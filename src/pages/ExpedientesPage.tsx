@@ -154,11 +154,11 @@ const ExpedientesPage = (_props: Props) => {
     const connection = DbConnection.builder()
       .withUri(host)
       .withDatabaseName(databaseName)
-      .onConnect((conn) => {
+      .onConnect((conn: DbConnection) => {
         setConnected(true);
         ensurePortalSession(conn).catch((e) => console.warn('Portal session en ExpedientesPage:', e));
       })
-      .onConnectError((_ctx, err) => {
+      .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('ExpedientesPage connect error:', err);
         setConnected(false);
       })
@@ -297,7 +297,7 @@ const ExpedientesPage = (_props: Props) => {
       .onApplied(() => {
         refreshFromCache();
       })
-      .onError((ctx) => {
+      .onError((ctx: unknown) => {
         console.error(ctx);
       })
       .subscribe([
@@ -644,7 +644,7 @@ Reglas de salida:
         aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else {
         // APIFreeLLM is proxied through Vite in local development to avoid browser CORS issues.
-        const res = await fetch('/api/apifreellm/api/v1/chat', {
+        const res = await fetch('/api/apifreellm/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -6,10 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api/apifreellm': {
+      '/api/apifreellm/chat': {
         target: 'https://apifreellm.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/apifreellm/, ''),
+        rewrite: () => '/api/v1/chat',
       },
     },
   },

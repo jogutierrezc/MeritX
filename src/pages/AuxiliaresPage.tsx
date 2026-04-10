@@ -57,7 +57,7 @@ const AuxiliaresPage = () => {
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect(() => setConnected(true))
-      .onConnectError((_ctx, error) => {
+      .onConnectError((_ctx: unknown, error: unknown) => {
         console.error(error);
         setConnected(false);
       })
@@ -89,7 +89,7 @@ const AuxiliaresPage = () => {
     const subscription = conn
       .subscriptionBuilder()
       .onApplied(() => refreshFromCache())
-      .onError((ctx) => console.error(ctx))
+      .onError((ctx: unknown) => console.error(ctx))
       .subscribe(['SELECT * FROM application']);
 
     return () => {

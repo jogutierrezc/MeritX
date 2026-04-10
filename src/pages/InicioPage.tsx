@@ -139,7 +139,7 @@ const InicioPage = ({ standalone = false }: Props) => {
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect(() => setConnected(true))
-      .onConnectError((_ctx, error) => {
+      .onConnectError((_ctx: unknown, error: unknown) => {
         console.error(error);
         setConnected(false);
       })

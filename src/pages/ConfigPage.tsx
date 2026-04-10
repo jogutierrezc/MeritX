@@ -274,7 +274,7 @@ const ConfigPage = () => {
     const connection = DbConnection.builder()
       .withUri(host)
       .withDatabaseName(databaseName)
-      .onConnect((conn) => {
+      .onConnect((conn: DbConnection) => {
         setConnected(true);
 
         ensurePortalSession(conn).catch((error: unknown) => {
@@ -283,7 +283,7 @@ const ConfigPage = () => {
           setStatusMessage('No fue posible abrir sesión admin en Spacetime para ejecutar cambios protegidos.');
         });
       })
-      .onConnectError((_ctx, error) => {
+      .onConnectError((_ctx: unknown, error: unknown) => {
         console.error(error);
         setStatusMessage('No fue posible conectar con SpacetimeDB.');
       })
@@ -459,7 +459,7 @@ const ConfigPage = () => {
         }
         setLoading(false);
       })
-      .onError((ctx) => {
+      .onError((ctx: unknown) => {
         console.error(ctx);
         setLoading(false);
         setStatusMessage('Error de suscripcion en Spacetime.');

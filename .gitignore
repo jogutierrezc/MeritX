@@ -24,5 +24,4 @@ dist-ssr
 *.sw?
 
 # SpacetimeDB generated bindings
-src/module_bindings/*
-!src/module_bindings/.gitkeep
+# Keep generated bindings versioned so CI/Vercel can build without regenerating them
