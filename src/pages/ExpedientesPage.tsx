@@ -134,7 +134,6 @@ const ExpedientesPage = (_props: Props) => {
   const [ragTopK, setRagTopK] = useState(5);
   const [ragChunkSize, setRagChunkSize] = useState(1200);
   const [ragChunkOverlap, setRagChunkOverlap] = useState(150);
-  const [ragDocuments, setRagDocuments] = useState<StoredRagDocument[]>([]);
 
   useEffect(() => {
     const { host, databaseName } = getSpacetimeConnectionConfig();
@@ -213,20 +212,6 @@ const ExpedientesPage = (_props: Props) => {
           }
         }
       }
-
-      const ragDocumentTable = dbView.ragDocument || dbView.rag_document;
-      const ragDocumentRows = ragDocumentTable ? (Array.from(ragDocumentTable.iter()) as any[]) : [];
-      setRagDocuments(
-        ragDocumentRows
-          .filter((row) => row.active)
-          .map((row) => ({
-            documentKey: row.documentKey,
-            fileName: row.fileName,
-            fileType: row.fileType,
-            active: row.active,
-            contentBase64: row.contentBase64 ?? undefined,
-          })),
-      );
 
       const mapped: RequestRecord[] = appRows
         .map((row) => {
@@ -309,7 +294,6 @@ const ExpedientesPage = (_props: Props) => {
         'SELECT * FROM application_audit',
         'SELECT * FROM api_config',
         'SELECT * FROM rag_config',
-        'SELECT * FROM rag_document',
         'SELECT * FROM system_setting',
       ]);
 
@@ -435,6 +419,25 @@ const ExpedientesPage = (_props: Props) => {
     window.alert(`La eliminación no está habilitada en Spacetime para ${id}.`);
   };
 
+  const getActiveRagDocuments = (): StoredRagDocument[] => {
+    const connection = connectionRef.current;
+    if (!connection) return [];
+
+    const dbView = connection.db as any;
+    const ragDocumentTable = dbView.ragDocument || dbView.rag_document;
+    const ragDocumentRows = ragDocumentTable ? (Array.from(ragDocumentTable.iter()) as any[]) : [];
+
+    return ragDocumentRows
+      .filter((row) => row.active)
+      .map((row) => ({
+        documentKey: row.documentKey,
+        fileName: row.fileName,
+        fileType: row.fileType,
+        active: row.active,
+        contentBase64: row.contentBase64 ?? undefined,
+      }));
+  };
+
   const buildRagContext = (req: RequestRecord, caseDetail: string) => {
     const queryTerms = Array.from(
       new Set(
@@ -456,7 +459,8 @@ const ExpedientesPage = (_props: Props) => {
     );
 
     const rankedChunks: RankedRagChunk[] = [];
-    for (const document of ragDocuments) {
+    const activeRagDocuments = getActiveRagDocuments();
+    for (const document of activeRagDocuments) {
       const decoded = decodeBase64Document(document.contentBase64);
       if (!decoded) continue;
       const chunks = chunkText(decoded, ragChunkSize, ragChunkOverlap);
