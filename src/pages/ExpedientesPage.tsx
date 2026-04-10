@@ -504,19 +504,64 @@ const ExpedientesPage = (_props: Props) => {
         ? selectedExperiences.map((e) => `${e.experienceType}: ${e.startedAt} a ${e.endedAt || 'Presente'}${e.certified ? ' (certificado)' : ''}`).join('; ')
         : 'Sin experiencia registrada';
 
+      const provisionalBreakdown = calculateAdvancedEscalafon({
+        nombre: req.nombre,
+        documento: req.documento,
+        programa: '',
+        facultad: req.facultad,
+        scopusProfile: '',
+        esIngresoNuevo: req.esIngresoNuevo,
+        isAccreditedSource: false,
+        yearsInCategory: 0,
+        hasTrabajoAprobadoCEPI: false,
+        orcid: '',
+        titulos: selectedTitles.map((t) => ({
+          titulo: t.titleName,
+          nivel: t.titleLevel as 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado',
+        })),
+        idiomas: selectedLanguages.map((l) => ({
+          idioma: l.languageName,
+          nivel: l.languageLevel as 'A2' | 'B1' | 'B2' | 'C1',
+          convalidacion: l.convalidation ? 'SI' as const : 'NO' as const,
+        })),
+        produccion: selectedPublications.map((p) => ({
+          titulo: p.publicationTitle,
+          cuartil: p.quartile as 'Q1' | 'Q2' | 'Q3' | 'Q4',
+          fecha: p.publicationYear,
+          tipo: p.publicationType,
+          autores: p.authorsCount,
+          fuente: p.sourceKind as 'SCOPUS' | 'MANUAL',
+        })),
+        experiencia: selectedExperiences.map((e) => ({
+          tipo: e.experienceType as 'Profesional' | 'Docencia Universitaria' | 'Investigación',
+          inicio: e.startedAt,
+          fin: e.endedAt,
+          certificacion: e.certified ? 'SI' as const : 'NO' as const,
+        })),
+      });
+
+      const workflowSummary = [
+        `Académico: ${provisionalBreakdown.ptsAcad.toFixed(1)} pts posibles · ${req.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
+        `Idiomas: ${provisionalBreakdown.ptsIdioma.toFixed(1)} pts posibles · ${req.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
+        `Producción: ${provisionalBreakdown.ptsPI.toFixed(1)} pts posibles · ${req.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar'}`,
+        `Experiencia: ${Math.min(provisionalBreakdown.ptsExpBruta, provisionalBreakdown.appliedTope).toFixed(1)} pts posibles · ${req.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar'}`,
+        `Resultado preliminar por soportes: ${provisionalBreakdown.finalPts.toFixed(1)} pts · categoría posible ${provisionalBreakdown.finalCat.name}`,
+      ].join('\n');
+
       const caseDetail = [
         `Docente: ${req.nombre}`,
         `Documento: ${req.documento}`,
         `Facultad: ${req.facultad}`,
         `Estado del expediente: ${req.status}`,
-        `Puntaje final: ${req.finalPts.toFixed(1)}`,
-        `Categoría asignada: ${req.finalCat.name}`,
-        `Mensaje del motor: ${req.outputMessage}`,
+        `Puntaje final oficial del expediente: ${req.finalPts.toFixed(1)}`,
+        `Categoría oficial asignada: ${req.finalCat.name}`,
+        `Mensaje oficial del motor: ${req.outputMessage}`,
         `Validación de títulos: ${req.audit?.titleValidated ? 'Sí' : 'No'}`,
         `Validación de idiomas: ${req.audit?.languageValidated ? 'Sí' : 'No'}`,
         `Validación de publicaciones: ${req.audit?.publicationVerified ? 'Sí' : 'No'}`,
         `Certificación de experiencia: ${req.audit?.experienceCertified ? 'Sí' : 'No'}`,
         `Observaciones de auditoría: ${req.audit?.observations || 'Sin observaciones registradas'}`,
+        `\nLECTURA PRELIMINAR POR SOPORTES Y WORKFLOW:\n${workflowSummary}`,
         `\nTÍTULOS ACADÉMICOS: ${titulosTxt}`,
         `IDIOMAS: ${idiomasTxt}`,
         `PRODUCCIÓN INTELECTUAL: ${pubsTxt}`,
@@ -556,7 +601,7 @@ Sintetiza los puntos comunes y los desacuerdos relevantes.
 Emite una recomendación final autónoma, argumentada y prudente. Debe indicar si recomiendas aprobar, aprobar con condicionamientos, requerir subsanación o no aprobar.
 
 ## 7. Trazabilidad razonada del puntaje
-Explica de manera narrativa por qué el expediente alcanza o no el puntaje final informado. Relaciona títulos, idiomas, producción y experiencia con el resultado final, y aclara los límites, topes o faltantes cuando corresponda.
+Explica de manera narrativa por qué el expediente alcanza o no el puntaje final oficial informado. Debes diferenciar explícitamente entre el puntaje oficial del expediente y la posible calificación preliminar derivada de los soportes cargados y del estado del workflow. Relaciona títulos, idiomas, producción y experiencia con el resultado final, y aclara los límites, topes o faltantes cuando corresponda.
 
 ## 8. Sustento normativo citado
 Lista las normas y fragmentos RAG realmente usados, con citas breves y su relevancia para la decisión.
@@ -567,6 +612,8 @@ Reglas de salida:
 - Usa encabezados Markdown.
 - Evita respuestas cortas o genéricas.
 - Si la evidencia es insuficiente, dilo y explica qué soporte falta.
+- Diferencia siempre entre "puntaje oficial del expediente" y "posible calificación por soportes".
+- No trates como definitivo un componente que siga pendiente de validación auxiliar.
 - Nunca digas que usaste un RAG si no vas a citar el contexto efectivamente entregado.`;
 
       const systemPrompt = ragSystemContext

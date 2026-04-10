@@ -215,12 +215,41 @@ const AIDictamenModal: React.FC<Props> = ({
     const base = [
       'El informe fue generado mediante contraste automatizado entre los soportes del expediente, las reglas del motor de puntaje y el contexto normativo recuperado desde el repositorio RAG institucional.',
       `Se evaluaron ${titles.length} título(s), ${languages.length} registro(s) de idioma, ${publications.length} publicación(es) y ${experiences.length} experiencia(s) con trazabilidad hacia el puntaje final de ${request.finalPts.toFixed(1)} puntos.`,
+      'La lectura por componentes se basa en el tipo de evidencia cargada y se interpreta dentro del workflow de validación auxiliar.',
     ];
-    if (scoreBreakdown && scoreBreakdown.ptsExpBruta > scoreBreakdown.appliedTope) {
-      base.push(`La experiencia fue sometida a tope reglamentario: ${scoreBreakdown.ptsExpBruta.toFixed(1)} puntos brutos frente a ${scoreBreakdown.appliedTope.toFixed(1)} puntos aplicables.`);
-    }
+    base.push('La puntuación final mostrada en este informe corresponde al valor oficial persistido en el expediente; la posible calificación por componente es preliminar hasta validación auxiliar.');
     return base.join(' ');
   }, [experiences.length, languages.length, publications.length, request.finalPts, scoreBreakdown, titles.length]);
+
+  const workflowBreakdown = useMemo(() => {
+    if (!scoreBreakdown) return [] as Array<{ label: string; value: number; state: string; hint: string }>;
+    return [
+      {
+        label: 'Académico',
+        value: scoreBreakdown.ptsAcad,
+        state: request.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
+        hint: titles.length > 0 ? `${titles.length} soporte(s) académicos cargados` : 'Sin soportes académicos cargados',
+      },
+      {
+        label: 'Idiomas',
+        value: scoreBreakdown.ptsIdioma,
+        state: request.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
+        hint: languages.length > 0 ? `${languages.length} soporte(s) de idioma cargados` : 'Sin soportes de idioma cargados',
+      },
+      {
+        label: 'Producción',
+        value: scoreBreakdown.ptsPI,
+        state: request.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar',
+        hint: publications.length > 0 ? `${publications.length} evidencia(s) de producción cargadas` : 'Sin evidencia de producción cargada',
+      },
+      {
+        label: 'Experiencia',
+        value: Math.min(scoreBreakdown.ptsExpBruta, scoreBreakdown.appliedTope),
+        state: request.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar',
+        hint: experiences.length > 0 ? `${experiences.length} soporte(s) de experiencia cargados` : 'Sin soportes de experiencia cargados',
+      },
+    ];
+  }, [experiences.length, languages.length, publications.length, request.audit, scoreBreakdown, titles.length]);
 
   const recommendationItems = useMemo(() => {
     const lines = analysis.split('\n').map((item) => item.trim()).filter(Boolean);
@@ -458,28 +487,37 @@ const AIDictamenModal: React.FC<Props> = ({
                     </div>
                   </section>
 
-                  {scoreBreakdown && (
-                    <section className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-6">
-                      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-                        <Database size={20} className="text-blue-700" />
-                        <h3 className="text-lg font-bold tracking-tight text-slate-900 font-sans">Trazabilidad del Puntaje</h3>
-                      </div>
+                  <section className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-6">
+                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                      <Database size={20} className="text-blue-700" />
+                      <h3 className="text-lg font-bold tracking-tight text-slate-900 font-sans">Trazabilidad del Puntaje</h3>
+                    </div>
+                    <p className="text-sm text-slate-600">
+                      Los siguientes valores muestran la posible calificación por tipo de evidencia cargada. Cada frente queda en firme cuando el auxiliar valida su conformidad documental.
+                    </p>
+                    {workflowBreakdown.length > 0 && (
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        {[
-                          { label: 'Académico', value: scoreBreakdown.ptsAcad },
-                          { label: 'Idiomas', value: scoreBreakdown.ptsIdioma },
-                          { label: 'Producción', value: scoreBreakdown.ptsPI },
-                          { label: 'Experiencia', value: Math.min(scoreBreakdown.ptsExpBruta, scoreBreakdown.appliedTope) },
-                        ].map((item) => (
+                        {workflowBreakdown.map((item) => (
                           <div key={item.label} className="rounded border border-slate-200 bg-white px-4 py-4 text-center">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.label}</p>
                             <p className="mt-2 text-3xl font-black text-slate-900">{item.value.toFixed(1)}</p>
+                            <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-700">{item.state}</p>
+                            <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-500">{item.hint}</p>
                           </div>
                         ))}
                       </div>
-                      <p className="text-sm text-slate-600">{scoreBreakdown.outputMessage}</p>
-                    </section>
-                  )}
+                    )}
+                    <div className="rounded border border-blue-100 bg-blue-50 px-4 py-4">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-blue-700">Puntaje oficial del expediente</p>
+                      <p className="mt-2 text-4xl font-black text-slate-900">{request.finalPts.toFixed(1)}</p>
+                      <p className="mt-3 text-sm text-slate-600">{request.outputMessage}</p>
+                    </div>
+                    {scoreBreakdown && (
+                      <p className="text-[11px] font-semibold text-slate-500">
+                        Posible resultado por soportes: {scoreBreakdown.finalPts.toFixed(1)} pts y categoría posible {scoreBreakdown.finalCat.name}.
+                      </p>
+                    )}
+                  </section>
 
                   <section className="space-y-4">
                     <div className="flex items-center gap-2 border-b border-slate-200 pb-2">

@@ -62,7 +62,7 @@ const DetalleView: React.FC<Props> = ({
 
   const scoreBreakdown = useMemo(() => {
     try {
-      const formState = {
+      return calculateAdvancedEscalafon({
         nombre: selectedRequest.nombre,
         documento: selectedRequest.documento,
         programa: '',
@@ -96,12 +96,44 @@ const DetalleView: React.FC<Props> = ({
           fin: e.endedAt,
           certificacion: e.certified ? 'SI' as const : 'NO' as const,
         })),
-      };
-      return calculateAdvancedEscalafon(formState);
+      });
     } catch {
       return null;
     }
   }, [selectedRequest, titles, languages, publications, experiences]);
+
+  const workflowBreakdown = scoreBreakdown
+    ? [
+        {
+          label: 'Académico',
+          value: scoreBreakdown.ptsAcad,
+          color: 'border-blue-600 bg-blue-50',
+          state: selectedRequest.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
+          hint: titles.length > 0 ? `${titles.length} soporte(s) académicos cargados` : 'Sin soportes académicos cargados',
+        },
+        {
+          label: 'Idiomas',
+          value: scoreBreakdown.ptsIdioma,
+          color: 'border-purple-600 bg-purple-50',
+          state: selectedRequest.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
+          hint: languages.length > 0 ? `${languages.length} soporte(s) de idioma cargados` : 'Sin soportes de idioma cargados',
+        },
+        {
+          label: 'Producción',
+          value: scoreBreakdown.ptsPI,
+          color: 'border-teal-600 bg-teal-50',
+          state: selectedRequest.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar',
+          hint: publications.length > 0 ? `${publications.length} evidencia(s) de producción cargadas` : 'Sin evidencia de producción cargada',
+        },
+        {
+          label: 'Experiencia',
+          value: Math.min(scoreBreakdown.ptsExpBruta, scoreBreakdown.appliedTope),
+          color: 'border-orange-500 bg-orange-50',
+          state: selectedRequest.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar',
+          hint: experiences.length > 0 ? `${experiences.length} soporte(s) de experiencia cargados` : 'Sin soportes de experiencia cargados',
+        },
+      ]
+    : [];
 
   const openAIDictamen = async () => {
     setAiModalOpen(true);
@@ -268,49 +300,44 @@ const DetalleView: React.FC<Props> = ({
           <h3 className="font-black text-2xl uppercase tracking-[0.2em] text-slate-900">Calificación Escalafón</h3>
         </div>
 
-        {scoreBreakdown ? (
+        {scoreBreakdown && (
           <>
+            <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 px-6 py-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-700">Posible calificación según soportes y workflow</p>
+              <p className="mt-2 text-sm font-semibold text-slate-700">
+                Esta lectura toma en cuenta el tipo de documentos cargados. Es preliminar hasta que el auxiliar valide la conformidad documental de cada frente.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-              {[
-                { label: 'Académico', value: scoreBreakdown.ptsAcad, color: 'border-blue-600 bg-blue-50' },
-                { label: 'Idiomas', value: scoreBreakdown.ptsIdioma, color: 'border-purple-600 bg-purple-50' },
-                { label: 'Producción', value: scoreBreakdown.ptsPI, color: 'border-teal-600 bg-teal-50' },
-                { label: 'Experiencia', value: Math.min(scoreBreakdown.ptsExpBruta, scoreBreakdown.appliedTope), color: 'border-orange-500 bg-orange-50' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className={`border-4 p-6 text-center ${color}`}>
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 mb-2">{label}</p>
-                  <p className="text-4xl font-black text-slate-950">{value.toFixed(1)}</p>
+              {workflowBreakdown.map(({ label, value, color, state, hint }) => (
+                <div key={label} className={`border-4 p-6 ${color}`}>
+                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 mb-2 text-center">{label}</p>
+                  <p className="text-4xl font-black text-slate-950 text-center">{value.toFixed(1)}</p>
+                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-700 text-center">{state}</p>
+                  <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-600 text-center">{hint}</p>
                 </div>
               ))}
             </div>
 
-            {scoreBreakdown.ptsExpBruta > scoreBreakdown.appliedTope && (
-              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-6 border-l-4 border-orange-500 pl-4">
-                Exp. bruta {scoreBreakdown.ptsExpBruta.toFixed(1)} pts — aplicado tope {scoreBreakdown.appliedTope.toFixed(1)} pts por categoría
-              </p>
-            )}
-
-            <div className="flex items-center gap-8 border-t-4 border-slate-200 pt-10">
-              <div className="text-center">
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Puntaje Final</p>
-                <p className="text-8xl font-black text-slate-950 tracking-tighter leading-none">{scoreBreakdown.finalPts.toFixed(1)}</p>
-              </div>
-              <div className="flex-1">
-                <div className={`py-5 px-8 text-center font-black text-[13px] uppercase tracking-[0.4em] ${scoreBreakdown.finalCat?.bgColor || 'bg-slate-500'} text-white mb-4`}>
-                  DOCENTE {scoreBreakdown.finalCat?.name || 'SIN CATEGORÍA'}
-                </div>
-                <p className="text-slate-600 font-bold text-sm italic leading-relaxed">"{scoreBreakdown.outputMessage}"</p>
-              </div>
-            </div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-6 border-l-4 border-slate-300 pl-4">
+              Posible resultado por soportes: {scoreBreakdown.finalPts.toFixed(1)} pts · categoría posible {scoreBreakdown.finalCat.name}
+            </p>
           </>
-        ) : (
-          <div className="text-center py-10">
-            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Score calculado al registrar: {(selectedRequest.finalPts || 0).toFixed(1)} pts</p>
-            <div className={`mt-4 inline-block py-4 px-8 font-black text-[12px] uppercase tracking-[0.4em] ${selectedRequest.finalCat?.bgColor || 'bg-slate-500'} text-white`}>
+        )}
+
+        <div className="flex items-center gap-8 border-t-4 border-slate-200 pt-10">
+          <div className="text-center">
+            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Puntaje Final Oficial</p>
+            <p className="text-8xl font-black text-slate-950 tracking-tighter leading-none">{(selectedRequest.finalPts || 0).toFixed(1)}</p>
+          </div>
+          <div className="flex-1">
+            <div className={`py-5 px-8 text-center font-black text-[13px] uppercase tracking-[0.4em] ${selectedRequest.finalCat?.bgColor || 'bg-slate-500'} text-white mb-4`}>
               DOCENTE {selectedRequest.finalCat?.name || 'SIN CATEGORÍA'}
             </div>
+            <p className="text-slate-600 font-bold text-sm italic leading-relaxed">"{selectedRequest.outputMessage}"</p>
           </div>
-        )}
+        </div>
       </section>
 
       </div>
