@@ -3,7 +3,7 @@ import { Lock, ShieldCheck } from 'lucide-react';
 
 import { DbConnection } from '../module_bindings';
 import type { PortalRole, PortalSession } from '../services/portalAuth';
-import { authenticatePortal, createFirstAdmin } from '../services/portalAuth';
+import { createFirstAdmin } from '../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
 
 interface Props {
@@ -42,17 +42,53 @@ const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
   const [adminSetupConfirmPassword, setAdminSetupConfirmPassword] = useState('');
   const [setupMessage, setSetupMessage] = useState('');
   const [isFirstAdminAvailable, setIsFirstAdminAvailable] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const labels = PORTAL_LABELS[role];
 
-  const handleSubmit = () => {
-    const session = authenticatePortal(role, username, password);
-    if (!session) {
-      setError('Credenciales inválidas para este portal.');
+  const handleSubmit = async () => {
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanPassword = password.trim();
+    if (!cleanUsername || !cleanPassword) {
+      setError('Ingresa usuario y contraseña.');
       return;
     }
-    setError('');
-    onLogin(session);
+
+    const { host, databaseName } = getSpacetimeConnectionConfig();
+    let connection: DbConnection | null = null;
+
+    setSubmitting(true);
+    try {
+      connection = DbConnection.builder()
+        .withUri(host)
+        .withDatabaseName(databaseName)
+        .build();
+
+      const reducers = connection.reducers as any;
+      const loginReducer = reducers.portalLogin || reducers.portal_login;
+      if (typeof loginReducer !== 'function') {
+        throw new Error('Reducer portal_login no disponible.');
+      }
+
+      await loginReducer({
+        role,
+        username: cleanUsername,
+        password: cleanPassword,
+      });
+
+      setError('');
+      onLogin({
+        role,
+        username: cleanUsername,
+        loginAt: new Date().toISOString(),
+        password: cleanPassword,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Credenciales inválidas para este portal.');
+    } finally {
+      if (connection) connection.disconnect();
+      setSubmitting(false);
+    }
   };
 
   const handleCreateFirstAdmin = async () => {
@@ -220,9 +256,10 @@ const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
 
         <button
           onClick={handleSubmit}
+          disabled={submitting}
           className="w-full rounded-2xl bg-slate-950 px-6 py-5 text-[11px] font-black uppercase tracking-[0.35em] text-white transition-all hover:bg-blue-600"
         >
-          Ingresar al portal
+          {submitting ? 'Validando acceso...' : 'Ingresar al portal'}
         </button>
       </div>
     </div>

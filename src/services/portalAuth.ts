@@ -4,6 +4,7 @@ export type PortalSession = {
   role: PortalRole;
   username: string;
   loginAt: string;
+  password?: string;
 };
 
 const STORAGE_KEY = 'meritx.portal.session';
@@ -47,6 +48,17 @@ export const getPortalCredentialsForRole = (
   role: PortalRole,
   expectedUsername?: string,
 ): { username: string; password: string } | null => {
+  const activeSession = getPortalSession();
+  if (activeSession?.role === role && activeSession.password) {
+    const sessionUsername = activeSession.username.trim().toLowerCase();
+    if (!expectedUsername || sessionUsername === expectedUsername.trim().toLowerCase()) {
+      return {
+        username: sessionUsername,
+        password: activeSession.password,
+      };
+    }
+  }
+
   const source = role === 'admin' ? getBootstrapAdmin() || CREDENTIALS.admin : CREDENTIALS[role];
   const candidate = {
     username: source.username.trim().toLowerCase(),
@@ -99,13 +111,15 @@ export const authenticatePortal = (
   password: string,
 ): PortalSession | null => {
   const inputUser = username.trim().toLowerCase();
+  const inputPassword = password.trim();
   const config = role === 'admin' ? getBootstrapAdmin() || CREDENTIALS.admin : CREDENTIALS[role];
-  const matches = inputUser === config.username && password === config.password;
+  const matches = inputUser === config.username.trim().toLowerCase() && inputPassword === config.password;
   if (!matches) return null;
   return {
     role,
-    username: config.username,
+    username: config.username.trim().toLowerCase(),
     loginAt: new Date().toISOString(),
+    password: config.password,
   };
 };
 
