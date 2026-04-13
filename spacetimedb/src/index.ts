@@ -630,10 +630,24 @@ function parseFacultyProgramsPayload(payload?: string): FacultyProgramsImportIte
     if (!Array.isArray(parsed)) throw new Error('payload debe ser una lista.');
 
     return parsed
-      .map((item) => ({
-        facultyName: toCleanString(item?.facultyName || item?.faculty || item?.nombreFacultad),
-        programs: Array.isArray(item?.programs)
-          ? item.programs
+      .map((item) => {
+        const programList =
+          (Array.isArray(item?.programs) && item.programs)
+          || (Array.isArray(item?.programas) && item.programas)
+          || (Array.isArray(item?.academicPrograms) && item.academicPrograms)
+          || (Array.isArray(item?.programasAcademicos) && item.programasAcademicos)
+          || [];
+
+        return {
+        facultyName: toCleanString(
+          item?.facultyName
+          || item?.faculty
+          || item?.faculty_name
+          || item?.nombreFacultad
+          || item?.facultad,
+        ),
+        programs: Array.isArray(programList)
+          ? programList
             .map((program: unknown) => {
               if (typeof program === 'string') {
                 const name = toCleanString(program);
@@ -645,6 +659,7 @@ function parseFacultyProgramsPayload(payload?: string): FacultyProgramsImportIte
                 parsedProgram?.name
                 || parsedProgram?.program
                 || parsedProgram?.programName
+                || parsedProgram?.program_name
                 || parsedProgram?.nombre
                 || parsedProgram?.programa,
               );
@@ -665,7 +680,8 @@ function parseFacultyProgramsPayload(payload?: string): FacultyProgramsImportIte
                 Boolean(program?.name),
             )
           : [],
-      }))
+      };
+      })
       .filter((item) => item.facultyName);
   } catch (error) {
     throw new SenderError(`import_payload inválido: ${error instanceof Error ? error.message : String(error)}`);
@@ -1627,6 +1643,11 @@ export const import_faculty_programs = spacetimedb.reducer(
     const rows = parseFacultyProgramsPayload(args.import_payload);
     if (rows.length === 0) {
       throw new SenderError('No se encontraron datos válidos para importar.');
+    }
+
+    const totalPrograms = rows.reduce((acc, row) => acc + row.programs.length, 0);
+    if (totalPrograms === 0) {
+      throw new SenderError('No se encontraron programas válidos. Usa "programs" o "programas" con al menos un programa por facultad.');
     }
 
     for (const row of rows) {
