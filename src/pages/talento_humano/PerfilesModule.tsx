@@ -32,11 +32,104 @@ import {
   parseAiJson,
   toSafeNumber,
 } from './perfiles/helpers';
-import type { AnalysisVersionRecord, AiCriterionRow, ArrayKey, ManualRow, MatrixRow } from './perfiles/types';
+import type { AnalysisVersionRecord, AiCriterionRow, ArrayKey, ChatMessage, ManualRow, MatrixRow } from './perfiles/types';
 
 const clamp = (value: number) => (Number.isFinite(value) ? value : 0);
 
-const PerfilesModule = () => {
+type StoredRagDocument = {
+  documentKey: string;
+  fileName: string;
+  fileType: string;
+  active: boolean;
+  contentBase64?: string;
+};
+
+const normalizeForSearch = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const compactText = (value: string) =>
+  value
+    .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+
+const decodeBase64Document = (contentBase64?: string) => {
+  if (!contentBase64) return '';
+  try {
+    const binary = window.atob(contentBase64);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    const normalized = compactText(decoded);
+    if (normalized.length >= 120) return normalized;
+
+    const fallback = compactText(binary);
+    return fallback;
+  } catch {
+    return '';
+  }
+};
+
+const chunkText = (content: string, chunkSize: number, overlap: number) => {
+  if (!content) return [] as string[];
+  if (content.length <= chunkSize) return [content];
+
+  const chunks: string[] = [];
+  const safeOverlap = Math.max(0, Math.min(overlap, Math.floor(chunkSize / 2)));
+  const step = Math.max(1, chunkSize - safeOverlap);
+
+  for (let index = 0; index < content.length; index += step) {
+    const chunk = content.slice(index, index + chunkSize).trim();
+    if (chunk.length >= 120) chunks.push(chunk);
+  }
+
+  return chunks;
+};
+
+const scoreRagChunk = (chunk: string, queryTerms: string[]) => {
+  const normalizedChunk = normalizeForSearch(chunk);
+  let score = 0;
+
+  for (const term of queryTerms) {
+    if (!term) continue;
+    if (normalizedChunk.includes(term)) score += term.length > 8 ? 4 : 2;
+  }
+
+  const normativeTerms = [
+    'reglamento',
+    'escalafon',
+    'udes',
+    'acuerdo',
+    'resolucion',
+    'articulo',
+    'categoria',
+    'puntaje',
+    'titulo',
+    'idioma',
+    'publicacion',
+    'experiencia',
+    'auxiliar',
+    'asistente',
+    'asociado',
+    'titular',
+  ];
+
+  for (const term of normativeTerms) {
+    if (normalizedChunk.includes(term)) score += 1;
+  }
+
+  return score;
+};
+
+type PerfilesModuleProps = {
+  mode?: 'full' | 'metrix';
+};
+
+const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const connectionRef = useRef<DbConnection | null>(null);
   const reloadRef = useRef<(() => Promise<void>) | null>(null);
   const [view, setView] = useState<'lista' | 'nuevo'>('lista');
@@ -58,10 +151,17 @@ const PerfilesModule = () => {
   const [apifreellmApiKey, setApifreellmApiKey] = useState('');
   const [aiProvider, setAiProvider] = useState('gemini');
   const [aiModel, setAiModel] = useState('gemini-2.5-flash');
+  const [ragSystemContext, setRagSystemContext] = useState('');
+  const [ragTopK, setRagTopK] = useState(5);
+  const [ragChunkSize, setRagChunkSize] = useState(1200);
+  const [ragChunkOverlap, setRagChunkOverlap] = useState(150);
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNarrative, setAiNarrative] = useState('');
   const [aiRows, setAiRows] = useState<AiCriterionRow[]>([]);
+  const [metriXChat, setMetriXChat] = useState<ChatMessage[]>([]);
+  const [metriXInput, setMetriXInput] = useState('');
+  const [metriXLoading, setMetriXLoading] = useState(false);
 
   const [manualMode, setManualMode] = useState(false);
   const [manualRows, setManualRows] = useState<ManualRow[]>([]);
@@ -119,6 +219,7 @@ const PerfilesModule = () => {
       const publicationTable = dbView.applicationPublication || dbView.application_publication;
       const experienceTable = dbView.applicationExperience || dbView.application_experience;
       const analysisVersionTable = dbView.applicationAnalysisVersion || dbView.application_analysis_version;
+      const ragTable = dbView.ragConfig || dbView.rag_config;
 
       const apiTable = dbView.apiConfig || dbView.api_config;
       if (apiTable) {
@@ -131,6 +232,17 @@ const PerfilesModule = () => {
         if (defaultCfg?.apifreellmApiKey) setApifreellmApiKey(defaultCfg.apifreellmApiKey);
         if (defaultCfg?.aiProvider) setAiProvider(defaultCfg.aiProvider);
         if (defaultCfg?.aiModel) setAiModel(defaultCfg.aiModel);
+      }
+
+      if (ragTable) {
+        const ragRows = Array.from(ragTable.iter()) as any[];
+        const defaultRag = ragRows.find((row) => row.configKey === 'default');
+        if (defaultRag) {
+          setRagSystemContext(defaultRag.systemContext || '');
+          setRagTopK(Number(defaultRag.topK || 5));
+          setRagChunkSize(Number(defaultRag.chunkSize || 1200));
+          setRagChunkOverlap(Number(defaultRag.chunkOverlap || 150));
+        }
       }
 
       const mapped: RequestRecord[] = appRows
@@ -748,6 +860,8 @@ const PerfilesModule = () => {
     if (!selectedAnalysis) {
       setAiRows([]);
       setAiNarrative('');
+      setMetriXChat([]);
+      setMetriXInput('');
       setManualRows([]);
       setManualNarrative('');
       setManualMode(false);
@@ -756,6 +870,8 @@ const PerfilesModule = () => {
 
     setAiRows([]);
     setAiNarrative('');
+    setMetriXChat([]);
+    setMetriXInput('');
     setManualRows(
       selectedAnalysis.rows.map((row, index) => ({
         id: `manual-${index}-${row.criterio}`,
@@ -872,6 +988,231 @@ const PerfilesModule = () => {
       setAiNarrative(error instanceof Error ? error.message : 'No se pudo generar el análisis de IA.');
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const getActiveRagDocuments = (): StoredRagDocument[] => {
+    const connection = connectionRef.current;
+    if (!connection) return [];
+
+    const dbView = connection.db as any;
+    const ragDocumentTable = dbView.ragDocument || dbView.rag_document;
+    const ragDocumentRows = ragDocumentTable ? (Array.from(ragDocumentTable.iter()) as any[]) : [];
+
+    return ragDocumentRows
+      .filter((row) => row.active)
+      .map((row) => ({
+        documentKey: row.documentKey,
+        fileName: row.fileName,
+        fileType: row.fileType,
+        active: row.active,
+        contentBase64: row.contentBase64 ?? undefined,
+      }));
+  };
+
+  const buildRagContextForChat = (question: string) => {
+    if (!selectedAnalysis || !selectedAnalysisRequest) {
+      return 'No hay un expediente seleccionado para construir contexto RAG.';
+    }
+
+    const trackingId = selectedAnalysisRequest.id;
+    const titles = allTitles.filter((row) => row.trackingId === trackingId);
+    const languages = allLanguages.filter((row) => row.trackingId === trackingId);
+    const publications = allPublications.filter((row) => row.trackingId === trackingId);
+    const experiences = allExperiences.filter((row) => row.trackingId === trackingId);
+
+    const queryTerms = Array.from(
+      new Set(
+        normalizeForSearch(
+          [
+            selectedAnalysisRequest.nombre,
+            selectedAnalysisRequest.facultad,
+            selectedAnalysisRequest.finalCat.name,
+            question,
+            titles.map((item) => item.titleLevel).join(' '),
+            languages.map((item) => item.languageLevel).join(' '),
+            publications.map((item) => item.quartile).join(' '),
+            experiences.map((item) => item.experienceType).join(' '),
+          ].join(' '),
+        )
+          .split(/[^a-z0-9]+/)
+          .filter((term) => term.length >= 4),
+      ),
+    );
+
+    const rankedChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
+    const activeRagDocuments = getActiveRagDocuments();
+    for (const document of activeRagDocuments) {
+      const decoded = decodeBase64Document(document.contentBase64);
+      if (!decoded) continue;
+      const chunks = chunkText(decoded, ragChunkSize, ragChunkOverlap);
+      for (const chunk of chunks) {
+        const score = scoreRagChunk(chunk, queryTerms);
+        if (score > 0) rankedChunks.push({ fileName: document.fileName, chunk, score });
+      }
+    }
+
+    const selectedChunks = rankedChunks
+      .sort((left, right) => right.score - left.score)
+      .slice(0, Math.max(1, ragTopK))
+      .map((item, index) => `[Fuente ${index + 1}: ${item.fileName}]\n${item.chunk.slice(0, 1600)}`);
+
+    return selectedChunks.length > 0
+      ? selectedChunks.join('\n\n')
+      : 'No se recuperaron fragmentos normativos desde RAG para este caso.';
+  };
+
+  const sendMetriXMessage = async () => {
+    if (!selectedAnalysis || !selectedAnalysisRequest) return;
+    if (!metriXInput.trim()) return;
+
+    const provider = aiProvider || 'gemini';
+    const model = aiModel || 'gemini-2.5-flash';
+    const activeKey = provider === 'gemini'
+      ? (geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '')
+      : apifreellmApiKey;
+
+    if (!activeKey) {
+      window.alert(`No se encontró API Key para ${provider === 'gemini' ? 'Gemini' : 'APIFreeLLM'}.`);
+      return;
+    }
+
+    const userMessage: ChatMessage = {
+      id: `chat-user-${Date.now()}`,
+      role: 'user',
+      content: metriXInput.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const nextConversation = [...metriXChat, userMessage];
+    setMetriXChat(nextConversation);
+    setMetriXInput('');
+    setMetriXLoading(true);
+
+    try {
+      const ragContext = buildRagContextForChat(userMessage.content);
+
+      const matrixBase = selectedAnalysis.rows.map((row) => ({
+        criterio: row.criterio,
+        section: row.section,
+        puntajeBase: row.puntaje,
+        soporte: row.hasSupport,
+        detalle: row.detalle,
+      }));
+
+      const workflowContext = [
+        `Docente: ${selectedAnalysisRequest.nombre}`,
+        `Documento: ${selectedAnalysisRequest.documento}`,
+        `Facultad: ${selectedAnalysisRequest.facultad}`,
+        `Puntaje oficial del expediente: ${selectedAnalysisRequest.finalPts.toFixed(1)}`,
+        `Categoría oficial actual: ${selectedAnalysisRequest.finalCat.name}`,
+        `Puntaje motor preliminar: ${selectedAnalysis.suggested.finalPts.toFixed(1)}`,
+        `Categoría motor preliminar: ${selectedAnalysis.suggested.finalCat.name}`,
+      ].join('\n');
+
+      const conversationText = nextConversation
+        .map((entry) => `${entry.role === 'user' ? 'Usuario' : 'MetriX'}: ${entry.content}`)
+        .join('\n');
+
+      const systemPrompt = [
+        'Eres MetriX, asistente experto de escalafón docente UDES para Talento Humano.',
+        'Debes analizar situaciones específicas del caso usando RAG, reglas de escalafón y evidencia del expediente.',
+        'Responde SIEMPRE en JSON válido con esta estructura exacta:',
+        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"..."}],"narrativa":"concepto técnico con explicación normativa y trazabilidad de puntaje"}',
+        'En narrativa debes explicar por qué se asigna o no puntaje por criterio, y mencionar fuentes RAG cuando apliquen.',
+        'No inventes soportes ni normas. Si falta evidencia, indícalo explícitamente.',
+      ].join(' ');
+
+      const userPrompt = [
+        'CONTEXTO DEL EXPEDIENTE:',
+        workflowContext,
+        '\nMATRIZ BASE DE CRITERIOS:',
+        JSON.stringify(matrixBase),
+        '\nCONVERSACIÓN ACUMULADA:',
+        conversationText,
+        '\nRAG (normativa/documentos):',
+        ragContext,
+        ragSystemContext ? `\nPOLÍTICA RAG ADICIONAL:\n${ragSystemContext}` : '',
+      ].join('\n');
+
+      let aiText = '';
+      if (provider === 'gemini') {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: userPrompt }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else {
+        const res = await fetch('/api/apifreellm/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${activeKey}`,
+          },
+          body: JSON.stringify({
+            message: `${systemPrompt}\n\n${userPrompt}`,
+            model: model || 'apifreellm',
+          }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        aiText = data.response || data.message || data.content || data.text || '';
+      }
+
+      const parsed = parseAiJson(aiText);
+      if (!parsed) {
+        setMetriXChat((prev) => [
+          ...prev,
+          {
+            id: `chat-assistant-${Date.now()}`,
+            role: 'assistant',
+            content: aiText || 'No pude interpretar la respuesta en formato estructurado.',
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+        return;
+      }
+
+      const mergedRows = selectedAnalysis.rows.map((base) => {
+        const hit = parsed.rows.find((row) => normalizeText(row.criterio) === normalizeText(base.criterio));
+        return {
+          criterio: base.criterio,
+          soporteValido: hit ? hit.soporteValido : base.hasSupport,
+          puntajeSugerido: hit ? Math.max(0, toSafeNumber(hit.puntajeSugerido, 0)) : base.hasSupport ? base.puntaje : 0,
+          comentario: hit?.comentario || (base.hasSupport ? 'Con soporte documental presentado.' : 'Sin soporte documental; puntaje sugerido en 0.'),
+        };
+      });
+
+      setAiRows(mergedRows);
+      setAiNarrative(parsed.narrativa || 'MetriX generó concepto técnico con ajuste de puntajes.');
+      setMetriXChat((prev) => [
+        ...prev,
+        {
+          id: `chat-assistant-${Date.now()}`,
+          role: 'assistant',
+          content: parsed.narrativa || 'MetriX actualizó la tabla IA con base en la conversación.',
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No fue posible procesar el chat con MetriX.';
+      setMetriXChat((prev) => [
+        ...prev,
+        {
+          id: `chat-assistant-${Date.now()}`,
+          role: 'assistant',
+          content: `Error: ${message}`,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setMetriXLoading(false);
     }
   };
 
@@ -1116,14 +1457,18 @@ const PerfilesModule = () => {
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Talento Humano</p>
-          <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">Perfiles de Profesor</h2>
+          <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">
+            {mode === 'metrix' ? 'Expedientes para Chat MetriX' : 'Perfiles de Profesor'}
+          </h2>
         </div>
-        <button
-          onClick={() => setView('nuevo')}
-          className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-white hover:bg-indigo-700"
-        >
-          <FilePlus2 size={16} /> Crear Perfil
-        </button>
+        {mode !== 'metrix' && (
+          <button
+            onClick={() => setView('nuevo')}
+            className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-black uppercase tracking-[0.18em] text-white hover:bg-indigo-700"
+          >
+            <FilePlus2 size={16} /> Crear Perfil
+          </button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -1191,7 +1536,17 @@ const PerfilesModule = () => {
           manualNarrative={manualNarrative}
           versionRowsForSelected={versionRowsForSelected}
           currentRole={currentRole}
+          showMetriXChat={false}
+          chatMessages={metriXChat}
+          chatInput={metriXInput}
+          chatLoading={metriXLoading}
           onClose={() => setSelectedAnalysisRequest(null)}
+          onChatInputChange={setMetriXInput}
+          onSendChatMessage={sendMetriXMessage}
+          onClearChat={() => {
+            setMetriXChat([]);
+            setMetriXInput('');
+          }}
           onRunAiSuggestion={runAiSuggestion}
           onSaveMotorVersion={handleSaveMotorVersion}
           onSaveAiVersion={handleSaveAiVersion}

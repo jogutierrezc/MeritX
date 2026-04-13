@@ -177,7 +177,11 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     { id: 'auxiliar', ...ESCALAFON_CONFIG.RANGOS.AUXILIAR, reqTitulo: 'Pregrado', reqIdioma: 'Ninguno' }
   ];
 
-  let finalCat: Category = CATEGORIES.find((c) => c.id === 'none') || { id: 'none', name: 'Sin Categoría' };
+  const fallbackCategory = CATEGORIES.find((c) => c.id === 'none') ?? CATEGORIES[0];
+  if (!fallbackCategory) {
+    throw new Error('No hay categorías configuradas en CATEGORIES.');
+  }
+  let finalCat: Category = fallbackCategory;
   let appliedTope = 0;
   let finalPts = ptsBaseSinExp;
   let observations = "";

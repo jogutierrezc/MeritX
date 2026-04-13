@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { RequestRecord } from '../../../types/domain';
 import { normalizeText, toSafeNumber } from './helpers';
-import type { AiCriterionRow, AnalysisVersionRecord, ManualRow, SelectedAnalysis } from './types';
+import type { AiCriterionRow, AnalysisVersionRecord, ChatMessage, ManualRow, SelectedAnalysis } from './types';
 
 interface Props {
   selectedAnalysisRequest: RequestRecord;
@@ -30,7 +30,14 @@ interface Props {
   manualNarrative: string;
   versionRowsForSelected: AnalysisVersionRecord[];
   currentRole: string;
+  chatMessages?: ChatMessage[];
+  chatInput?: string;
+  chatLoading?: boolean;
+  showMetriXChat?: boolean;
   onClose: () => void;
+  onChatInputChange?: (value: string) => void;
+  onSendChatMessage?: () => void;
+  onClearChat?: () => void;
   onRunAiSuggestion: () => void;
   onSaveMotorVersion: () => void;
   onSaveAiVersion: () => void;
@@ -91,7 +98,14 @@ export const AnalysisDetailView: React.FC<Props> = ({
   manualNarrative,
   versionRowsForSelected,
   currentRole,
+  chatMessages = [],
+  chatInput = '',
+  chatLoading = false,
+  showMetriXChat = false,
   onClose,
+  onChatInputChange,
+  onSendChatMessage,
+  onClearChat,
   onRunAiSuggestion,
   onSaveMotorVersion,
   onSaveAiVersion,
@@ -268,6 +282,80 @@ export const AnalysisDetailView: React.FC<Props> = ({
               </div>
             )}
           </div>
+        )}
+
+        {showMetriXChat && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Asistente Conversacional</p>
+              <h3 className="text-lg font-black tracking-tight">Chat con MetriX</h3>
+            </div>
+            <button
+              onClick={onClearChat}
+              disabled={chatMessages.length === 0 || chatLoading}
+              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+            >
+              Limpiar conversación
+            </button>
+          </div>
+
+          <div className="grid gap-0 lg:grid-cols-[1.2fr_1fr]">
+            <div className="border-r border-slate-200">
+              <div className="h-[340px] overflow-y-auto p-4 bg-slate-50 space-y-3">
+                {chatMessages.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5">
+                    <p className="text-xs font-semibold text-slate-500">
+                      Expón aquí casos específicos del escalafón. MetriX responderá con concepto técnico y ajustará la tabla IA con base en RAG, soportes y algoritmo.
+                    </p>
+                  </div>
+                )}
+                {chatMessages.map((message) => (
+                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[90%] rounded-xl px-4 py-3 ${message.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                      <p className={`mt-2 text-[10px] ${message.role === 'user' ? 'text-indigo-100' : 'text-slate-400'}`}>
+                        {message.createdAt.replace('T', ' ').slice(0, 19)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-slate-200 bg-white p-4">
+                <textarea
+                  value={chatInput}
+                  onChange={(event) => onChatInputChange?.(event.target.value)}
+                  rows={3}
+                  placeholder="Ejemplo: docente con maestría sin soporte y 2 años de docencia certificada, ¿cómo quedaría la categoría y por qué?"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                />
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={onSendChatMessage}
+                    disabled={chatLoading || !chatInput.trim()}
+                    className="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-cyan-700 disabled:opacity-50"
+                  >
+                    {chatLoading ? 'Analizando...' : 'Enviar a MetriX'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-cyan-50 p-4 border-t lg:border-t-0 border-slate-200">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700">Salida esperada de MetriX</p>
+              <ul className="mt-3 space-y-2 text-xs text-cyan-900 font-medium">
+                <li>Concepto argumentado del caso según reglamento y evidencia.</li>
+                <li>Explicación de por qué aplica (o no) cada puntaje.</li>
+                <li>Ajuste de la tabla IA en Categorización Sugerida.</li>
+                <li>Categoría sugerida y total calculado según conversación.</li>
+              </ul>
+              <p className="mt-4 text-[11px] text-cyan-800">
+                Consejo: especifica soportes, tiempos de experiencia, nivel de idioma, tipo de publicación y cualquier excepción normativa.
+              </p>
+            </div>
+          </div>
+        </div>
         )}
 
         {manualMode && (

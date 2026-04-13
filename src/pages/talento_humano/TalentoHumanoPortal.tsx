@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { CalendarDays, UserRoundSearch } from 'lucide-react';
+import { CalendarDays, MessageSquare, UserRoundSearch } from 'lucide-react';
 
 import PerfilesModule from './PerfilesModule';
 import ConvocatoriasModule from './ConvocatoriasModule';
+import ChatMetriXModule from './ChatMetriXModule';
 
 const TalentoHumanoPortal = () => {
-  const [tab, setTab] = useState<'perfiles' | 'convocatorias'>('perfiles');
+  const [tab, setTab] = useState<'perfiles' | 'convocatorias' | 'metrix'>('perfiles');
 
   return (
     <div className="space-y-8">
@@ -39,10 +40,22 @@ const TalentoHumanoPortal = () => {
           >
             <CalendarDays size={16} /> Convocatorias
           </button>
+          <button
+            onClick={() => setTab('metrix')}
+            className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-xs font-black uppercase tracking-[0.16em] transition-all ${
+              tab === 'metrix'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <MessageSquare size={16} /> Chat MetriX
+          </button>
         </div>
       </section>
 
-      {tab === 'perfiles' ? <PerfilesModule /> : <ConvocatoriasModule />}
+      {tab === 'perfiles' && <PerfilesModule />}
+      {tab === 'convocatorias' && <ConvocatoriasModule />}
+      {tab === 'metrix' && <ChatMetriXModule />}
     </div>
   );
 };

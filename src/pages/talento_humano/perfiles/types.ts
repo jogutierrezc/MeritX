@@ -18,6 +18,13 @@ export type AiCriterionRow = {
   comentario: string;
 };
 
+export type ChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+};
+
 export type ManualRow = {
   id: string;
   section: MatrixRow['section'];
