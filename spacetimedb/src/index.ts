@@ -95,6 +95,9 @@ const application_language = table(
     language_name: t.string().index('btree'),
     language_level: t.string().index('btree'),
     convalidation: t.bool(),
+    support_name: t.string().optional(),
+    support_url: t.string().optional(),
+    support_path: t.string().optional(),
   },
 );
 
@@ -139,6 +142,67 @@ const application_audit = table(
     observations: t.string(),
     reviewer_username: t.string().optional(),
     updated_at: t.timestamp(),
+  },
+);
+
+const application_audit_criterion = table(
+  { name: 'application_audit_criterion', public: true },
+  {
+    criterion_id: t.string().primaryKey(),
+    tracking_id: t.string().index('btree'),
+    criterion_key: t.string().index('btree'),
+    criterion_label: t.string(),
+    criterion_status: t.string().index('btree'),
+    quantity: t.f64(),
+    unit_label: t.string(),
+    base_weight: t.f64(),
+    recommended_score: t.f64(),
+    weighted_score: t.f64(),
+    support_summary: t.string(),
+    notes: t.string(),
+    reviewer_username: t.string().optional(),
+    valuation_stage: t.string().index('btree'),
+    updated_at: t.timestamp(),
+  },
+);
+
+const audit_score_snapshot = table(
+  { name: 'audit_score_snapshot', public: true },
+  {
+    id: t.u32().primaryKey().autoInc(),
+    tracking_id: t.string().index('btree'),
+    valuation_stage: t.string().index('btree'),
+    actor_username: t.string(),
+    actor_role: t.string(),
+    suggested_score: t.f64(),
+    current_weighted_score: t.f64(),
+    final_weighted_score: t.f64().optional(),
+    final_category: t.string().optional(),
+    notes: t.string(),
+    criteria_count: t.u32(),
+    created_at: t.timestamp(),
+  },
+);
+
+const audit_criterion_event = table(
+  { name: 'audit_criterion_event', public: true },
+  {
+    id: t.u32().primaryKey().autoInc(),
+    tracking_id: t.string().index('btree'),
+    criterion_key: t.string().index('btree'),
+    valuation_stage: t.string().index('btree'),
+    actor_username: t.string(),
+    actor_role: t.string(),
+    previous_status: t.string().optional(),
+    new_status: t.string(),
+    previous_base_weight: t.f64().optional(),
+    new_base_weight: t.f64(),
+    previous_recommended_score: t.f64().optional(),
+    new_recommended_score: t.f64(),
+    previous_weighted_score: t.f64().optional(),
+    new_weighted_score: t.f64(),
+    message: t.string(),
+    created_at: t.timestamp(),
   },
 );
 
@@ -252,6 +316,119 @@ const rag_document = table(
   },
 );
 
+const convocatoria = table(
+  { name: 'convocatoria', public: true },
+  {
+    id: t.string().primaryKey(),
+    codigo: t.string().unique().index('btree'),
+    nombre: t.string().index('btree'),
+    descripcion: t.string(),
+    periodo: t.string().index('btree'),
+    año: t.u32().index('btree'),
+    fecha_apertura: t.string(),
+    fecha_cierre: t.string(),
+    estado: t.string().index('btree'),
+    postulaciones_count: t.u32(),
+    created_by: t.string().optional(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const application_convocatoria = table(
+  { name: 'application_convocatoria', public: true },
+  {
+    tracking_id: t.string().primaryKey(),
+    convocatoria_id: t.string().index('btree'),
+    linked_by: t.string().optional(),
+    linked_at: t.timestamp(),
+  },
+);
+
+const faculty = table(
+  { name: 'faculty', public: true },
+  {
+    faculty_id: t.string().primaryKey(),
+    faculty_name: t.string().unique().index('btree'),
+    active: t.bool(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const academic_program = table(
+  { name: 'academic_program', public: true },
+  {
+    program_id: t.string().primaryKey(),
+    faculty_id: t.string().index('btree'),
+    program_name: t.string().index('btree'),
+    active: t.bool(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+    formation_level: t.string().default('PREGRADO').index('btree'),
+  },
+);
+
+const user_faculty_assignment = table(
+  { name: 'user_faculty_assignment', public: true },
+  {
+    user_email: t.string().primaryKey(),
+    role_key: t.string().index('btree'),
+    faculty_id: t.string().index('btree'),
+    faculty_name: t.string().index('btree'),
+    active: t.bool(),
+    assigned_by: t.string().optional(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const application_decano_document = table(
+  { name: 'application_decano_document', public: true },
+  {
+    document_id: t.string().primaryKey(),
+    tracking_id: t.string().index('btree'),
+    document_type: t.string().index('btree'),
+    file_name: t.string(),
+    file_url: t.string().optional(),
+    file_path: t.string().optional(),
+    uploaded_by: t.string().optional(),
+    uploaded_at: t.timestamp(),
+  },
+);
+
+const application_decano_review = table(
+  { name: 'application_decano_review', public: true },
+  {
+    tracking_id: t.string().primaryKey(),
+    review_status: t.string().index('btree'),
+    observations: t.string(),
+    reviewed_by: t.string().optional(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const application_analysis_version = table(
+  { name: 'application_analysis_version', public: true },
+  {
+    version_id: t.string().primaryKey(),
+    tracking_id: t.string().index('btree'),
+    source_type: t.string().index('btree'),
+    version_status: t.string().index('btree'),
+    rows_payload: t.string(),
+    total_score: t.f64(),
+    suggested_category: t.string().index('btree'),
+    narrative: t.string(),
+    notes: t.string(),
+    created_by: t.string().optional(),
+    created_role: t.string().optional(),
+    approved_by: t.string().optional(),
+    approved_at: t.timestamp().optional(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema({
   portal_user,
   user_profile,
@@ -263,7 +440,10 @@ const spacetimedb = schema({
   application_publication,
   application_experience,
   application_audit,
+  application_audit_criterion,
   audit_event,
+  audit_score_snapshot,
+  audit_criterion_event,
   system_setting,
   report_snapshot,
   api_config,
@@ -271,6 +451,14 @@ const spacetimedb = schema({
   email_template,
   rag_config,
   rag_document,
+  convocatoria,
+  application_convocatoria,
+  faculty,
+  academic_program,
+  user_faculty_assignment,
+  application_decano_document,
+  application_decano_review,
+  application_analysis_version,
 });
 
 export default spacetimedb;
@@ -283,16 +471,22 @@ const DEFAULT_ROLES = [
     description: 'Acceso total a expedientes, reportes y configuración.',
   },
   {
-    role_key: 'auxiliar',
-    role_name: 'Auxiliar',
-    portal_module: 'auxiliares',
-    description: 'Validación inicial y auditoría documental operativa.',
+    role_key: 'decano',
+    role_name: 'Decano',
+    portal_module: 'decano',
+    description: 'Consejo de Facultad para aval o rechazo de postulación.',
   },
   {
-    role_key: 'director',
-    role_name: 'Director',
-    portal_module: 'director',
-    description: 'Seguimiento directivo y revisión final de procesos.',
+    role_key: 'cap',
+    role_name: 'CAP',
+    portal_module: 'cap',
+    description: 'Comité de Asuntos Profesorales para valoración intermedia.',
+  },
+  {
+    role_key: 'cepi',
+    role_name: 'CEPI',
+    portal_module: 'cepi',
+    description: 'Comité de Evaluación de Producción Intelectual para decisión final.',
   },
   {
     role_key: 'talento_humano',
@@ -304,12 +498,13 @@ const DEFAULT_ROLES = [
 
 type RoleKey = (typeof DEFAULT_ROLES)[number]['role_key'];
 
-function requireSession(ctx: any, role: RoleKey) {
+function requireSession(ctx: any, role: RoleKey | RoleKey[]) {
   const session = ctx.db.portal_session.identity.find(ctx.sender);
   if (!session || !session.active) {
     throw new SenderError('No hay una sesión activa para este portal.');
   }
-  if (session.role !== 'admin' && session.role !== role) {
+  const allowedRoles = Array.isArray(role) ? role : [role];
+  if (session.role !== 'admin' && !allowedRoles.includes(session.role)) {
     throw new SenderError('No tienes permisos para este recurso.');
   }
   return session;
@@ -321,6 +516,10 @@ function requireRoleExists(ctx: any, roleKey: string) {
     throw new SenderError('El rol seleccionado no existe o está inactivo.');
   }
   return role;
+}
+
+function isDecanoLikeRole(roleKey: string) {
+  return roleKey.trim().toLowerCase().includes('decano');
 }
 
 function requireNonEmpty(value: string, label: string) {
@@ -343,6 +542,279 @@ function nextId(): number {
   return (Date.now() + idCounter) >>> 0;
 }
 
+type AuditCriterionPayload = {
+  criterionKey?: string;
+  criterionLabel?: string;
+  criterionStatus?: string;
+  quantity?: number;
+  unitLabel?: string;
+  baseWeight?: number;
+  recommendedScore?: number;
+  weightedScore?: number;
+  supportSummary?: string;
+  notes?: string;
+};
+
+function toCleanString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function toStableKey(value: string, fallbackPrefix: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || `${fallbackPrefix}_${nextId()}`;
+}
+
+function toSafeNumber(value: unknown, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function parseAuditCriteriaPayload(payload?: string): AuditCriterionPayload[] {
+  if (!payload || !payload.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(payload);
+    if (!Array.isArray(parsed)) throw new Error('criteria_payload debe ser una lista.');
+
+    return parsed
+      .map((item) => ({
+        criterionKey: toCleanString(item?.criterionKey),
+        criterionLabel: toCleanString(item?.criterionLabel),
+        criterionStatus: toCleanString(item?.criterionStatus, 'PRESENTADO') || 'PRESENTADO',
+        quantity: toSafeNumber(item?.quantity),
+        unitLabel: toCleanString(item?.unitLabel),
+        baseWeight: toSafeNumber(item?.baseWeight),
+        recommendedScore: toSafeNumber(item?.recommendedScore),
+        weightedScore: toSafeNumber(item?.weightedScore),
+        supportSummary: toCleanString(item?.supportSummary),
+        notes: toCleanString(item?.notes),
+      }))
+      .filter((item) => item.criterionKey || item.criterionLabel);
+  } catch (error) {
+    throw new SenderError(`criteria_payload inválido: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+type FacultyProgramImportProgram = {
+  name: string;
+  level: string;
+};
+
+type FacultyProgramsImportItem = {
+  facultyName: string;
+  programs: FacultyProgramImportProgram[];
+};
+
+type AnalysisRowPayload = {
+  section: string;
+  criterion: string;
+  detail: string;
+  quantity: number;
+  value: number;
+  baseScore: number;
+  suggestedScore: number;
+  hasSupport: boolean;
+  supportNote: string;
+  comment: string;
+};
+
+function parseFacultyProgramsPayload(payload?: string): FacultyProgramsImportItem[] {
+  if (!payload || !payload.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(payload);
+    if (!Array.isArray(parsed)) throw new Error('payload debe ser una lista.');
+
+    return parsed
+      .map((item) => ({
+        facultyName: toCleanString(item?.facultyName || item?.faculty || item?.nombreFacultad),
+        programs: Array.isArray(item?.programs)
+          ? item.programs
+            .map((program: unknown) => {
+              if (typeof program === 'string') {
+                const name = toCleanString(program);
+                return name ? { name, level: 'PREGRADO' } : null;
+              }
+
+              const parsedProgram = program as Record<string, unknown>;
+              const name = toCleanString(
+                parsedProgram?.name
+                || parsedProgram?.program
+                || parsedProgram?.programName
+                || parsedProgram?.nombre
+                || parsedProgram?.programa,
+              );
+              if (!name) return null;
+
+              const level = toCleanString(
+                parsedProgram?.level
+                || parsedProgram?.formationLevel
+                || parsedProgram?.nivel
+                || parsedProgram?.nivelFormacion,
+                'PREGRADO',
+              ).toUpperCase();
+
+              return { name, level: level || 'PREGRADO' };
+            })
+            .filter(
+              (program: FacultyProgramImportProgram | null): program is FacultyProgramImportProgram =>
+                Boolean(program?.name),
+            )
+          : [],
+      }))
+      .filter((item) => item.facultyName);
+  } catch (error) {
+    throw new SenderError(`import_payload inválido: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function normalizeAnalysisSourceType(sourceType: string) {
+  const normalized = sourceType.trim().toUpperCase();
+  if (['MOTOR', 'IA', 'MANUAL_TH'].includes(normalized)) return normalized;
+  throw new SenderError('source_type inválido. Usa MOTOR, IA o MANUAL_TH.');
+}
+
+function parseAnalysisRowsPayload(payload: string): AnalysisRowPayload[] {
+  if (!payload.trim()) {
+    throw new SenderError('rows_payload es obligatorio.');
+  }
+
+  try {
+    const parsed = JSON.parse(payload);
+    if (!Array.isArray(parsed)) {
+      throw new Error('rows_payload debe ser una lista JSON.');
+    }
+
+    return parsed.map((item) => ({
+      section: toCleanString(item?.section, 'Otros'),
+      criterion: toCleanString(item?.criterion || item?.criterio, ''),
+      detail: toCleanString(item?.detail || item?.detalle, ''),
+      quantity: toSafeNumber(item?.quantity ?? item?.cantidad, 0),
+      value: toSafeNumber(item?.value ?? item?.valor, 0),
+      baseScore: toSafeNumber(item?.baseScore ?? item?.puntajeBase ?? item?.puntaje, 0),
+      suggestedScore: toSafeNumber(item?.suggestedScore ?? item?.puntajeSugerido ?? item?.puntaje, 0),
+      hasSupport: Boolean(item?.hasSupport ?? item?.soportado),
+      supportNote: toCleanString(item?.supportNote || item?.support_note || '', ''),
+      comment: toCleanString(item?.comment || item?.comentario || '', ''),
+    })).filter((row) => row.criterion);
+  } catch (error) {
+    throw new SenderError(`rows_payload inválido: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function isFinalWorkflowState(status: string, stage: string) {
+  const normalizedStatus = status.trim().toUpperCase();
+  const normalizedStage = stage.trim().toUpperCase();
+  return ['APTO', 'APROBADO', 'FINALIZADO', 'CERRADO'].includes(normalizedStatus)
+    || normalizedStage.includes('FINAL')
+    || normalizedStage.includes('APPROVED');
+}
+
+function upsertAuditCriteria(
+  ctx: any,
+  trackingId: string,
+  stage: string,
+  actorUsername: string,
+  actorRole: string,
+  criteria: AuditCriterionPayload[],
+) {
+  const stageKey = stage
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'stage';
+
+  for (const criterion of criteria) {
+    const criterionKey = (criterion.criterionKey || criterion.criterionLabel || `criterion-${nextId()}`)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    const criterionId = `${trackingId}:${stageKey}:${criterionKey}`;
+    const label = criterion.criterionLabel || criterionKey.replace(/_/g, ' ').toUpperCase();
+    const existing = ctx.db.application_audit_criterion.criterion_id.find(criterionId);
+    const nextRow = {
+      criterion_id: criterionId,
+      tracking_id: trackingId,
+      criterion_key: criterionKey,
+      criterion_label: label,
+      criterion_status: criterion.criterionStatus || 'PRESENTADO',
+      quantity: criterion.quantity ?? 0,
+      unit_label: criterion.unitLabel || '',
+      base_weight: criterion.baseWeight ?? 0,
+      recommended_score: criterion.recommendedScore ?? 0,
+      weighted_score: criterion.weightedScore ?? 0,
+      support_summary: criterion.supportSummary || '',
+      notes: criterion.notes || '',
+      reviewer_username: actorUsername,
+      valuation_stage: stage,
+      updated_at: ctx.timestamp,
+    };
+
+    if (existing) {
+      const hasChanged = existing.criterion_status !== nextRow.criterion_status
+        || existing.base_weight !== nextRow.base_weight
+        || existing.recommended_score !== nextRow.recommended_score
+        || existing.weighted_score !== nextRow.weighted_score
+        || existing.notes !== nextRow.notes
+        || existing.support_summary !== nextRow.support_summary
+        || existing.quantity !== nextRow.quantity
+        || existing.unit_label !== nextRow.unit_label
+        || existing.valuation_stage !== nextRow.valuation_stage;
+
+      ctx.db.application_audit_criterion.criterion_id.update({
+        ...existing,
+        ...nextRow,
+      });
+
+      if (hasChanged) {
+        ctx.db.audit_criterion_event.insert({
+          id: nextId(),
+          tracking_id: trackingId,
+          criterion_key: criterionKey,
+          valuation_stage: stage,
+          actor_username: actorUsername,
+          actor_role: actorRole,
+          previous_status: existing.criterion_status,
+          new_status: nextRow.criterion_status,
+          previous_base_weight: existing.base_weight,
+          new_base_weight: nextRow.base_weight,
+          previous_recommended_score: existing.recommended_score,
+          new_recommended_score: nextRow.recommended_score,
+          previous_weighted_score: existing.weighted_score,
+          new_weighted_score: nextRow.weighted_score,
+          message: nextRow.notes || `Criterio ${label} actualizado en etapa ${stage}.`,
+          created_at: ctx.timestamp,
+        });
+      }
+    } else {
+      ctx.db.application_audit_criterion.insert(nextRow);
+      ctx.db.audit_criterion_event.insert({
+        id: nextId(),
+        tracking_id: trackingId,
+        criterion_key: criterionKey,
+        valuation_stage: stage,
+        actor_username: actorUsername,
+        actor_role: actorRole,
+        previous_status: undefined,
+        new_status: nextRow.criterion_status,
+        previous_base_weight: undefined,
+        new_base_weight: nextRow.base_weight,
+        previous_recommended_score: undefined,
+        new_recommended_score: nextRow.recommended_score,
+        previous_weighted_score: undefined,
+        new_weighted_score: nextRow.weighted_score,
+        message: nextRow.notes || `Criterio ${label} registrado en etapa ${stage}.`,
+        created_at: ctx.timestamp,
+      });
+    }
+  }
+}
+
 export const init = spacetimedb.init((ctx) => {
   for (const role of DEFAULT_ROLES) {
     const existingRole = ctx.db.portal_role.role_key.find(role.role_key);
@@ -356,27 +828,40 @@ export const init = spacetimedb.init((ctx) => {
     }
   }
 
-  const auxiliar = ctx.db.portal_user.username.find('auxiliar');
-  if (!auxiliar) {
+  const decano = ctx.db.portal_user.username.find('decano');
+  if (!decano) {
     ctx.db.portal_user.insert({
       id: nextId(),
-      username: 'auxiliar',
-      password: 'Auxiliar123!',
-      role: 'auxiliar',
-      display_name: 'Auxiliar Operativo',
+      username: 'decano',
+      password: 'Decano123!',
+      role: 'decano',
+      display_name: 'Consejo de Facultad',
       active: true,
       created_at: ctx.timestamp,
     });
   }
 
-  const director = ctx.db.portal_user.username.find('director');
-  if (!director) {
+  const cap = ctx.db.portal_user.username.find('cap');
+  if (!cap) {
     ctx.db.portal_user.insert({
       id: nextId(),
-      username: 'director',
-      password: 'Director123!',
-      role: 'director',
-      display_name: 'Director Académico',
+      username: 'cap',
+      password: 'Cap123!',
+      role: 'cap',
+      display_name: 'Comité CAP',
+      active: true,
+      created_at: ctx.timestamp,
+    });
+  }
+
+  const cepi = ctx.db.portal_user.username.find('cepi');
+  if (!cepi) {
+    ctx.db.portal_user.insert({
+      id: nextId(),
+      username: 'cepi',
+      password: 'Cepi123!',
+      role: 'cepi',
+      display_name: 'Comité CEPI',
       active: true,
       created_at: ctx.timestamp,
     });
@@ -417,8 +902,9 @@ export const init = spacetimedb.init((ctx) => {
     });
   };
 
-  seedProfile('Auxiliar Operativo', 'auxiliar@udes.edu.co', 'VALLEDUPAR', 'Auxiliar123!', 'auxiliar');
-  seedProfile('Director Académico', 'director@udes.edu.co', 'VALLEDUPAR', 'Director123!', 'director');
+  seedProfile('Consejo de Facultad', 'decano@udes.edu.co', 'VALLEDUPAR', 'Decano123!', 'decano');
+  seedProfile('Comité CAP', 'cap@udes.edu.co', 'VALLEDUPAR', 'Cap123!', 'cap');
+  seedProfile('Comité CEPI', 'cepi@udes.edu.co', 'VALLEDUPAR', 'Cepi123!', 'cepi');
   seedProfile('Talento Humano', 'talentohumano@udes.edu.co', 'VALLEDUPAR', 'Talento123!', 'talento_humano');
 
   // Seed portal roles
@@ -437,8 +923,9 @@ export const init = spacetimedb.init((ctx) => {
   };
 
   seedRole('admin', 'Administrador', 'Acceso administrativo completo al sistema');
-  seedRole('auxiliar', 'Auxiliar', 'Acceso apoyo operativo');
-  seedRole('director', 'Director', 'Acceso control directivo');
+  seedRole('decano', 'Decano', 'Consejo de Facultad para aval inicial');
+  seedRole('cap', 'CAP', 'Comité de Asuntos Profesorales');
+  seedRole('cepi', 'CEPI', 'Comité de Evaluación de Producción Intelectual');
   seedRole('talento_humano', 'Talento Humano', 'Acceso gestión administrativa');
 
   const apiDefault = ctx.db.api_config.config_key.find('default');
@@ -615,8 +1102,9 @@ export const init_portal_roles = spacetimedb.reducer(
     };
 
     seedRole('admin', 'Administrador', 'Acceso administrativo completo al sistema');
-    seedRole('auxiliar', 'Auxiliar', 'Acceso apoyo operativo');
-    seedRole('director', 'Director', 'Acceso control directivo');
+    seedRole('decano', 'Decano', 'Consejo de Facultad para aval inicial');
+    seedRole('cap', 'CAP', 'Comité de Asuntos Profesorales');
+    seedRole('cepi', 'CEPI', 'Comité de Evaluación de Producción Intelectual');
     seedRole('talento_humano', 'Talento Humano', 'Acceso gestión administrativa');
   },
 );
@@ -677,7 +1165,7 @@ export const upsert_portal_role = spacetimedb.reducer(
     active: t.bool(),
   },
   (ctx, args) => {
-    requireSession(ctx, 'admin');
+    const session = requireSession(ctx, 'admin');
     
     // Enhanced validation with detailed error messages
     const roleKey = args.role_key ? String(args.role_key).trim() : '';
@@ -718,7 +1206,7 @@ export const create_portal_user = spacetimedb.reducer(
     active: t.bool(),
   },
   (ctx, args) => {
-    requireSession(ctx, 'admin');
+    const session = requireSession(ctx, 'admin');
     requireNonEmpty(args.username, 'Usuario');
     requireNonEmpty(args.password, 'Contraseña');
     requireNonEmpty(args.role, 'Rol');
@@ -746,9 +1234,10 @@ export const register_user_profile = spacetimedb.reducer(
     campus: t.string(),
     password: t.string(),
     role: t.string(),
+    faculty_id: t.string().optional(),
   },
   (ctx, args) => {
-    requireSession(ctx, 'admin');
+    const session = requireSession(ctx, 'admin');
     requireNonEmpty(args.nombre, 'Nombre');
     requireNonEmpty(args.campus, 'Campus');
     requireNonEmpty(args.password, 'Contraseña');
@@ -788,6 +1277,113 @@ export const register_user_profile = spacetimedb.reducer(
       active: true,
       created_at: ctx.timestamp,
     });
+
+    const previousAssignment = ctx.db.user_faculty_assignment.user_email.find(correo);
+    if (isDecanoLikeRole(args.role)) {
+      const facultyId = args.faculty_id || '';
+      requireNonEmpty(facultyId, 'Facultad asignada para decano');
+      const faculty = ctx.db.faculty.faculty_id.find(facultyId);
+      if (!faculty || !faculty.active) {
+        throw new SenderError('La facultad seleccionada para el decano no existe o está inactiva.');
+      }
+
+      const nextAssignment = {
+        user_email: correo,
+        role_key: args.role,
+        faculty_id: faculty.faculty_id,
+        faculty_name: faculty.faculty_name,
+        active: true,
+        assigned_by: session.username,
+        created_at: previousAssignment?.created_at || ctx.timestamp,
+        updated_at: ctx.timestamp,
+      };
+
+      if (previousAssignment) {
+        ctx.db.user_faculty_assignment.user_email.update(nextAssignment);
+      } else {
+        ctx.db.user_faculty_assignment.insert(nextAssignment);
+      }
+    } else if (previousAssignment) {
+      ctx.db.user_faculty_assignment.user_email.delete(correo);
+    }
+  },
+);
+
+export const update_user_profile = spacetimedb.reducer(
+  {
+    correo: t.string(),
+    nombre: t.string().optional(),
+    campus: t.string().optional(),
+    role: t.string().optional(),
+    active: t.bool().optional(),
+    faculty_id: t.string().optional(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, 'admin');
+    const correo = requireEmail(args.correo);
+
+    const profile = ctx.db.user_profile.correo.find(correo);
+    if (!profile) {
+      throw new SenderError('No existe un perfil con ese correo.');
+    }
+
+    const portalUser = ctx.db.portal_user.username.find(correo);
+    if (!portalUser) {
+      throw new SenderError('No existe un usuario de portal con ese correo.');
+    }
+
+    const nextRole = toCleanString(args.role, profile.role);
+    requireRoleExists(ctx, nextRole);
+
+    const nextNombre = toCleanString(args.nombre, profile.nombre);
+    const nextCampus = toCleanString(args.campus, profile.campus);
+    const nextActive = args.active ?? profile.active;
+
+    ctx.db.user_profile.id.update({
+      ...profile,
+      nombre: nextNombre,
+      campus: nextCampus,
+      role: nextRole,
+      active: nextActive,
+      updated_at: ctx.timestamp,
+    });
+
+    ctx.db.portal_user.id.update({
+      ...portalUser,
+      display_name: nextNombre,
+      role: nextRole,
+      active: nextActive,
+    });
+
+    const previousAssignment = ctx.db.user_faculty_assignment.user_email.find(correo);
+    if (isDecanoLikeRole(nextRole)) {
+      const facultyId = toCleanString(args.faculty_id, previousAssignment?.faculty_id || '');
+      requireNonEmpty(facultyId, 'Facultad asignada para decano');
+
+      const faculty = ctx.db.faculty.faculty_id.find(facultyId);
+      if (!faculty || !faculty.active) {
+        throw new SenderError('La facultad seleccionada para el decano no existe o está inactiva.');
+      }
+
+      const nextAssignment = {
+        user_email: correo,
+        role_key: nextRole,
+        faculty_id: faculty.faculty_id,
+        faculty_name: faculty.faculty_name,
+        active: nextActive,
+        assigned_by: session.username,
+        created_at: previousAssignment?.created_at || ctx.timestamp,
+        updated_at: ctx.timestamp,
+      };
+
+      if (previousAssignment) {
+        ctx.db.user_faculty_assignment.user_email.update(nextAssignment);
+      } else {
+        ctx.db.user_faculty_assignment.insert(nextAssignment);
+      }
+    } else if (previousAssignment) {
+      ctx.db.user_faculty_assignment.user_email.delete(correo);
+    }
   },
 );
 
@@ -799,6 +1395,7 @@ export const register_professor = spacetimedb.reducer(
     campus: t.string(),
     program_name: t.string(),
     faculty_name: t.string(),
+    convocatoria_id: t.string().optional(),
     scopus_profile: t.string().optional(),
     final_points: t.f64(),
     final_category: t.string(),
@@ -817,15 +1414,35 @@ export const register_professor = spacetimedb.reducer(
 
     ctx.db.application.insert({
       ...args,
-      status: 'RECIBIDO',
+      status: 'PENDIENTE_AVAL_FACULTAD',
       source_portal: 'AUTOREGISTRO',
       created_at: ctx.timestamp,
       updated_at: ctx.timestamp,
     });
 
+    if (args.convocatoria_id) {
+      const convocatoria = ctx.db.convocatoria.id.find(args.convocatoria_id);
+      if (!convocatoria) {
+        throw new SenderError('La convocatoria seleccionada no existe.');
+      }
+
+      ctx.db.application_convocatoria.insert({
+        tracking_id: args.tracking_id,
+        convocatoria_id: args.convocatoria_id,
+        linked_by: 'public_portal',
+        linked_at: ctx.timestamp,
+      });
+
+      ctx.db.convocatoria.id.update({
+        ...convocatoria,
+        postulaciones_count: (convocatoria.postulaciones_count || 0) + 1,
+        updated_at: ctx.timestamp,
+      });
+    }
+
     ctx.db.application_audit.insert({
       tracking_id: args.tracking_id,
-      current_status: 'RECIBIDO',
+      current_status: 'PENDIENTE_AVAL_FACULTAD',
       title_validated: false,
       experience_certified: false,
       publication_verified: false,
@@ -872,6 +1489,9 @@ export const add_application_language = spacetimedb.reducer(
     language_name: t.string(),
     language_level: t.string(),
     convalidation: t.bool(),
+    support_name: t.string().optional(),
+    support_url: t.string().optional(),
+    support_path: t.string().optional(),
   },
   (ctx, args) => {
     const app = ctx.db.application.tracking_id.find(args.tracking_id);
@@ -924,6 +1544,247 @@ export const add_application_experience = spacetimedb.reducer(
   },
 );
 
+export const upsert_faculty = spacetimedb.reducer(
+  {
+    faculty_name: t.string(),
+    active: t.bool().optional(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, 'admin');
+    requireNonEmpty(args.faculty_name, 'Facultad');
+
+    const facultyId = toStableKey(args.faculty_name, 'faculty');
+    const existing = ctx.db.faculty.faculty_id.find(facultyId);
+
+    if (existing) {
+      ctx.db.faculty.faculty_id.update({
+        ...existing,
+        faculty_name: args.faculty_name,
+        active: args.active ?? existing.active,
+        updated_at: ctx.timestamp,
+      });
+    } else {
+      ctx.db.faculty.insert({
+        faculty_id: facultyId,
+        faculty_name: args.faculty_name,
+        active: args.active ?? true,
+        created_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+      });
+    }
+  },
+);
+
+export const upsert_academic_program = spacetimedb.reducer(
+  {
+    faculty_id: t.string(),
+    program_name: t.string(),
+    formation_level: t.string().optional(),
+    active: t.bool().optional(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, 'admin');
+    requireNonEmpty(args.faculty_id, 'Facultad');
+    requireNonEmpty(args.program_name, 'Programa');
+
+    const ownerFaculty = ctx.db.faculty.faculty_id.find(args.faculty_id);
+    if (!ownerFaculty) {
+      throw new SenderError('La facultad seleccionada no existe.');
+    }
+
+    const programId = `${args.faculty_id}:${toStableKey(args.program_name, 'program')}`;
+    const existing = ctx.db.academic_program.program_id.find(programId);
+
+    if (existing) {
+      ctx.db.academic_program.program_id.update({
+        ...existing,
+        faculty_id: args.faculty_id,
+        program_name: args.program_name,
+        formation_level: toCleanString(args.formation_level, existing.formation_level || 'PREGRADO').toUpperCase(),
+        active: args.active ?? existing.active,
+        updated_at: ctx.timestamp,
+      });
+    } else {
+      ctx.db.academic_program.insert({
+        program_id: programId,
+        faculty_id: args.faculty_id,
+        program_name: args.program_name,
+        formation_level: toCleanString(args.formation_level, 'PREGRADO').toUpperCase(),
+        active: args.active ?? true,
+        created_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+      });
+    }
+  },
+);
+
+export const import_faculty_programs = spacetimedb.reducer(
+  {
+    import_payload: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, 'admin');
+    const rows = parseFacultyProgramsPayload(args.import_payload);
+    if (rows.length === 0) {
+      throw new SenderError('No se encontraron datos válidos para importar.');
+    }
+
+    for (const row of rows) {
+      const facultyId = toStableKey(row.facultyName, 'faculty');
+      const existingFaculty = ctx.db.faculty.faculty_id.find(facultyId);
+      if (existingFaculty) {
+        ctx.db.faculty.faculty_id.update({
+          ...existingFaculty,
+          faculty_name: row.facultyName,
+          active: true,
+          updated_at: ctx.timestamp,
+        });
+      } else {
+        ctx.db.faculty.insert({
+          faculty_id: facultyId,
+          faculty_name: row.facultyName,
+          active: true,
+          created_at: ctx.timestamp,
+          updated_at: ctx.timestamp,
+        });
+      }
+
+      for (const program of row.programs) {
+        const programId = `${facultyId}:${toStableKey(program.name, 'program')}`;
+        const existingProgram = ctx.db.academic_program.program_id.find(programId);
+        if (existingProgram) {
+          ctx.db.academic_program.program_id.update({
+            ...existingProgram,
+            faculty_id: facultyId,
+            program_name: program.name,
+            formation_level: program.level || 'PREGRADO',
+            active: true,
+            updated_at: ctx.timestamp,
+          });
+        } else {
+          ctx.db.academic_program.insert({
+            program_id: programId,
+            faculty_id: facultyId,
+            program_name: program.name,
+            formation_level: program.level || 'PREGRADO',
+            active: true,
+            created_at: ctx.timestamp,
+            updated_at: ctx.timestamp,
+          });
+        }
+      }
+    }
+  },
+);
+
+export const record_decano_review = spacetimedb.reducer(
+  {
+    tracking_id: t.string(),
+    review_status: t.string(),
+    observations: t.string().optional(),
+    interview_file_name: t.string().optional(),
+    interview_file_url: t.string().optional(),
+    interview_file_path: t.string().optional(),
+    decision_file_name: t.string().optional(),
+    decision_file_url: t.string().optional(),
+    decision_file_path: t.string().optional(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, 'decano');
+    requireNonEmpty(args.tracking_id, 'Tracking');
+    requireNonEmpty(args.review_status, 'Estado de revisión');
+
+    const app = ctx.db.application.tracking_id.find(args.tracking_id);
+    if (!app) throw new SenderError('La postulación no existe.');
+
+    const normalizedStatus = args.review_status.trim().toUpperCase();
+    const mappedStatus = normalizedStatus === 'APTO_PARA_CONTINUAR'
+      ? 'AVALADO_FACULTAD'
+      : normalizedStatus === 'RECHAZAR_POSTULACION'
+        ? 'RECHAZADO_FACULTAD'
+        : 'PENDIENTE_AVAL_FACULTAD';
+
+    if (args.interview_file_name?.trim()) {
+      const documentId = `${args.tracking_id}:interview:${nextId()}`;
+      ctx.db.application_decano_document.insert({
+        document_id: documentId,
+        tracking_id: args.tracking_id,
+        document_type: 'INTERVIEW',
+        file_name: args.interview_file_name.trim(),
+        file_url: args.interview_file_url,
+        file_path: args.interview_file_path,
+        uploaded_by: session.username,
+        uploaded_at: ctx.timestamp,
+      });
+    }
+
+    if (args.decision_file_name?.trim()) {
+      const documentId = `${args.tracking_id}:decision:${nextId()}`;
+      ctx.db.application_decano_document.insert({
+        document_id: documentId,
+        tracking_id: args.tracking_id,
+        document_type: 'DECISION',
+        file_name: args.decision_file_name.trim(),
+        file_url: args.decision_file_url,
+        file_path: args.decision_file_path,
+        uploaded_by: session.username,
+        uploaded_at: ctx.timestamp,
+      });
+    }
+
+    const existingReview = ctx.db.application_decano_review.tracking_id.find(args.tracking_id);
+    const nextReview = {
+      tracking_id: args.tracking_id,
+      review_status: normalizedStatus,
+      observations: args.observations || '',
+      reviewed_by: session.username,
+      updated_at: ctx.timestamp,
+    };
+
+    if (existingReview) {
+      ctx.db.application_decano_review.tracking_id.update({
+        ...existingReview,
+        ...nextReview,
+      });
+    } else {
+      ctx.db.application_decano_review.insert(nextReview);
+    }
+
+    ctx.db.application.tracking_id.update({
+      ...app,
+      status: mappedStatus,
+      output_message:
+        mappedStatus === 'AVALADO_FACULTAD'
+          ? 'La postulación fue avalada por Consejo de Facultad y enviada a CAP.'
+          : mappedStatus === 'RECHAZADO_FACULTAD'
+            ? 'La postulación fue rechazada por Consejo de Facultad.'
+            : 'La postulación sigue pendiente de revisión en Consejo de Facultad.',
+      updated_at: ctx.timestamp,
+    });
+
+    const audit = ctx.db.application_audit.tracking_id.find(args.tracking_id);
+    if (audit) {
+      ctx.db.application_audit.tracking_id.update({
+        ...audit,
+        current_status: mappedStatus,
+        observations: args.observations || audit.observations,
+        reviewer_username: session.username,
+        updated_at: ctx.timestamp,
+      });
+    }
+
+    ctx.db.audit_event.insert({
+      id: nextId(),
+      tracking_id: args.tracking_id,
+      actor_username: session.username,
+      actor_role: session.role,
+      event_type: 'DECANO_REVIEW_RECORDED',
+      message: args.observations || `Revisión de decano registrada con estado ${normalizedStatus}.`,
+      created_at: ctx.timestamp,
+    });
+  },
+);
+
 export const update_application_status = spacetimedb.reducer(
   {
     tracking_id: t.string(),
@@ -931,7 +1792,7 @@ export const update_application_status = spacetimedb.reducer(
     output_message: t.string(),
   },
   (ctx, args) => {
-    const session = requireSession(ctx, 'auxiliar');
+    const session = requireSession(ctx, ['decano', 'cap', 'cepi']);
     const app = ctx.db.application.tracking_id.find(args.tracking_id);
     if (!app) throw new SenderError('La postulación no existe.');
 
@@ -973,18 +1834,69 @@ export const record_application_audit = spacetimedb.reducer(
     publication_verified: t.bool(),
     language_validated: t.bool(),
     observations: t.string(),
+    suggested_score: t.f64().optional(),
+    current_weighted_score: t.f64().optional(),
+    final_weighted_score: t.f64().optional(),
+    valuation_stage: t.string().optional(),
+    final_category: t.string().optional(),
+    criteria_payload: t.string().optional(),
   },
   (ctx, args) => {
-    const session = requireSession(ctx, 'auxiliar');
+    const session = requireSession(ctx, ['cap', 'cepi']);
     const audit = ctx.db.application_audit.tracking_id.find(args.tracking_id);
     if (!audit) throw new SenderError('No existe auditoría para ese expediente.');
 
+    const app = ctx.db.application.tracking_id.find(args.tracking_id);
+    if (!app) throw new SenderError('La postulación no existe.');
+
+    const valuationStage = toCleanString(args.valuation_stage, 'CAP_REVIEW') || 'CAP_REVIEW';
+    const criteria = parseAuditCriteriaPayload(args.criteria_payload);
+    const suggestedScore = args.suggested_score ?? 0;
+    const currentWeightedScore = args.current_weighted_score ?? suggestedScore;
+    const explicitFinalWeightedScore = args.final_weighted_score;
+    const finalWeightedScore = explicitFinalWeightedScore ?? (isFinalWorkflowState(args.current_status, valuationStage) ? currentWeightedScore : undefined);
+    const finalCategory = toCleanString(args.final_category, app.final_category || '') || undefined;
+
     ctx.db.application_audit.tracking_id.update({
       ...audit,
-      ...args,
+      tracking_id: args.tracking_id,
+      current_status: args.current_status,
+      title_validated: args.title_validated,
+      experience_certified: args.experience_certified,
+      publication_verified: args.publication_verified,
+      language_validated: args.language_validated,
+      observations: args.observations,
       reviewer_username: session.username,
       updated_at: ctx.timestamp,
     });
+
+    if (criteria.length > 0) {
+      upsertAuditCriteria(ctx, args.tracking_id, valuationStage, session.username, session.role, criteria);
+    }
+
+    ctx.db.audit_score_snapshot.insert({
+      id: nextId(),
+      tracking_id: args.tracking_id,
+      valuation_stage: valuationStage,
+      actor_username: session.username,
+      actor_role: session.role,
+      suggested_score: suggestedScore,
+      current_weighted_score: currentWeightedScore,
+      final_weighted_score: finalWeightedScore,
+      final_category: finalCategory,
+      notes: args.observations,
+      criteria_count: criteria.length,
+      created_at: ctx.timestamp,
+    });
+
+    if (isFinalWorkflowState(args.current_status, valuationStage) && finalWeightedScore !== undefined) {
+      ctx.db.application.tracking_id.update({
+        ...app,
+        final_points: finalWeightedScore,
+        final_category: finalCategory || app.final_category,
+        updated_at: ctx.timestamp,
+      });
+    }
 
     ctx.db.audit_event.insert({
       id: nextId(),
@@ -992,7 +1904,7 @@ export const record_application_audit = spacetimedb.reducer(
       actor_username: session.username,
       actor_role: session.role,
       event_type: 'AUDIT_RECORDED',
-      message: args.observations,
+      message: args.observations || `Auditoría registrada en etapa ${valuationStage}.`,
       created_at: ctx.timestamp,
     });
   },
@@ -1222,3 +2134,276 @@ export const deactivate_rag_document = spacetimedb.reducer(
     });
   },
 );
+
+export const create_convocatoria = spacetimedb.reducer(
+  {
+    codigo: t.string(),
+    nombre: t.string(),
+    descripcion: t.string(),
+    periodo: t.string(),
+    año: t.u32(),
+    fecha_apertura: t.string(),
+    fecha_cierre: t.string(),
+    estado: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['cap', 'talento_humano']);
+    requireNonEmpty(args.codigo, 'Código');
+    requireNonEmpty(args.nombre, 'Nombre');
+
+    const existing = ctx.db.convocatoria.codigo.find(args.codigo);
+    if (existing) {
+      throw new SenderError('El código de convocatoria ya existe.');
+    }
+
+    // Reducers must stay deterministic across replicas; derive ID from stable input.
+    const id = args.codigo.trim().toLowerCase();
+    ctx.db.convocatoria.insert({
+      id,
+      codigo: args.codigo,
+      nombre: args.nombre,
+      descripcion: args.descripcion,
+      periodo: args.periodo,
+      año: args.año,
+      fecha_apertura: args.fecha_apertura,
+      fecha_cierre: args.fecha_cierre,
+      estado: args.estado,
+      postulaciones_count: 0,
+      created_by: ctx.sender.toString(),
+      created_at: ctx.timestamp,
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const update_convocatoria = spacetimedb.reducer(
+  {
+    id: t.string(),
+    nombre: t.string(),
+    descripcion: t.string(),
+    estado: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['cap', 'talento_humano']);
+    requireNonEmpty(args.id, 'ID');
+    requireNonEmpty(args.nombre, 'Nombre');
+
+    const existing = ctx.db.convocatoria.id.find(args.id);
+    if (!existing) {
+      throw new SenderError('Convocatoria no encontrada.');
+    }
+
+    ctx.db.convocatoria.id.update({
+      ...existing,
+      nombre: args.nombre,
+      descripcion: args.descripcion,
+      estado: args.estado,
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const close_convocatoria = spacetimedb.reducer(
+  {
+    id: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['cap', 'talento_humano']);
+    requireNonEmpty(args.id, 'ID');
+
+    const existing = ctx.db.convocatoria.id.find(args.id);
+    if (!existing) {
+      throw new SenderError('Convocatoria no encontrada.');
+    }
+
+    ctx.db.convocatoria.id.update({
+      ...existing,
+      estado: 'CERRADA',
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const link_application_convocatoria = spacetimedb.reducer(
+  {
+    tracking_id: t.string(),
+    convocatoria_id: t.string(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, 'cap');
+    requireNonEmpty(args.tracking_id, 'Tracking');
+    requireNonEmpty(args.convocatoria_id, 'Convocatoria');
+
+    const app = ctx.db.application.tracking_id.find(args.tracking_id);
+    if (!app) throw new SenderError('La postulación no existe.');
+
+    const convocatoria = ctx.db.convocatoria.id.find(args.convocatoria_id);
+    if (!convocatoria) throw new SenderError('La convocatoria no existe.');
+
+    const existing = ctx.db.application_convocatoria.tracking_id.find(args.tracking_id);
+    if (existing?.convocatoria_id === args.convocatoria_id) {
+      return;
+    }
+
+    if (existing) {
+      const oldConv = ctx.db.convocatoria.id.find(existing.convocatoria_id);
+      if (oldConv) {
+        ctx.db.convocatoria.id.update({
+          ...oldConv,
+          postulaciones_count: Math.max(0, (oldConv.postulaciones_count || 0) - 1),
+          updated_at: ctx.timestamp,
+        });
+      }
+
+      ctx.db.application_convocatoria.tracking_id.update({
+        ...existing,
+        convocatoria_id: args.convocatoria_id,
+        linked_by: session.username,
+        linked_at: ctx.timestamp,
+      });
+    } else {
+      ctx.db.application_convocatoria.insert({
+        tracking_id: args.tracking_id,
+        convocatoria_id: args.convocatoria_id,
+        linked_by: session.username,
+        linked_at: ctx.timestamp,
+      });
+    }
+
+    ctx.db.convocatoria.id.update({
+      ...convocatoria,
+      postulaciones_count: (convocatoria.postulaciones_count || 0) + 1,
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const save_application_analysis_version = spacetimedb.reducer(
+  {
+    tracking_id: t.string(),
+    source_type: t.string(),
+    rows_payload: t.string(),
+    total_score: t.f64(),
+    suggested_category: t.string(),
+    narrative: t.string().optional(),
+    notes: t.string().optional(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, ['talento_humano', 'cap', 'cepi']);
+    requireNonEmpty(args.tracking_id, 'Tracking');
+    requireNonEmpty(args.source_type, 'Tipo de fuente');
+    requireNonEmpty(args.suggested_category, 'Categoría sugerida');
+
+    const app = ctx.db.application.tracking_id.find(args.tracking_id);
+    if (!app) {
+      throw new SenderError('La postulación no existe.');
+    }
+
+    const sourceType = normalizeAnalysisSourceType(args.source_type);
+    const parsedRows = parseAnalysisRowsPayload(args.rows_payload);
+    if (parsedRows.length === 0) {
+      throw new SenderError('La versión debe incluir al menos un criterio.');
+    }
+
+    const versionId = `${args.tracking_id}:${sourceType}:${nextId()}`;
+    ctx.db.application_analysis_version.insert({
+      version_id: versionId,
+      tracking_id: args.tracking_id,
+      source_type: sourceType,
+      version_status: sourceType === 'MOTOR' ? 'REFERENCIA' : 'BORRADOR',
+      rows_payload: JSON.stringify(parsedRows),
+      total_score: args.total_score,
+      suggested_category: args.suggested_category,
+      narrative: args.narrative || '',
+      notes: args.notes || '',
+      created_by: session.username,
+      created_role: session.role,
+      approved_by: undefined,
+      approved_at: undefined,
+      created_at: ctx.timestamp,
+      updated_at: ctx.timestamp,
+    });
+
+    ctx.db.audit_event.insert({
+      id: nextId(),
+      tracking_id: args.tracking_id,
+      actor_username: session.username,
+      actor_role: session.role,
+      event_type: 'ANALYSIS_VERSION_SAVED',
+      message: `Versión ${sourceType} guardada (${versionId}).`,
+      created_at: ctx.timestamp,
+    });
+  },
+);
+
+export const approve_application_analysis_version = spacetimedb.reducer(
+  {
+    version_id: t.string(),
+    output_message: t.string().optional(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, 'cap');
+    requireNonEmpty(args.version_id, 'Version ID');
+
+    const targetVersion = ctx.db.application_analysis_version.version_id.find(args.version_id);
+    if (!targetVersion) {
+      throw new SenderError('La versión de análisis no existe.');
+    }
+
+    const app = ctx.db.application.tracking_id.find(targetVersion.tracking_id);
+    if (!app) {
+      throw new SenderError('La postulación asociada no existe.');
+    }
+
+    const sameTracking = Array.from(ctx.db.application_analysis_version.tracking_id.filter(targetVersion.tracking_id));
+    for (const row of sameTracking) {
+      if (row.version_status === 'OFICIAL' && row.version_id !== targetVersion.version_id) {
+        ctx.db.application_analysis_version.version_id.update({
+          ...row,
+          version_status: 'HISTORICO',
+          updated_at: ctx.timestamp,
+        });
+      }
+    }
+
+    ctx.db.application_analysis_version.version_id.update({
+      ...targetVersion,
+      version_status: 'OFICIAL',
+      approved_by: session.username,
+      approved_at: ctx.timestamp,
+      updated_at: ctx.timestamp,
+    });
+
+    ctx.db.application.tracking_id.update({
+      ...app,
+      final_points: targetVersion.total_score,
+      final_category: targetVersion.suggested_category,
+      output_message:
+        args.output_message
+        || `CAP aprobó como oficial la versión ${targetVersion.source_type} (${targetVersion.version_id}).`,
+      updated_at: ctx.timestamp,
+    });
+
+    const audit = ctx.db.application_audit.tracking_id.find(targetVersion.tracking_id);
+    if (audit) {
+      ctx.db.application_audit.tracking_id.update({
+        ...audit,
+        current_status: 'TABLA_OFICIAL_CAP',
+        observations: `Versión oficial CAP: ${targetVersion.version_id}`,
+        reviewer_username: session.username,
+        updated_at: ctx.timestamp,
+      });
+    }
+
+    ctx.db.audit_event.insert({
+      id: nextId(),
+      tracking_id: targetVersion.tracking_id,
+      actor_username: session.username,
+      actor_role: session.role,
+      event_type: 'ANALYSIS_VERSION_APPROVED',
+      message: `CAP aprobó como oficial la versión ${targetVersion.version_id}.`,
+      created_at: ctx.timestamp,
+    });
+  },
+);
+

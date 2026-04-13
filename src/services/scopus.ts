@@ -2,6 +2,7 @@ import { ScopusResult, Produccion } from '../types';
 import { SCOPUS_CONFIG } from '../constants';
 
 const SCOPUS_API_KEY_STORAGE_KEYS = ['meritx.scopusApiKey', 'scopusApiKey'];
+const SCOPUS_INST_TOKEN_STORAGE_KEYS = ['meritx.scopusInstToken', 'scopusInstToken'];
 
 const resolveScopusApiKey = (providedKey?: string): string => {
   const fromArg = (providedKey || '').trim();
@@ -12,6 +13,23 @@ const resolveScopusApiKey = (providedKey?: string): string => {
 
   if (typeof window !== 'undefined') {
     for (const key of SCOPUS_API_KEY_STORAGE_KEYS) {
+      const stored = (window.localStorage.getItem(key) || '').trim();
+      if (stored) return stored;
+    }
+  }
+
+  return '';
+};
+
+const resolveScopusInstToken = (providedToken?: string): string => {
+  const fromArg = (providedToken || '').trim();
+  if (fromArg) return fromArg;
+
+  const fromEnv = (import.meta.env.VITE_SCOPUS_INST_TOKEN || '').trim();
+  if (fromEnv) return fromEnv;
+
+  if (typeof window !== 'undefined') {
+    for (const key of SCOPUS_INST_TOKEN_STORAGE_KEYS) {
       const stored = (window.localStorage.getItem(key) || '').trim();
       if (stored) return stored;
     }
@@ -88,29 +106,134 @@ const quartileFromCitationCount = (count: number): 'Q1' | 'Q2' | 'Q3' | 'Q4' => 
   return 'Q4';
 };
 
+const toQueryString = (params: Record<string, string | number | undefined>) => {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    search.set(key, String(value));
+  }
+  return search.toString();
+};
+
+const parseUpstreamErrorMessage = async (response: Response) => {
+  try {
+    const raw = await response.text();
+    if (!raw) return '';
+    try {
+      const data = JSON.parse(raw);
+      return (
+        data?.error ||
+        data?.message ||
+        data?.['service-error']?.status?.statusText ||
+        data?.['service-error']?.status?.statusCode ||
+        raw
+      );
+    } catch {
+      return raw;
+    }
+  } catch {
+    return '';
+  }
+};
+
+const throwScopusAuthError = (details?: string): never => {
+  const detailText = details ? ` Detalle: ${details}` : '';
+  throw new Error(
+    'SCOPUS rechazó la autenticación (401/403). Verifica la API Key, permisos de API en Elsevier y, si aplica, configura InstToken.' +
+      detailText,
+  );
+};
+
+const isRestrictedViewError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('not authorized to access the requested view') ||
+    normalized.includes('not authorized to access') ||
+    normalized.includes('requested view or fields')
+  );
+};
+
+const scopusRequestJson = async (
+  endpoint: string,
+  queryParams: Record<string, string | number | undefined>,
+  apiKey: string,
+  instToken?: string,
+) => {
+  const payload = {
+    endpoint,
+    queryParams,
+    apiKey,
+    instToken: instToken || undefined,
+  };
+
+  // First try server-side proxy to avoid browser-origin restrictions.
+  if (typeof window !== 'undefined') {
+    try {
+      const proxyResponse = await fetch('/api/scopus/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (proxyResponse.ok) {
+        return await proxyResponse.json();
+      }
+
+      if (proxyResponse.status !== 404 && proxyResponse.status !== 405) {
+        if (proxyResponse.status === 401 || proxyResponse.status === 403) {
+          const details = await parseUpstreamErrorMessage(proxyResponse);
+          throwScopusAuthError(details);
+        }
+        const details = await parseUpstreamErrorMessage(proxyResponse);
+        throw new Error(details || `Error SCOPUS vía proxy (${proxyResponse.status}).`);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('SCOPUS rechazó la autenticación')) {
+        throw error;
+      }
+      // Continue with direct call fallback.
+    }
+  }
+
+  const queryString = toQueryString(queryParams);
+  const response = await fetch(`${SCOPUS_CONFIG.baseUrl}${endpoint}?${queryString}`, {
+    headers: {
+      'X-ELS-APIKey': apiKey,
+      ...(instToken ? { 'X-ELS-Insttoken': instToken } : {}),
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      const details = await parseUpstreamErrorMessage(response);
+      throwScopusAuthError(details);
+    }
+    const details = await parseUpstreamErrorMessage(response);
+    throw new Error(details || `Error consultando SCOPUS (${response.status} ${response.statusText}).`);
+  }
+
+  return await response.json();
+};
+
 const resolveQuartileFromSerial = async (
   apiKey: string,
   sourceId?: string,
   issn?: string,
+  instToken?: string,
 ): Promise<'Q1' | 'Q2' | 'Q3' | 'Q4' | null> => {
-  const params = sourceId
-    ? `source_id=${encodeURIComponent(sourceId)}`
-    : issn
-      ? `issn=${encodeURIComponent(issn)}`
-      : '';
-
-  if (!params) return null;
-
+  if (!sourceId && !issn) return null;
   try {
-    const response = await fetch(`${SCOPUS_CONFIG.baseUrl}/content/serial/title?${params}`, {
-      headers: {
-        'X-ELS-APIKey': apiKey,
-        Accept: 'application/json',
+    const serialData = await scopusRequestJson(
+      '/content/serial/title',
+      {
+        source_id: sourceId,
+        issn,
+        view: 'STANDARD',
       },
-    });
-
-    if (!response.ok) return null;
-    const serialData = await response.json();
+      apiKey,
+      instToken,
+    );
     return findQuartileText(serialData);
   } catch {
     return null;
@@ -123,6 +246,7 @@ export const importScopusProduccion = async (
   count = 10,
 ): Promise<ImportedScopusProduction[]> => {
   const effectiveApiKey = resolveScopusApiKey(apiKey);
+  const effectiveInstToken = resolveScopusInstToken();
 
   if (!effectiveApiKey) {
     throw new Error('No se encontró API Key de SCOPUS. Configúrala en Panel Admin > Configuración de API y guarda cambios.');
@@ -133,26 +257,51 @@ export const importScopusProduccion = async (
   }
 
   const scopusQuery = extractScopusQuery(profileInput);
-  const encodedQuery = encodeURIComponent(scopusQuery);
-
-  const response = await fetch(
-    `${SCOPUS_CONFIG.baseUrl}/content/search/scopus?query=${encodedQuery}&count=${count}&view=COMPLETE`,
+  const requestProfiles: Array<Record<string, string | number | undefined>> = [
     {
-      headers: {
-        'X-ELS-APIKey': effectiveApiKey,
-        Accept: 'application/json',
-      },
+      query: scopusQuery,
+      count,
+      view: 'COMPLETE',
+      field: 'dc:title,prism:coverDate,subtypeDescription,author-count,citedby-count,source-id,prism:issn',
+      sort: '-coverDate',
     },
-  );
+    {
+      query: scopusQuery,
+      count,
+      view: 'STANDARD',
+      sort: '-coverDate',
+    },
+    {
+      query: scopusQuery,
+      count,
+      sort: '-coverDate',
+    },
+  ];
 
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new Error('La API Key de SCOPUS es inválida o no tiene permisos.');
+  let data: any = null;
+  let lastError: Error | null = null;
+
+  for (let index = 0; index < requestProfiles.length; index += 1) {
+    try {
+      data = await scopusRequestJson('/content/search/scopus', requestProfiles[index], effectiveApiKey, effectiveInstToken);
+      lastError = null;
+      break;
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      lastError = error;
+
+      // If the key is valid but not entitled for current view/fields, try a less restrictive profile.
+      if (isRestrictedViewError(error.message) && index < requestProfiles.length - 1) {
+        continue;
+      }
+      throw error;
     }
-    throw new Error(`Error consultando SCOPUS (${response.status} ${response.statusText}).`);
   }
 
-  const data = await response.json();
+  if (!data && lastError) {
+    throw lastError;
+  }
+
   const entries = (data?.['search-results']?.entry || []) as Array<Record<string, any>>;
   if (entries.length === 0) return [];
 
@@ -170,7 +319,7 @@ export const importScopusProduccion = async (
 
       if (!quartile && cacheKey) {
         if (!serialCache.has(cacheKey)) {
-          serialCache.set(cacheKey, await resolveQuartileFromSerial(effectiveApiKey, sourceId || undefined, issn || undefined));
+          serialCache.set(cacheKey, await resolveQuartileFromSerial(effectiveApiKey, sourceId || undefined, issn || undefined, effectiveInstToken));
         }
         quartile = serialCache.get(cacheKey) || null;
       }

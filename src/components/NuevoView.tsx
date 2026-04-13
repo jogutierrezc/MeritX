@@ -15,6 +15,12 @@ type Props = {
   addProduccionManual: () => void;
   removeArrayItem: (key: ArrayKey, index: number) => void;
   importScopusProduccion: () => void;
+  importOrcidProduccion: () => void;
+  facultyOptions: Array<{ id: string; name: string }>;
+  programOptions: Array<{ id: string; facultyId: string; name: string; level: string }>;
+  openConvocatorias: Array<{ id: string; codigo: string; nombre: string; periodo: string }>;
+  selectedConvocatoriaId: string;
+  setSelectedConvocatoriaId: (id: string) => void;
 };
 
 const NuevoView: React.FC<Props> = ({
@@ -28,7 +34,18 @@ const NuevoView: React.FC<Props> = ({
   addProduccionManual,
   removeArrayItem,
   importScopusProduccion,
+  importOrcidProduccion,
+  facultyOptions,
+  programOptions,
+  openConvocatorias,
+  selectedConvocatoriaId,
+  setSelectedConvocatoriaId,
 }) => {
+  const selectedFaculty = facultyOptions.find((faculty) => faculty.name === formData.facultad);
+  const availablePrograms = selectedFaculty
+    ? programOptions.filter((program) => program.facultyId === selectedFaculty.id)
+    : [];
+
   return (
     <div className="max-w-5xl mx-auto space-y-12 animate-in slide-in-from-bottom-10 duration-700 pb-20">
       <div className="bg-white p-12 border-4 border-slate-950 flex justify-between items-center shadow-2xl">
@@ -58,6 +75,20 @@ const NuevoView: React.FC<Props> = ({
             <h3 className="font-black uppercase tracking-widest text-[11px]">Identificación Institucional</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="md:col-span-2">
+              <select
+                value={selectedConvocatoriaId}
+                onChange={(e) => setSelectedConvocatoriaId(e.target.value)}
+                className="w-full p-4 bg-amber-50 border-2 border-amber-200 focus:border-amber-500 outline-none font-black text-[11px] uppercase"
+              >
+                <option value="">SELECCIONA CONVOCATORIA ABIERTA</option>
+                {openConvocatorias.map((convocatoria) => (
+                  <option key={convocatoria.id} value={convocatoria.id}>
+                    {convocatoria.codigo} - {convocatoria.nombre} ({convocatoria.periodo})
+                  </option>
+                ))}
+              </select>
+            </div>
             <input
               value={formData.nombre}
               onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
@@ -72,20 +103,37 @@ const NuevoView: React.FC<Props> = ({
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
               placeholder="N° DOCUMENTO"
             />
-            <input
+            <select
+              value={formData.facultad}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  facultad: e.target.value,
+                  programa: '',
+                })
+              }
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
+            >
+              <option value="">FACULTAD RELACIONADA</option>
+              {facultyOptions.map((faculty) => (
+                <option key={faculty.id} value={faculty.name}>
+                  {faculty.name}
+                </option>
+              ))}
+            </select>
+            <select
               value={formData.programa}
               onChange={(e) => setFormData({ ...formData, programa: e.target.value })}
-              type="text"
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
-              placeholder="PROGRAMA RELACIONADO"
-            />
-            <input
-              value={formData.facultad}
-              onChange={(e) => setFormData({ ...formData, facultad: e.target.value })}
-              type="text"
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
-              placeholder="FACULTAD RELACIONADA"
-            />
+              disabled={!formData.facultad}
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase disabled:opacity-60"
+            >
+              <option value="">{formData.facultad ? 'PROGRAMA RELACIONADO' : 'SELECCIONA FACULTAD PRIMERO'}</option>
+              {availablePrograms.map((program) => (
+                <option key={program.id} value={program.name}>
+                  {program.name} {program.level ? `(${program.level})` : ''}
+                </option>
+              ))}
+            </select>
             <div className="flex gap-px bg-slate-200 border border-slate-200">
               <button
                 onClick={() => setFormData({ ...formData, esIngresoNuevo: true })}
@@ -152,7 +200,7 @@ const NuevoView: React.FC<Props> = ({
                     setFormData({ ...formData, titulos: arr });
                   }}
                   placeholder="TÍTULO"
-                  className="md:col-span-7 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
+                  className="md:col-span-5 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
                 />
                 <select
                   value={t.nivel}
@@ -161,13 +209,30 @@ const NuevoView: React.FC<Props> = ({
                     arr[i] = { ...arr[i], nivel: e.target.value as FormState['titulos'][number]['nivel'] };
                     setFormData({ ...formData, titulos: arr });
                   }}
-                  className="md:col-span-4 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
                 >
                   <option>Pregrado</option>
                   <option>Especialización</option>
                   <option>Maestría</option>
                   <option>Doctorado</option>
                 </select>
+                <label className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
+                  {t.supportName || 'Adjuntar soporte'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0];
+                      const arr = [...formData.titulos];
+                      arr[i] = {
+                        ...arr[i],
+                        supportName: selected?.name || '',
+                        supportPath: selected ? `professor-supports/titles/${Date.now()}-${selected.name}` : '',
+                      };
+                      setFormData({ ...formData, titulos: arr });
+                    }}
+                  />
+                </label>
                 <button
                   onClick={() => removeArrayItem('titulos', i)}
                   className="md:col-span-1 p-3 bg-rose-50 text-rose-700 hover:bg-rose-100"
@@ -204,7 +269,7 @@ const NuevoView: React.FC<Props> = ({
                     setFormData({ ...formData, idiomas: arr });
                   }}
                   placeholder="IDIOMA"
-                  className="md:col-span-4 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
+                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
                 />
                 <select
                   value={idm.nivel}
@@ -227,11 +292,28 @@ const NuevoView: React.FC<Props> = ({
                     arr[i] = { ...arr[i], convalidacion: e.target.value as 'SI' | 'NO' };
                     setFormData({ ...formData, idiomas: arr });
                   }}
-                  className="md:col-span-4 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
                 >
                   <option value="SI">CONVALIDACIÓN: SI</option>
                   <option value="NO">CONVALIDACIÓN: NO</option>
                 </select>
+                <label className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
+                  {idm.supportName || 'Soporte idioma'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0];
+                      const arr = [...formData.idiomas];
+                      arr[i] = {
+                        ...arr[i],
+                        supportName: selected?.name || '',
+                        supportPath: selected ? `professor-supports/languages/${Date.now()}-${selected.name}` : '',
+                      };
+                      setFormData({ ...formData, idiomas: arr });
+                    }}
+                  />
+                </label>
                 <button
                   onClick={() => removeArrayItem('idiomas', i)}
                   className="md:col-span-1 p-3 bg-rose-50 text-rose-700 hover:bg-rose-100"
@@ -248,28 +330,36 @@ const NuevoView: React.FC<Props> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-slate-950 border-l-8 border-slate-950 pl-6">
               <LinkIcon size={20} />
-              <h3 className="font-black uppercase tracking-widest text-[11px]">Producción Intelectual (SCOPUS)</h3>
+              <h3 className="font-black uppercase tracking-widest text-[11px]">Producción Intelectual (SCOPUS / ORCID)</h3>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(260px,1fr)_auto]">
             <input
               value={formData.scopusProfile}
               onChange={(e) => setFormData({ ...formData, scopusProfile: e.target.value })}
-              placeholder="PERFIL/ID SCOPUS DEL PROFESOR"
-              className="md:col-span-7 p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
+              placeholder="ID ORCID, ID SCOPUS O URL DEL PERFIL"
+              className="p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
             />
-            <button
-              onClick={importScopusProduccion}
-              className="md:col-span-3 bg-slate-950 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-center gap-2"
-            >
-              <Globe size={14} /> IMPORTAR SCOPUS
-            </button>
-            <button
-              onClick={addProduccionManual}
-              className="md:col-span-2 bg-blue-600 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-center gap-2"
-            >
-              <Plus size={14} /> MANUAL
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={importScopusProduccion}
+                className="bg-slate-950 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-center gap-2"
+              >
+                <Globe size={14} /> IMPORTAR SCOPUS
+              </button>
+              <button
+                onClick={importOrcidProduccion}
+                className="bg-indigo-600 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-center gap-2"
+              >
+                <LinkIcon size={14} /> CONSULTAR ORCID
+              </button>
+              <button
+                onClick={addProduccionManual}
+                className="bg-blue-600 text-white px-4 py-3 text-[10px] font-black uppercase flex items-center justify-center gap-2"
+              >
+                <Plus size={14} /> MANUAL
+              </button>
+            </div>
           </div>
           <div className="space-y-3">
             {formData.produccion.map((art, i) => (
@@ -347,7 +437,7 @@ const NuevoView: React.FC<Props> = ({
                     arr[i] = { ...arr[i], tipo: e.target.value as FormState['experiencia'][number]['tipo'] };
                     setFormData({ ...formData, experiencia: arr });
                   }}
-                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                  className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
                 >
                   <option>Profesional</option>
                   <option>Docencia Universitaria</option>
@@ -380,11 +470,28 @@ const NuevoView: React.FC<Props> = ({
                     arr[i] = { ...arr[i], certificacion: e.target.value as 'SI' | 'NO' };
                     setFormData({ ...formData, experiencia: arr });
                   }}
-                  className="md:col-span-4 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
                 >
                   <option value="SI">PRESENTA CERTIFICACIÓN: SI</option>
                   <option value="NO">PRESENTA CERTIFICACIÓN: NO</option>
                 </select>
+                <label className="md:col-span-4 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
+                  {exp.supportName || 'Adjuntar certificado'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0];
+                      const arr = [...formData.experiencia];
+                      arr[i] = {
+                        ...arr[i],
+                        supportName: selected?.name || '',
+                        supportPath: selected ? `professor-supports/experience/${Date.now()}-${selected.name}` : '',
+                      };
+                      setFormData({ ...formData, experiencia: arr });
+                    }}
+                  />
+                </label>
                 <button
                   onClick={() => removeArrayItem('experiencia', i)}
                   className="md:col-span-1 p-3 bg-rose-50 text-rose-700 hover:bg-rose-100"

@@ -17,6 +17,7 @@ export default {
   campus: __t.string(),
   programName: __t.string(),
   facultyName: __t.string(),
+  convocatoriaId: __t.option(__t.string()),
   scopusProfile: __t.option(__t.string()),
   finalPoints: __t.f64(),
   finalCategory: __t.string(),

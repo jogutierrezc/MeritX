@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { DbConnection } from '../module_bindings';
-import type { Application } from '../module_bindings/types';
+import type { AcademicProgram, Application, ApplicationAnalysisVersion, Faculty } from '../module_bindings/types';
 import type { AppExperience, AppLanguage, AppPublication, AppTitle, FormState, RequestRecord } from '../types/domain';
 import { CATEGORIES, emptyForm } from '../types/escalafon';
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
+import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
 import { getPortalSession, getPortalCredentialsForRole } from '../services/portalAuth';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -28,6 +29,13 @@ type RankedRagChunk = {
   fileName: string;
   chunk: string;
   score: number;
+};
+
+type AiVersionSummary = {
+  versionId: string;
+  totalScore: number;
+  suggestedCategory: string;
+  versionStatus: string;
 };
 
 const normalizeForSearch = (value: string) =>
@@ -114,6 +122,7 @@ const scoreRagChunk = (chunk: string, queryTerms: string[]) => {
 const ExpedientesPage = (_props: Props) => {
   const connectionRef = useRef<DbConnection | null>(null);
   const getSubTablesForTrackingRef = useRef<((id: string) => { titles: AppTitle[]; languages: AppLanguage[]; publications: AppPublication[]; experiences: AppExperience[] }) | null>(null);
+  const reloadExpedientesRef = useRef<(() => Promise<void>) | null>(null);
   const [view, setView] = useState('lista');
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<RequestRecord[]>([]);
@@ -128,12 +137,20 @@ const ExpedientesPage = (_props: Props) => {
   const [connected, setConnected] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [apifreellmApiKey, setApifreellmApiKey] = useState('');
+  const [scopusApiKey, setScopusApiKey] = useState('');
+  const [orcidClientId, setOrcidClientId] = useState('');
+  const [orcidClientSecret, setOrcidClientSecret] = useState('');
   const [aiProvider, setAiProvider] = useState('gemini');
   const [aiModel, setAiModel] = useState('gemini-2.5-flash');
   const [ragSystemContext, setRagSystemContext] = useState('');
   const [ragTopK, setRagTopK] = useState(5);
   const [ragChunkSize, setRagChunkSize] = useState(1200);
   const [ragChunkOverlap, setRagChunkOverlap] = useState(150);
+  const [facultyOptions, setFacultyOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [programOptions, setProgramOptions] = useState<Array<{ id: string; facultyId: string; name: string; level: string }>>([]);
+  const [openConvocatorias, setOpenConvocatorias] = useState<Array<{ id: string; codigo: string; nombre: string; periodo: string }>>([]);
+  const [selectedConvocatoriaId, setSelectedConvocatoriaId] = useState('');
+  const [aiVersionsByTracking, setAiVersionsByTracking] = useState<Record<string, AiVersionSummary>>({});
 
   useEffect(() => {
     const { host, databaseName } = getSpacetimeConnectionConfig();
@@ -169,6 +186,14 @@ const ExpedientesPage = (_props: Props) => {
       const dbView = connection.db as any;
       const appTable = dbView.application;
       const appRows = appTable ? (Array.from(appTable.iter()) as Application[]) : [];
+      const facultyTable = dbView.faculty;
+      const facultyRows = facultyTable ? (Array.from(facultyTable.iter()) as Faculty[]) : [];
+      const programTable = dbView.academic_program || dbView.academicProgram;
+      const programRows = programTable ? (Array.from(programTable.iter()) as AcademicProgram[]) : [];
+      const convocatoriaTable = dbView.convocatoria || dbView.convocatorias;
+      const convocatoriaRows = convocatoriaTable ? (Array.from(convocatoriaTable.iter()) as any[]) : [];
+      const analysisVersionTable = dbView.applicationAnalysisVersion || dbView.application_analysis_version;
+      const analysisVersionRows = analysisVersionTable ? (Array.from(analysisVersionTable.iter()) as ApplicationAnalysisVersion[]) : [];
 
       // Load audit data
       const auditTable = dbView.applicationAudit || dbView.application_audit;
@@ -182,6 +207,9 @@ const ExpedientesPage = (_props: Props) => {
         const defaultCfg = apiRows.find((r) => r.configKey === 'default');
         if (defaultCfg?.geminiApiKey) setGeminiApiKey(defaultCfg.geminiApiKey);
         if (defaultCfg?.apifreellmApiKey) setApifreellmApiKey(defaultCfg.apifreellmApiKey);
+        if (defaultCfg?.scopusApiKey) setScopusApiKey(defaultCfg.scopusApiKey);
+        if (defaultCfg?.orcidClientId) setOrcidClientId(defaultCfg.orcidClientId);
+        if (defaultCfg?.orcidClientSecret) setOrcidClientSecret(defaultCfg.orcidClientSecret);
         if (defaultCfg?.aiProvider) setAiProvider(defaultCfg.aiProvider);
         if (defaultCfg?.aiModel) setAiModel(defaultCfg.aiModel);
       }
@@ -244,6 +272,66 @@ const ExpedientesPage = (_props: Props) => {
         .sort((a, b) => b.id.localeCompare(a.id));
 
       setRequests(mapped);
+
+      setFacultyOptions(
+        facultyRows
+          .filter((row) => row.active)
+          .map((row) => ({ id: row.facultyId, name: row.facultyName }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      );
+
+      setProgramOptions(
+        programRows
+          .filter((row) => row.active)
+          .map((row) => ({
+            id: row.programId,
+            facultyId: row.facultyId,
+            name: row.programName,
+            level: row.formationLevel || 'PREGRADO',
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      );
+
+      const normalizedOpenConvocatorias = convocatoriaRows
+        .filter((row) => String(row.estado || '').toUpperCase() === 'ABIERTA')
+        .map((row) => ({
+          id: row.id,
+          codigo: row.codigo || row.id,
+          nombre: row.nombre || 'Convocatoria',
+          periodo: row.periodo || '',
+        }));
+
+      setOpenConvocatorias(normalizedOpenConvocatorias);
+      if (normalizedOpenConvocatorias.length > 0) {
+        setSelectedConvocatoriaId((prev) => prev || normalizedOpenConvocatorias[0].id);
+      }
+
+      const latestIaByTracking = new Map<string, AiVersionSummary & { createdAtMs: number }>();
+      for (const row of analysisVersionRows) {
+        if (String(row.sourceType || '').toUpperCase() !== 'IA') continue;
+        const createdAtMs = new Date(String(row.createdAt)).getTime() || 0;
+        const prev = latestIaByTracking.get(row.trackingId);
+        if (!prev || createdAtMs >= prev.createdAtMs) {
+          latestIaByTracking.set(row.trackingId, {
+            versionId: row.versionId,
+            totalScore: Number(row.totalScore || 0),
+            suggestedCategory: row.suggestedCategory || 'Sin categoría',
+            versionStatus: row.versionStatus || 'REFERENCIA',
+            createdAtMs,
+          });
+        }
+      }
+
+      const normalizedLatestIa = Array.from(latestIaByTracking.entries()).reduce<Record<string, AiVersionSummary>>((acc, [trackingId, item]) => {
+        acc[trackingId] = {
+          versionId: item.versionId,
+          totalScore: item.totalScore,
+          suggestedCategory: item.suggestedCategory,
+          versionStatus: item.versionStatus,
+        };
+        return acc;
+      }, {});
+      setAiVersionsByTracking(normalizedLatestIa);
     };
 
     const getSubTablesForTracking = (trackingId: string): {
@@ -277,28 +365,47 @@ const ExpedientesPage = (_props: Props) => {
 
     getSubTablesForTrackingRef.current = getSubTablesForTracking;
 
-    const subscription = connection
-      .subscriptionBuilder()
-      .onApplied(() => {
-        refreshFromCache();
-      })
-      .onError((ctx: unknown) => {
-        console.error(ctx);
-      })
-      .subscribe([
-        'SELECT * FROM application',
-        'SELECT * FROM application_title',
-        'SELECT * FROM application_language',
-        'SELECT * FROM application_publication',
-        'SELECT * FROM application_experience',
-        'SELECT * FROM application_audit',
-        'SELECT * FROM api_config',
-        'SELECT * FROM rag_config',
-        'SELECT * FROM system_setting',
-      ]);
+    const loadExpedientesOnce = async () => {
+      await new Promise<void>((resolve, reject) => {
+        const subscription = connection
+          .subscriptionBuilder()
+          .onApplied(() => {
+            try {
+              refreshFromCache();
+              resolve();
+            } catch (error) {
+              reject(error);
+            } finally {
+              subscription.unsubscribe();
+            }
+          })
+          .onError((ctx: unknown) => {
+            subscription.unsubscribe();
+            reject(ctx);
+          })
+          .subscribe([
+            'SELECT * FROM application',
+            'SELECT * FROM application_title',
+            'SELECT * FROM application_language',
+            'SELECT * FROM application_publication',
+            'SELECT * FROM application_experience',
+            'SELECT * FROM application_audit',
+            'SELECT * FROM api_config',
+            'SELECT * FROM rag_config',
+            'SELECT * FROM system_setting',
+            'SELECT * FROM faculty',
+            'SELECT * FROM academic_program',
+            'SELECT * FROM convocatoria',
+            'SELECT * FROM application_analysis_version',
+          ]);
+      });
+    };
+
+    reloadExpedientesRef.current = loadExpedientesOnce;
+    void loadExpedientesOnce().catch((ctx) => console.error(ctx));
 
     return () => {
-      subscription.unsubscribe();
+      reloadExpedientesRef.current = null;
       connection.disconnect();
       connectionRef.current = null;
     };
@@ -337,6 +444,11 @@ const ExpedientesPage = (_props: Props) => {
       return;
     }
 
+    if (!selectedConvocatoriaId) {
+      window.alert('Selecciona una convocatoria abierta para registrar el expediente.');
+      return;
+    }
+
     if (formData.titulos.length === 0 || formData.titulos.some((t) => !t.titulo.trim())) {
       window.alert('Agrega al menos un título válido.');
       return;
@@ -359,6 +471,7 @@ const ExpedientesPage = (_props: Props) => {
         campus: 'VALLEDUPAR',
         programName: formData.programa.trim(),
         facultyName: formData.facultad.trim(),
+        convocatoriaId: selectedConvocatoriaId,
         scopusProfile: formData.scopusProfile.trim() || undefined,
         finalPoints: res.finalPts,
         finalCategory: res.finalCat.name,
@@ -370,6 +483,8 @@ const ExpedientesPage = (_props: Props) => {
           trackingId,
           titleName: t.titulo,
           titleLevel: t.nivel,
+          supportName: t.supportName || undefined,
+          supportPath: t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined),
         });
       }
 
@@ -401,11 +516,16 @@ const ExpedientesPage = (_props: Props) => {
           startedAt: e.inicio,
           endedAt: e.fin,
           certified: e.certificacion === 'SI',
+          supportName: e.supportName || undefined,
+          supportPath: e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined),
         });
       }
 
       window.alert('Expediente registrado correctamente.');
       setFormData(emptyForm);
+      if (reloadExpedientesRef.current) {
+        await reloadExpedientesRef.current();
+      }
       setView('lista');
     } catch (e) {
       console.error(e);
@@ -574,6 +694,37 @@ const ExpedientesPage = (_props: Props) => {
 
       const ragContext = buildRagContext(req, caseDetail);
 
+      const iaRowsPayload = [
+        {
+          section: 'Académico',
+          criterion: 'Puntaje académico preliminar',
+          suggestedScore: provisionalBreakdown.ptsAcad,
+          hasSupport: selectedTitles.length > 0,
+          comment: selectedTitles.length > 0 ? 'Derivado de títulos cargados.' : 'Sin títulos cargados.',
+        },
+        {
+          section: 'Idiomas',
+          criterion: 'Puntaje de idiomas preliminar',
+          suggestedScore: provisionalBreakdown.ptsIdioma,
+          hasSupport: selectedLanguages.length > 0,
+          comment: selectedLanguages.length > 0 ? 'Derivado de idiomas cargados.' : 'Sin idiomas cargados.',
+        },
+        {
+          section: 'Producción',
+          criterion: 'Puntaje de producción preliminar',
+          suggestedScore: provisionalBreakdown.ptsPI,
+          hasSupport: selectedPublications.length > 0,
+          comment: selectedPublications.length > 0 ? 'Derivado de publicaciones cargadas.' : 'Sin publicaciones cargadas.',
+        },
+        {
+          section: 'Experiencia',
+          criterion: 'Puntaje de experiencia preliminar',
+          suggestedScore: Math.min(provisionalBreakdown.ptsExpBruta, provisionalBreakdown.appliedTope),
+          hasSupport: selectedExperiences.length > 0,
+          comment: selectedExperiences.length > 0 ? 'Derivado de experiencia cargada.' : 'Sin experiencia cargada.',
+        },
+      ];
+
       const baseSystemPrompt = `Eres un auditor jurídico-académico senior del Comité de Asignación de Puntaje (CAP) de la Universidad de Santander (UDES). Debes emitir un informe extenso, formalista, explicativo y profesional, con redacción narrativa y criterio técnico.
 
 Actúa simultáneamente desde cuatro planos:
@@ -668,6 +819,27 @@ Reglas de salida:
       }
 
       setAiAnalysis(aiText || 'No se pudo generar dictamen.');
+
+      if (aiText) {
+        try {
+          await runReducer('save_application_analysis_version', {
+            trackingId: req.id,
+            sourceType: 'IA',
+            rowsPayload: JSON.stringify(iaRowsPayload),
+            totalScore: provisionalBreakdown.finalPts,
+            suggestedCategory: provisionalBreakdown.finalCat.name,
+            narrative: aiText,
+            notes: 'Versión IA generada automáticamente desde Expedientes.',
+          });
+
+          if (reloadExpedientesRef.current) {
+            await reloadExpedientesRef.current();
+          }
+        } catch (saveError) {
+          console.error(saveError);
+          window.alert('Se generó el dictamen IA, pero no se pudo registrar la versión en la tabla de análisis.');
+        }
+      }
     } catch (error) {
       setAiAnalysis(error instanceof Error ? `Error en dictamen: ${error.message}` : 'Error en dictamen.');
     } finally {
@@ -676,15 +848,15 @@ Reglas de salida:
   };
 
   const addTitulo = () =>
-    setFormData((p) => ({ ...p, titulos: [...p.titulos, { titulo: '', nivel: 'Pregrado' }] }));
+    setFormData((p) => ({ ...p, titulos: [...p.titulos, { titulo: '', nivel: 'Pregrado', supportName: '', supportPath: '' }] }));
 
   const addIdioma = () =>
-    setFormData((p) => ({ ...p, idiomas: [...p.idiomas, { idioma: '', nivel: 'A2', convalidacion: 'NO' }] }));
+    setFormData((p) => ({ ...p, idiomas: [...p.idiomas, { idioma: '', nivel: 'A2', convalidacion: 'NO', supportName: '', supportPath: '' }] }));
 
   const addExperiencia = () =>
     setFormData((p) => ({
       ...p,
-      experiencia: [...p.experiencia, { tipo: 'Docencia Universitaria', inicio: '', fin: '', certificacion: 'NO' }],
+      experiencia: [...p.experiencia, { tipo: 'Docencia Universitaria', inicio: '', fin: '', certificacion: 'NO', supportName: '', supportPath: '' }],
     }));
 
   const addProduccionManual = () =>
@@ -739,6 +911,9 @@ Reglas de salida:
         languageValidated: req.audit?.languageValidated || false,
         observations: `Acción: ${action} por ${session?.username || 'sistema'}`,
       });
+      if (reloadExpedientesRef.current) {
+        await reloadExpedientesRef.current();
+      }
     } catch (e) {
       console.error(e);
       window.alert('Error al actualizar el estado del expediente.');
@@ -754,7 +929,7 @@ Reglas de salida:
     }
     setLoading(true);
     try {
-      const scopusKey = import.meta.env.VITE_SCOPUS_API_KEY || '';
+      const scopusKey = scopusApiKey || import.meta.env.VITE_SCOPUS_API_KEY || '';
       const imported = await importScopusProduccionFromApi(formData.scopusProfile, scopusKey, 20);
 
       if (imported.length === 0) {
@@ -766,6 +941,30 @@ Reglas de salida:
     } catch (err) {
       console.error(err);
       window.alert(err instanceof Error ? err.message : 'Error al importar producción desde SCOPUS.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importOrcidProduccion = async () => {
+    if (!formData.scopusProfile.trim()) {
+      window.alert('Ingresa un ORCID para consultar producción.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      void orcidClientId;
+      void orcidClientSecret;
+      const imported = await importOrcidProduccionFromApi(formData.scopusProfile, 20);
+      if (imported.length === 0) {
+        window.alert('ORCID no devolvió publicaciones para ese perfil.');
+        return;
+      }
+      setFormData((p) => ({ ...p, produccion: [...p.produccion, ...imported] }));
+    } catch (err) {
+      console.error(err);
+      window.alert(err instanceof Error ? err.message : 'Error al consultar producción en ORCID.');
     } finally {
       setLoading(false);
     }
@@ -795,6 +994,12 @@ Reglas de salida:
             addProduccionManual={addProduccionManual}
             removeArrayItem={removeArrayItem}
             importScopusProduccion={importScopusProduccion}
+            importOrcidProduccion={importOrcidProduccion}
+            facultyOptions={facultyOptions}
+            programOptions={programOptions}
+            openConvocatorias={openConvocatorias}
+            selectedConvocatoriaId={selectedConvocatoriaId}
+            setSelectedConvocatoriaId={setSelectedConvocatoriaId}
           />
         )}
         {view === 'detalle' && selectedRequest && (
@@ -808,6 +1013,7 @@ Reglas de salida:
             generateAI={generateAI}
             aiAnalysis={aiAnalysis}
             aiGenerating={aiGenerating}
+            latestAiVersion={aiVersionsByTracking[selectedRequest.id]}
           />
         )}
       </div>

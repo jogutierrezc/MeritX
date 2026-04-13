@@ -4,6 +4,13 @@ import type { AppExperience, AppLanguage, AppPublication, AppTitle, RequestRecor
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import AIDictamenModal from './AIDictamenModal';
 
+type AiVersionSummary = {
+  versionId: string;
+  totalScore: number;
+  suggestedCategory: string;
+  versionStatus: string;
+};
+
 type Props = {
   selectedRequest: RequestRecord;
   titles: AppTitle[];
@@ -14,6 +21,7 @@ type Props = {
   generateAI: (req: RequestRecord) => Promise<void>;
   aiAnalysis: string;
   aiGenerating: boolean;
+  latestAiVersion?: AiVersionSummary;
 };
 
 const levelBadge = (level: string) => (
@@ -57,6 +65,7 @@ const DetalleView: React.FC<Props> = ({
   generateAI,
   aiAnalysis,
   aiGenerating,
+  latestAiVersion,
 }) => {
   const [aiModalOpen, setAiModalOpen] = useState(false);
 
@@ -323,6 +332,24 @@ const DetalleView: React.FC<Props> = ({
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-6 border-l-4 border-slate-300 pl-4">
               Posible resultado por soportes: {scoreBreakdown.finalPts.toFixed(1)} pts · categoría posible {scoreBreakdown.finalCat.name}
             </p>
+
+            <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-800">Última versión IA registrada</p>
+              {latestAiVersion ? (
+                <>
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
+                    Puntaje IA: {latestAiVersion.totalScore.toFixed(1)} pts · categoría sugerida {latestAiVersion.suggestedCategory}
+                  </p>
+                  <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-amber-700">
+                    Estado: {latestAiVersion.versionStatus}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm font-semibold text-slate-700">
+                  Aún no hay una versión IA registrada para este expediente. Genera Dictamen IA para dejarlo pendiente.
+                </p>
+              )}
+            </div>
           </>
         )}
 

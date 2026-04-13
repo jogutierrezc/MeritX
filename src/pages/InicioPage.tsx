@@ -27,6 +27,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import type { FormState } from '../types/domain';
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
+import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
 import { getPortalSession } from '../services/portalAuth';
 
@@ -107,6 +108,9 @@ const InicioPage = ({ standalone = false }: Props) => {
   const [connected, setConnected] = useState(false);
   const [registroExitoso, setRegistroExitoso] = useState('');
   const [formData, setFormData] = useState<RegistroForm>(emptyForm);
+  const [scopusApiKey, setScopusApiKey] = useState('');
+  const [orcidClientId, setOrcidClientId] = useState('');
+  const [orcidClientSecret, setOrcidClientSecret] = useState('');
 
   const liveScore = useMemo(() => {
     try {
@@ -147,7 +151,29 @@ const InicioPage = ({ standalone = false }: Props) => {
 
     connectionRef.current = connection;
 
+    const subscription = connection
+      .subscriptionBuilder()
+      .onApplied(() => {
+        const dbView = connection.db as any;
+        const apiTable = dbView.apiConfig || dbView.api_config;
+        const apiRows = apiTable ? (Array.from(apiTable.iter()) as any[]) : [];
+        const defaultCfg = apiRows.find((row) => row.configKey === 'default');
+        if (!defaultCfg) return;
+        if (defaultCfg.scopusApiKey) {
+          setScopusApiKey(defaultCfg.scopusApiKey);
+          window.localStorage.setItem('meritx.scopusApiKey', String(defaultCfg.scopusApiKey));
+          window.localStorage.setItem('scopusApiKey', String(defaultCfg.scopusApiKey));
+        }
+        if (defaultCfg.orcidClientId) setOrcidClientId(defaultCfg.orcidClientId);
+        if (defaultCfg.orcidClientSecret) setOrcidClientSecret(defaultCfg.orcidClientSecret);
+      })
+      .onError((ctx: unknown) => {
+        console.error(ctx);
+      })
+      .subscribe(['SELECT * FROM api_config']);
+
     return () => {
+      subscription.unsubscribe();
       connection.disconnect();
       connectionRef.current = null;
     };
@@ -224,7 +250,7 @@ const InicioPage = ({ standalone = false }: Props) => {
     }
     setLoading(true);
     try {
-      const scopusKey = import.meta.env.VITE_SCOPUS_API_KEY || '';
+      const scopusKey = scopusApiKey || import.meta.env.VITE_SCOPUS_API_KEY || '';
       const imported = await importScopusProduccionFromApi(formData.scopusProfile, scopusKey, 20);
 
       if (imported.length === 0) {
@@ -236,6 +262,29 @@ const InicioPage = ({ standalone = false }: Props) => {
     } catch (error) {
       console.error(error);
       window.alert(error instanceof Error ? error.message : 'No fue posible importar la producción desde SCOPUS.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importOrcidProduccion = async () => {
+    if (!formData.scopusProfile.trim()) {
+      window.alert('Ingresa un ORCID para consultar producción.');
+      return;
+    }
+    setLoading(true);
+    try {
+      void orcidClientId;
+      void orcidClientSecret;
+      const imported = await importOrcidProduccionFromApi(formData.scopusProfile, 20);
+      if (imported.length === 0) {
+        window.alert('ORCID no devolvió publicaciones para ese perfil.');
+        return;
+      }
+      setFormData((prev) => ({ ...prev, produccion: [...prev.produccion, ...imported] }));
+    } catch (error) {
+      console.error(error);
+      window.alert(error instanceof Error ? error.message : 'No fue posible importar la producción desde ORCID.');
     } finally {
       setLoading(false);
     }
@@ -311,6 +360,7 @@ const InicioPage = ({ standalone = false }: Props) => {
           titleName: item.titulo,
           titleLevel: item.nivel,
           supportName: item.soporteNombre || undefined,
+          supportPath: item.soporteNombre ? `professor-supports/titles/${trackingId}/${item.soporteNombre}` : undefined,
         });
       }
 
@@ -343,6 +393,7 @@ const InicioPage = ({ standalone = false }: Props) => {
           endedAt: item.fin,
           certified: item.certificacion === 'SI',
           supportName: item.soporteNombre || undefined,
+          supportPath: item.soporteNombre ? `professor-supports/experience/${trackingId}/${item.soporteNombre}` : undefined,
         });
       }
 
@@ -722,7 +773,7 @@ const InicioPage = ({ standalone = false }: Props) => {
                   <LinkIcon className="text-slate-900" size={18} />
                   <h3 className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-900">Produccion intelectual</h3>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] xl:min-w-[560px]">
+                <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto] xl:min-w-[720px]">
                   <input
                     value={formData.scopusProfile}
                     onChange={(e) => updateField('scopusProfile', e.target.value)}
@@ -731,6 +782,9 @@ const InicioPage = ({ standalone = false }: Props) => {
                   />
                   <button onClick={importScopusProduccion} className={chipButtonClass}>
                     Importar SCOPUS
+                  </button>
+                  <button onClick={importOrcidProduccion} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:bg-indigo-700">
+                    Consultar ORCID
                   </button>
                   <button onClick={addProduccionManual} className="rounded-xl bg-blue-600 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:bg-blue-700">
                     Manual

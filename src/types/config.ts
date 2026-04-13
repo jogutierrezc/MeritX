@@ -2,7 +2,8 @@
  * Tipos compartidos del sistema
  */
 
-export type RoleKey = 'admin' | 'auxiliar' | 'director' | 'talento_humano';
+export type CoreRoleKey = 'admin' | 'decano' | 'cap' | 'cepi' | 'talento_humano';
+export type RoleKey = CoreRoleKey | (string & {});
 export type TabId = 'usuarios' | 'roles' | 'api' | 'email' | 'plantillas' | 'ia' | 'rag';
 
 export type RoleConfig = {
@@ -56,6 +57,7 @@ export type NewUserForm = {
   campus: string;
   password: string;
   role: RoleKey;
+  facultyId?: string;
 };
 
 export type RagConfig = {

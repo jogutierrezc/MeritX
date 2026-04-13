@@ -15,8 +15,9 @@ type Props = {
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'INICIO', icon: Home },
-  { id: 'auxiliares', label: 'AUXILIARES', icon: Users },
-  { id: 'director', label: 'DIRECTOR', icon: ShieldCheck },
+  { id: 'decano', label: 'CONSEJO DE FACULTAD', icon: Users },
+  { id: 'cap', label: 'PORTAL CAP', icon: ShieldCheck },
+  { id: 'cepi', label: 'PORTAL CEPI', icon: ShieldCheck },
   { id: 'talento_humano', label: 'TALENTO HUMANO', icon: UserIcon },
   { id: 'expedientes', label: 'EXPEDIENTES', icon: Files },
   { id: 'reportes', label: 'REPORTES', icon: BarChart3 },
@@ -28,12 +29,16 @@ const getVisibleNavItems = (portalSession: PortalSession | null) => {
     return NAV_ITEMS.filter((item) => item.id === 'inicio');
   }
 
-  if (portalSession.role === 'auxiliar') {
-    return NAV_ITEMS.filter((item) => ['inicio', 'auxiliares'].includes(item.id));
+  if (portalSession.role === 'decano') {
+    return NAV_ITEMS.filter((item) => ['inicio', 'decano'].includes(item.id));
   }
 
-  if (portalSession.role === 'director') {
-    return NAV_ITEMS.filter((item) => ['inicio', 'director'].includes(item.id));
+  if (portalSession.role === 'cap') {
+    return NAV_ITEMS.filter((item) => ['inicio', 'cap'].includes(item.id));
+  }
+
+  if (portalSession.role === 'cepi') {
+    return NAV_ITEMS.filter((item) => ['inicio', 'cepi'].includes(item.id));
   }
 
   if (portalSession.role === 'talento_humano') {

@@ -15,9 +15,15 @@ const ROLE_OPTIONS: Array<{
   icon: typeof Users;
 }> = [
   {
-    role: 'auxiliar',
-    title: 'Portal Auxiliares',
-    description: 'Bandeja operativa para validación inicial, auditoría documental y subsanaciones.',
+    role: 'decano',
+    title: 'Consejo de Facultad',
+    description: 'Primera verificación, carga de entrevistas y decisión de continuidad o rechazo.',
+    icon: ShieldCheck,
+  },
+  {
+    role: 'cap',
+    title: 'Portal CAP',
+    description: 'Comité de Asuntos Profesorales para valoración y continuidad del expediente.',
     icon: Users,
   },
   {
@@ -27,9 +33,9 @@ const ROLE_OPTIONS: Array<{
     icon: ShieldCheck,
   },
   {
-    role: 'director',
-    title: 'Portal Director',
-    description: 'Seguimiento directivo, revisión final y decisiones del proceso de escalafón.',
+    role: 'cepi',
+    title: 'Portal CEPI',
+    description: 'Comité de Evaluación de Producción Intelectual para decisión final y puntaje.',
     icon: ShieldCheck,
   },
   {
@@ -41,7 +47,7 @@ const ROLE_OPTIONS: Array<{
 ];
 
 const AuthPage = ({ onLogin }: Props) => {
-  const [selectedRole, setSelectedRole] = useState<PortalRole>('auxiliar');
+  const [selectedRole, setSelectedRole] = useState<PortalRole>('decano');
 
   return (
     <div className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">

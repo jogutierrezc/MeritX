@@ -38,19 +38,30 @@ import AddApplicationExperienceReducer from "./add_application_experience_reduce
 import AddApplicationLanguageReducer from "./add_application_language_reducer";
 import AddApplicationPublicationReducer from "./add_application_publication_reducer";
 import AddApplicationTitleReducer from "./add_application_title_reducer";
+import ApproveApplicationAnalysisVersionReducer from "./approve_application_analysis_version_reducer";
 import BootstrapFirstAdminReducer from "./bootstrap_first_admin_reducer";
+import CloseConvocatoriaReducer from "./close_convocatoria_reducer";
+import CreateConvocatoriaReducer from "./create_convocatoria_reducer";
 import CreatePortalUserReducer from "./create_portal_user_reducer";
 import CreateReportSnapshotReducer from "./create_report_snapshot_reducer";
 import DeactivateRagDocumentReducer from "./deactivate_rag_document_reducer";
+import ImportFacultyProgramsReducer from "./import_faculty_programs_reducer";
 import InitPortalRolesReducer from "./init_portal_roles_reducer";
+import LinkApplicationConvocatoriaReducer from "./link_application_convocatoria_reducer";
 import PortalLoginReducer from "./portal_login_reducer";
 import PortalLogoutReducer from "./portal_logout_reducer";
 import RecordApplicationAuditReducer from "./record_application_audit_reducer";
+import RecordDecanoReviewReducer from "./record_decano_review_reducer";
 import RegisterProfessorReducer from "./register_professor_reducer";
 import RegisterUserProfileReducer from "./register_user_profile_reducer";
+import SaveApplicationAnalysisVersionReducer from "./save_application_analysis_version_reducer";
 import UpdateApplicationStatusReducer from "./update_application_status_reducer";
+import UpdateConvocatoriaReducer from "./update_convocatoria_reducer";
+import UpdateUserProfileReducer from "./update_user_profile_reducer";
+import UpsertAcademicProgramReducer from "./upsert_academic_program_reducer";
 import UpsertApiConfigReducer from "./upsert_api_config_reducer";
 import UpsertEmailTemplateReducer from "./upsert_email_template_reducer";
+import UpsertFacultyReducer from "./upsert_faculty_reducer";
 import UpsertPortalRoleReducer from "./upsert_portal_role_reducer";
 import UpsertRagConfigReducer from "./upsert_rag_config_reducer";
 import UpsertRagDocumentReducer from "./upsert_rag_document_reducer";
@@ -60,15 +71,25 @@ import UpsertSystemSettingReducer from "./upsert_system_setting_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AcademicProgramRow from "./academic_program_table";
 import ApiConfigRow from "./api_config_table";
 import ApplicationRow from "./application_table";
+import ApplicationAnalysisVersionRow from "./application_analysis_version_table";
 import ApplicationAuditRow from "./application_audit_table";
+import ApplicationAuditCriterionRow from "./application_audit_criterion_table";
+import ApplicationConvocatoriaRow from "./application_convocatoria_table";
+import ApplicationDecanoDocumentRow from "./application_decano_document_table";
+import ApplicationDecanoReviewRow from "./application_decano_review_table";
 import ApplicationExperienceRow from "./application_experience_table";
 import ApplicationLanguageRow from "./application_language_table";
 import ApplicationPublicationRow from "./application_publication_table";
 import ApplicationTitleRow from "./application_title_table";
+import AuditCriterionEventRow from "./audit_criterion_event_table";
 import AuditEventRow from "./audit_event_table";
+import AuditScoreSnapshotRow from "./audit_score_snapshot_table";
+import ConvocatoriaRow from "./convocatoria_table";
 import EmailTemplateRow from "./email_template_table";
+import FacultyRow from "./faculty_table";
 import PortalRoleRow from "./portal_role_table";
 import PortalSessionRow from "./portal_session_table";
 import RagConfigRow from "./rag_config_table";
@@ -76,12 +97,33 @@ import RagDocumentRow from "./rag_document_table";
 import ReportSnapshotRow from "./report_snapshot_table";
 import ResendConfigRow from "./resend_config_table";
 import SystemSettingRow from "./system_setting_table";
+import UserFacultyAssignmentRow from "./user_faculty_assignment_table";
 import UserProfileRow from "./user_profile_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  academic_program: __table({
+    name: 'academic_program',
+    indexes: [
+      { accessor: 'faculty_id', name: 'academic_program_faculty_id_idx_btree', algorithm: 'btree', columns: [
+        'facultyId',
+      ] },
+      { accessor: 'formation_level', name: 'academic_program_formation_level_idx_btree', algorithm: 'btree', columns: [
+        'formationLevel',
+      ] },
+      { accessor: 'program_id', name: 'academic_program_program_id_idx_btree', algorithm: 'btree', columns: [
+        'programId',
+      ] },
+      { accessor: 'program_name', name: 'academic_program_program_name_idx_btree', algorithm: 'btree', columns: [
+        'programName',
+      ] },
+    ],
+    constraints: [
+      { name: 'academic_program_program_id_key', constraint: 'unique', columns: ['programId'] },
+    ],
+  }, AcademicProgramRow),
   api_config: __table({
     name: 'api_config',
     indexes: [
@@ -122,6 +164,29 @@ const tablesSchema = __schema({
       { name: 'application_tracking_id_key', constraint: 'unique', columns: ['trackingId'] },
     ],
   }, ApplicationRow),
+  application_analysis_version: __table({
+    name: 'application_analysis_version',
+    indexes: [
+      { accessor: 'source_type', name: 'application_analysis_version_source_type_idx_btree', algorithm: 'btree', columns: [
+        'sourceType',
+      ] },
+      { accessor: 'suggested_category', name: 'application_analysis_version_suggested_category_idx_btree', algorithm: 'btree', columns: [
+        'suggestedCategory',
+      ] },
+      { accessor: 'tracking_id', name: 'application_analysis_version_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+      { accessor: 'version_id', name: 'application_analysis_version_version_id_idx_btree', algorithm: 'btree', columns: [
+        'versionId',
+      ] },
+      { accessor: 'version_status', name: 'application_analysis_version_version_status_idx_btree', algorithm: 'btree', columns: [
+        'versionStatus',
+      ] },
+    ],
+    constraints: [
+      { name: 'application_analysis_version_version_id_key', constraint: 'unique', columns: ['versionId'] },
+    ],
+  }, ApplicationAnalysisVersionRow),
   application_audit: __table({
     name: 'application_audit',
     indexes: [
@@ -136,6 +201,74 @@ const tablesSchema = __schema({
       { name: 'application_audit_tracking_id_key', constraint: 'unique', columns: ['trackingId'] },
     ],
   }, ApplicationAuditRow),
+  application_audit_criterion: __table({
+    name: 'application_audit_criterion',
+    indexes: [
+      { accessor: 'criterion_id', name: 'application_audit_criterion_criterion_id_idx_btree', algorithm: 'btree', columns: [
+        'criterionId',
+      ] },
+      { accessor: 'criterion_key', name: 'application_audit_criterion_criterion_key_idx_btree', algorithm: 'btree', columns: [
+        'criterionKey',
+      ] },
+      { accessor: 'criterion_status', name: 'application_audit_criterion_criterion_status_idx_btree', algorithm: 'btree', columns: [
+        'criterionStatus',
+      ] },
+      { accessor: 'tracking_id', name: 'application_audit_criterion_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+      { accessor: 'valuation_stage', name: 'application_audit_criterion_valuation_stage_idx_btree', algorithm: 'btree', columns: [
+        'valuationStage',
+      ] },
+    ],
+    constraints: [
+      { name: 'application_audit_criterion_criterion_id_key', constraint: 'unique', columns: ['criterionId'] },
+    ],
+  }, ApplicationAuditCriterionRow),
+  application_convocatoria: __table({
+    name: 'application_convocatoria',
+    indexes: [
+      { accessor: 'convocatoria_id', name: 'application_convocatoria_convocatoria_id_idx_btree', algorithm: 'btree', columns: [
+        'convocatoriaId',
+      ] },
+      { accessor: 'tracking_id', name: 'application_convocatoria_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+    ],
+    constraints: [
+      { name: 'application_convocatoria_tracking_id_key', constraint: 'unique', columns: ['trackingId'] },
+    ],
+  }, ApplicationConvocatoriaRow),
+  application_decano_document: __table({
+    name: 'application_decano_document',
+    indexes: [
+      { accessor: 'document_id', name: 'application_decano_document_document_id_idx_btree', algorithm: 'btree', columns: [
+        'documentId',
+      ] },
+      { accessor: 'document_type', name: 'application_decano_document_document_type_idx_btree', algorithm: 'btree', columns: [
+        'documentType',
+      ] },
+      { accessor: 'tracking_id', name: 'application_decano_document_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+    ],
+    constraints: [
+      { name: 'application_decano_document_document_id_key', constraint: 'unique', columns: ['documentId'] },
+    ],
+  }, ApplicationDecanoDocumentRow),
+  application_decano_review: __table({
+    name: 'application_decano_review',
+    indexes: [
+      { accessor: 'review_status', name: 'application_decano_review_review_status_idx_btree', algorithm: 'btree', columns: [
+        'reviewStatus',
+      ] },
+      { accessor: 'tracking_id', name: 'application_decano_review_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+    ],
+    constraints: [
+      { name: 'application_decano_review_tracking_id_key', constraint: 'unique', columns: ['trackingId'] },
+    ],
+  }, ApplicationDecanoReviewRow),
   application_experience: __table({
     name: 'application_experience',
     indexes: [
@@ -213,6 +346,26 @@ const tablesSchema = __schema({
       { name: 'application_title_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ApplicationTitleRow),
+  audit_criterion_event: __table({
+    name: 'audit_criterion_event',
+    indexes: [
+      { accessor: 'criterion_key', name: 'audit_criterion_event_criterion_key_idx_btree', algorithm: 'btree', columns: [
+        'criterionKey',
+      ] },
+      { accessor: 'id', name: 'audit_criterion_event_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'tracking_id', name: 'audit_criterion_event_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+      { accessor: 'valuation_stage', name: 'audit_criterion_event_valuation_stage_idx_btree', algorithm: 'btree', columns: [
+        'valuationStage',
+      ] },
+    ],
+    constraints: [
+      { name: 'audit_criterion_event_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AuditCriterionEventRow),
   audit_event: __table({
     name: 'audit_event',
     indexes: [
@@ -230,6 +383,50 @@ const tablesSchema = __schema({
       { name: 'audit_event_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, AuditEventRow),
+  audit_score_snapshot: __table({
+    name: 'audit_score_snapshot',
+    indexes: [
+      { accessor: 'id', name: 'audit_score_snapshot_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'tracking_id', name: 'audit_score_snapshot_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+      { accessor: 'valuation_stage', name: 'audit_score_snapshot_valuation_stage_idx_btree', algorithm: 'btree', columns: [
+        'valuationStage',
+      ] },
+    ],
+    constraints: [
+      { name: 'audit_score_snapshot_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AuditScoreSnapshotRow),
+  convocatoria: __table({
+    name: 'convocatoria',
+    indexes: [
+      { accessor: 'año', name: 'convocatoria_año_idx_btree', algorithm: 'btree', columns: [
+        'año',
+      ] },
+      { accessor: 'codigo', name: 'convocatoria_codigo_idx_btree', algorithm: 'btree', columns: [
+        'codigo',
+      ] },
+      { accessor: 'estado', name: 'convocatoria_estado_idx_btree', algorithm: 'btree', columns: [
+        'estado',
+      ] },
+      { accessor: 'id', name: 'convocatoria_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'nombre', name: 'convocatoria_nombre_idx_btree', algorithm: 'btree', columns: [
+        'nombre',
+      ] },
+      { accessor: 'periodo', name: 'convocatoria_periodo_idx_btree', algorithm: 'btree', columns: [
+        'periodo',
+      ] },
+    ],
+    constraints: [
+      { name: 'convocatoria_codigo_key', constraint: 'unique', columns: ['codigo'] },
+      { name: 'convocatoria_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ConvocatoriaRow),
   email_template: __table({
     name: 'email_template',
     indexes: [
@@ -247,6 +444,21 @@ const tablesSchema = __schema({
       { name: 'email_template_template_key_key', constraint: 'unique', columns: ['templateKey'] },
     ],
   }, EmailTemplateRow),
+  faculty: __table({
+    name: 'faculty',
+    indexes: [
+      { accessor: 'faculty_id', name: 'faculty_faculty_id_idx_btree', algorithm: 'btree', columns: [
+        'facultyId',
+      ] },
+      { accessor: 'faculty_name', name: 'faculty_faculty_name_idx_btree', algorithm: 'btree', columns: [
+        'facultyName',
+      ] },
+    ],
+    constraints: [
+      { name: 'faculty_faculty_id_key', constraint: 'unique', columns: ['facultyId'] },
+      { name: 'faculty_faculty_name_key', constraint: 'unique', columns: ['facultyName'] },
+    ],
+  }, FacultyRow),
   portal_role: __table({
     name: 'portal_role',
     indexes: [
@@ -375,6 +587,26 @@ const tablesSchema = __schema({
       { name: 'system_setting_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, SystemSettingRow),
+  user_faculty_assignment: __table({
+    name: 'user_faculty_assignment',
+    indexes: [
+      { accessor: 'faculty_id', name: 'user_faculty_assignment_faculty_id_idx_btree', algorithm: 'btree', columns: [
+        'facultyId',
+      ] },
+      { accessor: 'faculty_name', name: 'user_faculty_assignment_faculty_name_idx_btree', algorithm: 'btree', columns: [
+        'facultyName',
+      ] },
+      { accessor: 'role_key', name: 'user_faculty_assignment_role_key_idx_btree', algorithm: 'btree', columns: [
+        'roleKey',
+      ] },
+      { accessor: 'user_email', name: 'user_faculty_assignment_user_email_idx_btree', algorithm: 'btree', columns: [
+        'userEmail',
+      ] },
+    ],
+    constraints: [
+      { name: 'user_faculty_assignment_user_email_key', constraint: 'unique', columns: ['userEmail'] },
+    ],
+  }, UserFacultyAssignmentRow),
   user_profile: __table({
     name: 'user_profile',
     indexes: [
@@ -407,19 +639,30 @@ const reducersSchema = __reducers(
   __reducerSchema("add_application_language", AddApplicationLanguageReducer),
   __reducerSchema("add_application_publication", AddApplicationPublicationReducer),
   __reducerSchema("add_application_title", AddApplicationTitleReducer),
+  __reducerSchema("approve_application_analysis_version", ApproveApplicationAnalysisVersionReducer),
   __reducerSchema("bootstrap_first_admin", BootstrapFirstAdminReducer),
+  __reducerSchema("close_convocatoria", CloseConvocatoriaReducer),
+  __reducerSchema("create_convocatoria", CreateConvocatoriaReducer),
   __reducerSchema("create_portal_user", CreatePortalUserReducer),
   __reducerSchema("create_report_snapshot", CreateReportSnapshotReducer),
   __reducerSchema("deactivate_rag_document", DeactivateRagDocumentReducer),
+  __reducerSchema("import_faculty_programs", ImportFacultyProgramsReducer),
   __reducerSchema("init_portal_roles", InitPortalRolesReducer),
+  __reducerSchema("link_application_convocatoria", LinkApplicationConvocatoriaReducer),
   __reducerSchema("portal_login", PortalLoginReducer),
   __reducerSchema("portal_logout", PortalLogoutReducer),
   __reducerSchema("record_application_audit", RecordApplicationAuditReducer),
+  __reducerSchema("record_decano_review", RecordDecanoReviewReducer),
   __reducerSchema("register_professor", RegisterProfessorReducer),
   __reducerSchema("register_user_profile", RegisterUserProfileReducer),
+  __reducerSchema("save_application_analysis_version", SaveApplicationAnalysisVersionReducer),
   __reducerSchema("update_application_status", UpdateApplicationStatusReducer),
+  __reducerSchema("update_convocatoria", UpdateConvocatoriaReducer),
+  __reducerSchema("update_user_profile", UpdateUserProfileReducer),
+  __reducerSchema("upsert_academic_program", UpsertAcademicProgramReducer),
   __reducerSchema("upsert_api_config", UpsertApiConfigReducer),
   __reducerSchema("upsert_email_template", UpsertEmailTemplateReducer),
+  __reducerSchema("upsert_faculty", UpsertFacultyReducer),
   __reducerSchema("upsert_portal_role", UpsertPortalRoleReducer),
   __reducerSchema("upsert_rag_config", UpsertRagConfigReducer),
   __reducerSchema("upsert_rag_document", UpsertRagDocumentReducer),

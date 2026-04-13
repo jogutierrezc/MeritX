@@ -16,4 +16,5 @@ export default {
   campus: __t.string(),
   password: __t.string(),
   role: __t.string(),
+  facultyId: __t.option(__t.string()),
 };

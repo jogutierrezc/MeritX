@@ -10,6 +10,17 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AcademicProgram = __t.object("AcademicProgram", {
+  programId: __t.string(),
+  facultyId: __t.string(),
+  programName: __t.string(),
+  active: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+  formationLevel: __t.string(),
+});
+export type AcademicProgram = __Infer<typeof AcademicProgram>;
+
 export const ApiConfig = __t.object("ApiConfig", {
   configKey: __t.string(),
   geminiApiKey: __t.string(),
@@ -41,6 +52,25 @@ export const Application = __t.object("Application", {
 });
 export type Application = __Infer<typeof Application>;
 
+export const ApplicationAnalysisVersion = __t.object("ApplicationAnalysisVersion", {
+  versionId: __t.string(),
+  trackingId: __t.string(),
+  sourceType: __t.string(),
+  versionStatus: __t.string(),
+  rowsPayload: __t.string(),
+  totalScore: __t.f64(),
+  suggestedCategory: __t.string(),
+  narrative: __t.string(),
+  notes: __t.string(),
+  createdBy: __t.option(__t.string()),
+  createdRole: __t.option(__t.string()),
+  approvedBy: __t.option(__t.string()),
+  approvedAt: __t.option(__t.timestamp()),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type ApplicationAnalysisVersion = __Infer<typeof ApplicationAnalysisVersion>;
+
 export const ApplicationAudit = __t.object("ApplicationAudit", {
   trackingId: __t.string(),
   currentStatus: __t.string(),
@@ -53,6 +83,54 @@ export const ApplicationAudit = __t.object("ApplicationAudit", {
   updatedAt: __t.timestamp(),
 });
 export type ApplicationAudit = __Infer<typeof ApplicationAudit>;
+
+export const ApplicationAuditCriterion = __t.object("ApplicationAuditCriterion", {
+  criterionId: __t.string(),
+  trackingId: __t.string(),
+  criterionKey: __t.string(),
+  criterionLabel: __t.string(),
+  criterionStatus: __t.string(),
+  quantity: __t.f64(),
+  unitLabel: __t.string(),
+  baseWeight: __t.f64(),
+  recommendedScore: __t.f64(),
+  weightedScore: __t.f64(),
+  supportSummary: __t.string(),
+  notes: __t.string(),
+  reviewerUsername: __t.option(__t.string()),
+  valuationStage: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type ApplicationAuditCriterion = __Infer<typeof ApplicationAuditCriterion>;
+
+export const ApplicationConvocatoria = __t.object("ApplicationConvocatoria", {
+  trackingId: __t.string(),
+  convocatoriaId: __t.string(),
+  linkedBy: __t.option(__t.string()),
+  linkedAt: __t.timestamp(),
+});
+export type ApplicationConvocatoria = __Infer<typeof ApplicationConvocatoria>;
+
+export const ApplicationDecanoDocument = __t.object("ApplicationDecanoDocument", {
+  documentId: __t.string(),
+  trackingId: __t.string(),
+  documentType: __t.string(),
+  fileName: __t.string(),
+  fileUrl: __t.option(__t.string()),
+  filePath: __t.option(__t.string()),
+  uploadedBy: __t.option(__t.string()),
+  uploadedAt: __t.timestamp(),
+});
+export type ApplicationDecanoDocument = __Infer<typeof ApplicationDecanoDocument>;
+
+export const ApplicationDecanoReview = __t.object("ApplicationDecanoReview", {
+  trackingId: __t.string(),
+  reviewStatus: __t.string(),
+  observations: __t.string(),
+  reviewedBy: __t.option(__t.string()),
+  updatedAt: __t.timestamp(),
+});
+export type ApplicationDecanoReview = __Infer<typeof ApplicationDecanoReview>;
 
 export const ApplicationExperience = __t.object("ApplicationExperience", {
   id: __t.u32(),
@@ -99,6 +177,26 @@ export const ApplicationTitle = __t.object("ApplicationTitle", {
 });
 export type ApplicationTitle = __Infer<typeof ApplicationTitle>;
 
+export const AuditCriterionEvent = __t.object("AuditCriterionEvent", {
+  id: __t.u32(),
+  trackingId: __t.string(),
+  criterionKey: __t.string(),
+  valuationStage: __t.string(),
+  actorUsername: __t.string(),
+  actorRole: __t.string(),
+  previousStatus: __t.option(__t.string()),
+  newStatus: __t.string(),
+  previousBaseWeight: __t.option(__t.f64()),
+  newBaseWeight: __t.f64(),
+  previousRecommendedScore: __t.option(__t.f64()),
+  newRecommendedScore: __t.f64(),
+  previousWeightedScore: __t.option(__t.f64()),
+  newWeightedScore: __t.f64(),
+  message: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AuditCriterionEvent = __Infer<typeof AuditCriterionEvent>;
+
 export const AuditEvent = __t.object("AuditEvent", {
   id: __t.u32(),
   trackingId: __t.string(),
@@ -110,6 +208,39 @@ export const AuditEvent = __t.object("AuditEvent", {
 });
 export type AuditEvent = __Infer<typeof AuditEvent>;
 
+export const AuditScoreSnapshot = __t.object("AuditScoreSnapshot", {
+  id: __t.u32(),
+  trackingId: __t.string(),
+  valuationStage: __t.string(),
+  actorUsername: __t.string(),
+  actorRole: __t.string(),
+  suggestedScore: __t.f64(),
+  currentWeightedScore: __t.f64(),
+  finalWeightedScore: __t.option(__t.f64()),
+  finalCategory: __t.option(__t.string()),
+  notes: __t.string(),
+  criteriaCount: __t.u32(),
+  createdAt: __t.timestamp(),
+});
+export type AuditScoreSnapshot = __Infer<typeof AuditScoreSnapshot>;
+
+export const Convocatoria = __t.object("Convocatoria", {
+  id: __t.string(),
+  codigo: __t.string(),
+  nombre: __t.string(),
+  descripcion: __t.string(),
+  periodo: __t.string(),
+  año: __t.u32(),
+  fechaApertura: __t.string(),
+  fechaCierre: __t.string(),
+  estado: __t.string(),
+  postulacionesCount: __t.u32(),
+  createdBy: __t.option(__t.string()),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type Convocatoria = __Infer<typeof Convocatoria>;
+
 export const EmailTemplate = __t.object("EmailTemplate", {
   templateKey: __t.string(),
   workflowKey: __t.string(),
@@ -119,6 +250,15 @@ export const EmailTemplate = __t.object("EmailTemplate", {
   updatedAt: __t.timestamp(),
 });
 export type EmailTemplate = __Infer<typeof EmailTemplate>;
+
+export const Faculty = __t.object("Faculty", {
+  facultyId: __t.string(),
+  facultyName: __t.string(),
+  active: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type Faculty = __Infer<typeof Faculty>;
 
 export const PortalRole = __t.object("PortalRole", {
   roleKey: __t.string(),
@@ -212,6 +352,18 @@ export const SystemSetting = __t.object("SystemSetting", {
   updatedAt: __t.timestamp(),
 });
 export type SystemSetting = __Infer<typeof SystemSetting>;
+
+export const UserFacultyAssignment = __t.object("UserFacultyAssignment", {
+  userEmail: __t.string(),
+  roleKey: __t.string(),
+  facultyId: __t.string(),
+  facultyName: __t.string(),
+  active: __t.bool(),
+  assignedBy: __t.option(__t.string()),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type UserFacultyAssignment = __Infer<typeof UserFacultyAssignment>;
 
 export const UserProfile = __t.object("UserProfile", {
   id: __t.u32(),

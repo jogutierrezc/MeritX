@@ -1,4 +1,4 @@
-export type PortalRole = 'admin' | 'auxiliar' | 'director' | 'talento_humano';
+export type PortalRole = 'admin' | 'decano' | 'cap' | 'cepi' | 'talento_humano';
 
 export type PortalSession = {
   role: PortalRole;
@@ -15,13 +15,17 @@ const CREDENTIALS = {
     username: import.meta.env.VITE_ADMIN_USER || 'admin',
     password: import.meta.env.VITE_ADMIN_PASSWORD || 'Admin123!',
   },
-  auxiliar: {
-    username: import.meta.env.VITE_AUXILIAR_USER || 'auxiliar',
-    password: import.meta.env.VITE_AUXILIAR_PASSWORD || 'Auxiliar123!',
+  decano: {
+    username: import.meta.env.VITE_DECANO_USER || 'decano',
+    password: import.meta.env.VITE_DECANO_PASSWORD || 'Decano123!',
   },
-  director: {
-    username: import.meta.env.VITE_DIRECTOR_USER || 'director',
-    password: import.meta.env.VITE_DIRECTOR_PASSWORD || 'Director123!',
+  cap: {
+    username: import.meta.env.VITE_CAP_USER || 'cap',
+    password: import.meta.env.VITE_CAP_PASSWORD || 'Cap123!',
+  },
+  cepi: {
+    username: import.meta.env.VITE_CEPI_USER || 'cepi',
+    password: import.meta.env.VITE_CEPI_PASSWORD || 'Cepi123!',
   },
   talento_humano: {
     username: import.meta.env.VITE_TALENTO_HUMANO_USER || 'talentohumano',
@@ -130,8 +134,9 @@ export const canAccessRole = (session: PortalSession | null, requiredRole: Porta
 };
 
 export const getRequiredRoleForModule = (moduleId: string): PortalRole | null => {
-  if (moduleId === 'auxiliares') return 'auxiliar';
-  if (moduleId === 'director') return 'director';
+  if (moduleId === 'decano') return 'decano';
+  if (moduleId === 'cap') return 'cap';
+  if (moduleId === 'cepi') return 'cepi';
   if (moduleId === 'talento_humano') return 'talento_humano';
   if (['expedientes', 'reportes', 'config'].includes(moduleId)) return 'admin';
   return null;

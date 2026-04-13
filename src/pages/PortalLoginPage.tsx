@@ -3,7 +3,6 @@ import { Lock, ShieldCheck } from 'lucide-react';
 
 import { DbConnection } from '../module_bindings';
 import type { PortalRole, PortalSession } from '../services/portalAuth';
-import { createFirstAdmin } from '../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
 
 interface Props {
@@ -13,16 +12,20 @@ interface Props {
 }
 
 const PORTAL_LABELS: Record<PortalRole, { title: string; badge: string }> = {
-  auxiliar: {
-    title: 'Acceso Portal Auxiliares',
-    badge: 'Acceso protegido para apoyo operativo',
+  decano: {
+    title: 'Acceso Consejo de Facultad',
+    badge: 'Acceso protegido para verificación inicial de postulación',
+  },
+  cap: {
+    title: 'Acceso Portal CAP (Comité de Asuntos Profesorales)',
+    badge: 'Acceso protegido para valoración intermedia y trazabilidad del expediente',
   },
   admin: {
     title: 'Acceso Portal Administrador',
     badge: 'Acceso protegido para CAP y backoffice',
   },
-  director: {
-    title: 'Acceso Portal Director',
+  cepi: {
+    title: 'Acceso Portal CEPI (Comité de Evaluación de Producción Intelectual)',
     badge: 'Acceso protegido para control directivo',
   },
   talento_humano: {
@@ -31,17 +34,41 @@ const PORTAL_LABELS: Record<PortalRole, { title: string; badge: string }> = {
   },
 };
 
+const openSpacetimeConnection = (host: string, databaseName: string, timeoutMs = 12000): Promise<DbConnection> =>
+  new Promise((resolve, reject) => {
+    let settled = false;
+
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Tiempo de espera agotado al conectar con SpacetimeDB. Verifica red, WS y configuración del host.'));
+    }, timeoutMs);
+
+    const connection = DbConnection.builder()
+      .withUri(host)
+      .withDatabaseName(databaseName)
+      .onConnect(() => {
+        if (settled) {
+          connection.disconnect();
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(connection);
+      })
+      .onConnectError((_ctx: unknown, error: unknown) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        reject(new Error(`No fue posible conectar a SpacetimeDB: ${error instanceof Error ? error.message : String(error)}`));
+      })
+      .build();
+  });
+
 const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [adminSetupNombre, setAdminSetupNombre] = useState('');
-  const [adminSetupCorreo, setAdminSetupCorreo] = useState('');
-  const [adminSetupCampus, setAdminSetupCampus] = useState('VALLEDUPAR');
-  const [adminSetupPassword, setAdminSetupPassword] = useState('');
-  const [adminSetupConfirmPassword, setAdminSetupConfirmPassword] = useState('');
-  const [setupMessage, setSetupMessage] = useState('');
-  const [isFirstAdminAvailable, setIsFirstAdminAvailable] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const labels = PORTAL_LABELS[role];
@@ -59,10 +86,7 @@ const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
 
     setSubmitting(true);
     try {
-      connection = DbConnection.builder()
-        .withUri(host)
-        .withDatabaseName(databaseName)
-        .build();
+      connection = await openSpacetimeConnection(host, databaseName);
 
       const reducers = connection.reducers as any;
       const loginReducer = reducers.portalLogin || reducers.portal_login;
@@ -88,67 +112,6 @@ const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
     } finally {
       if (connection) connection.disconnect();
       setSubmitting(false);
-    }
-  };
-
-  const handleCreateFirstAdmin = async () => {
-    if (role !== 'admin') return;
-
-    if (!adminSetupNombre.trim() || !adminSetupCorreo.trim() || !adminSetupCampus.trim() || !adminSetupPassword.trim()) {
-      setError('Nombre, correo, campus y contraseña son obligatorios para crear el primer admin.');
-      return;
-    }
-
-    if (adminSetupPassword !== adminSetupConfirmPassword) {
-      setError('La confirmación de contraseña no coincide.');
-      return;
-    }
-
-    const { host, databaseName } = getSpacetimeConnectionConfig();
-
-    let connection: DbConnection | null = null;
-    try {
-      connection = DbConnection.builder()
-        .withUri(host)
-        .withDatabaseName(databaseName)
-        .build();
-
-      const reducers = connection.reducers as any;
-
-      // Initialize portal roles first
-      const initRolesReducer = reducers.initPortalRoles || reducers.init_portal_roles;
-      if (typeof initRolesReducer === 'function') {
-        await initRolesReducer({});
-      }
-
-      const bootstrapReducer = reducers.bootstrapFirstAdmin || reducers.bootstrap_first_admin;
-
-      if (typeof bootstrapReducer !== 'function') {
-        throw new Error('Reducer bootstrap_first_admin no disponible.');
-      }
-
-      await bootstrapReducer({
-        nombre: adminSetupNombre.trim(),
-        correo: adminSetupCorreo.trim().toLowerCase(),
-        campus: adminSetupCampus.trim().toUpperCase(),
-        password: adminSetupPassword,
-      });
-
-      createFirstAdmin(adminSetupCorreo.trim().toLowerCase(), adminSetupPassword);
-
-      setIsFirstAdminAvailable(false);
-      setError('');
-      setSetupMessage('Primer administrador creado en backend. Ya puedes iniciar sesión.');
-      setUsername(adminSetupCorreo.trim().toLowerCase());
-      setPassword(adminSetupPassword);
-      setAdminSetupConfirmPassword('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'No fue posible crear el primer administrador.';
-      const alreadyExists = /ya fue configurado|ya existe/i.test(message);
-      setError(message);
-      if (alreadyExists) setIsFirstAdminAvailable(false);
-    } finally {
-      if (connection) connection.disconnect();
     }
   };
 
@@ -191,66 +154,6 @@ const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
             </div>
           </label>
         </div>
-
-        {role === 'admin' && isFirstAdminAvailable && (
-          <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-700">Configuración inicial</p>
-            <p className="mt-2 text-xs font-semibold text-blue-900">
-              Crea el primer usuario administrador. Esta acción solo se permite una única vez.
-            </p>
-            <div className="mt-4 grid gap-3">
-              <input
-                value={adminSetupNombre}
-                onChange={(e) => setAdminSetupNombre(e.target.value)}
-                className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-blue-600"
-                placeholder="NOMBRE COMPLETO"
-              />
-              <input
-                type="email"
-                value={adminSetupCorreo}
-                onChange={(e) => setAdminSetupCorreo(e.target.value)}
-                className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-blue-600"
-                placeholder="CORREO ADMIN"
-              />
-              <select
-                value={adminSetupCampus}
-                onChange={(e) => setAdminSetupCampus(e.target.value)}
-                className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-blue-600"
-              >
-                <option>VALLEDUPAR</option>
-                <option>BUCARAMANGA</option>
-                <option>CUCUTA</option>
-                <option>BOGOTA</option>
-              </select>
-              <input
-                type="password"
-                value={adminSetupPassword}
-                onChange={(e) => setAdminSetupPassword(e.target.value)}
-                className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-blue-600"
-                placeholder="CONTRASEÑA ADMIN"
-              />
-              <input
-                type="password"
-                value={adminSetupConfirmPassword}
-                onChange={(e) => setAdminSetupConfirmPassword(e.target.value)}
-                className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-blue-600"
-                placeholder="CONFIRMAR CONTRASEÑA"
-              />
-              <button
-                onClick={handleCreateFirstAdmin}
-                className="w-full rounded-xl bg-blue-600 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition-all hover:bg-blue-700"
-              >
-                Crear primer admin en backend
-              </button>
-            </div>
-          </section>
-        )}
-
-        {setupMessage && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-            {setupMessage}
-          </div>
-        )}
 
         {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">{error}</div>}
 

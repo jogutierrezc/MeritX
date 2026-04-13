@@ -30,6 +30,57 @@ export const ESCALAFON_CONFIG = {
   VALOR_IDIOMA: { 'Ninguno': 0, 'A2': 1, 'B1': 2, 'B2': 3, 'C1': 4 }
 };
 
+export const CRITERIO_REFERENCIA = {
+  titulos: {
+    Doctorado: 500,
+    Pregrado: 300,
+    MaestriaInvestigacion: 300,
+    EspecializacionMedicoQuirurgica: 300,
+    MaestriaProfundizacion: 200,
+    SubespecialidadMedicoQuirurgica: 100,
+    Especializacion: 90,
+    MaestriaAdicional: 90,
+    TituloProfesionalAdicional: 60,
+    EspecializacionAdicional: 30,
+  },
+  idiomas: {
+    C1: 100,
+    B2: 60,
+    B1: 30,
+    A2: 20,
+  },
+  experienciaAnual: {
+    Investigacion: 50,
+    DocenciaUniversitaria: 30,
+    Profesional: 20,
+    ColcienciasSenior: 100,
+    ColcienciasJunior: 50,
+  },
+  produccion: {
+    PatenteInvencion: 300,
+    ModeloUtilidad: 120,
+    LibroInvestigacion: 100,
+    ArticuloQ1: 70,
+    SoftwareEspecializado: 70,
+    DisenoIndustrialBiotecnologia: 70,
+    ArticuloQ2: 50,
+    LibroTexto: 50,
+    ProyectoEstadoEmpresa: 50,
+    CapituloLibroInvestigacion: 40,
+    TraduccionObraExtranjera: 40,
+    ArticuloQ3: 30,
+    ArticuloQ4: 20,
+  },
+} as const;
+
+export const getSuggestedCategoryByPoints = (points: number) => {
+  if (points >= ESCALAFON_CONFIG.RANGOS.TITULAR.min) return 'TITULAR';
+  if (points >= ESCALAFON_CONFIG.RANGOS.ASOCIADO.min && points <= ESCALAFON_CONFIG.RANGOS.ASOCIADO.max) return 'ASOCIADO';
+  if (points >= ESCALAFON_CONFIG.RANGOS.ASISTENTE.min && points <= ESCALAFON_CONFIG.RANGOS.ASISTENTE.max) return 'ASISTENTE';
+  if (points >= ESCALAFON_CONFIG.RANGOS.AUXILIAR.min && points <= ESCALAFON_CONFIG.RANGOS.AUXILIAR.max) return 'AUXILIAR';
+  return 'SIN CATEGORIA';
+};
+
 export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => {
   // --- FASE 2: ASIGNACIÓN MATEMÁTICA DE TÍTULOS E IDIOMAS ---
   // Los títulos son aditivos según el reglamento (Pregrado + Posgrados)
@@ -53,8 +104,8 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
   // --- FASE 3: EVALUACIÓN DE PRODUCCIÓN INTELECTUAL (CEPI) ---
   const ptsPI = data.produccion.reduce((acc, art) => {
     let base = { Q1: 70, Q2: 50, Q3: 30, Q4: 20 }[art.cuartil] || 0;
-    if (art.tipo === 'Libro') base = 100;
-    if (art.tipo === 'Patente') base = 200;
+    if (art.tipo === 'Libro') base = CRITERIO_REFERENCIA.produccion.LibroInvestigacion;
+    if (art.tipo === 'Patente') base = CRITERIO_REFERENCIA.produccion.PatenteInvencion;
     
     const autores = art.autores || 1;
     let factor = 1;

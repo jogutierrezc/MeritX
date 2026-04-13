@@ -19,7 +19,7 @@ export const emptyForm: FormState = {
   yearsInCategory: 0,
   hasTrabajoAprobadoCEPI: false,
   titulos: [{ titulo: '', nivel: 'Pregrado' }],
-  idiomas: [{ idioma: 'Inglés', nivel: 'A2', convalidacion: 'NO' }],
+  idiomas: [{ idioma: 'Inglés', nivel: 'A2', convalidacion: 'NO', supportName: '', supportPath: '' }],
   produccion: [],
   experiencia: [{ tipo: 'Docencia Universitaria', inicio: '', fin: '', certificacion: 'NO' }],
   orcid: '',

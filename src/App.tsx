@@ -3,8 +3,9 @@ import './App.css';
 
 import AppHeader from './components/AppHeader';
 import AuthPage from './pages/AuthPage';
-import AuxiliaresPage from './pages/AuxiliaresPage';
-import InicioPage from './pages/InicioPage';
+import AuxiliaresPortal from './pages/auxiliares/AuxiliaresPortal';
+import DecanoPage from './pages/decano/ConsejoFacultadPortal';
+import InicioPortal from './pages/inicio/InicioPortal';
 import ExpedientesPage from './pages/ExpedientesPage';
 import ReportesPage from './pages/ReportesPage';
 import ConfigPage from './pages/ConfigPage';
@@ -45,8 +46,9 @@ const App = () => {
   const handlePortalLogin = (session: PortalSession) => {
     const roleLandingModule: Record<PortalSession['role'], string> = {
       admin: 'expedientes',
-      auxiliar: 'auxiliares',
-      director: 'director',
+      decano: 'decano',
+      cap: 'cap',
+      cepi: 'cepi',
       talento_humano: 'talento_humano',
     };
 
@@ -67,7 +69,7 @@ const App = () => {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950 md:px-8 md:py-10">
         <div className="mx-auto max-w-7xl">
-          <InicioPage standalone />
+          <InicioPortal standalone />
         </div>
       </div>
     );
@@ -86,10 +88,11 @@ const App = () => {
       />
 
       <main className="max-w-7xl mx-auto px-8 py-12">
-        {activeModule === 'inicio' && <InicioPage />}
+        {activeModule === 'inicio' && <InicioPortal />}
         {activeModule === 'auth' && <AuthPage onLogin={handlePortalLogin} />}
-        {activeModule === 'auxiliares' && hasAccess && <AuxiliaresPage />}
-        {activeModule === 'director' && hasAccess && <DirectorPage />}
+        {activeModule === 'decano' && hasAccess && <DecanoPage />}
+        {activeModule === 'cap' && hasAccess && <AuxiliaresPortal />}
+        {activeModule === 'cepi' && hasAccess && <DirectorPage />}
         {activeModule === 'talento_humano' && hasAccess && <TalentoHumanoPage />}
         {activeModule === 'expedientes' && hasAccess && <ExpedientesPage />}
         {activeModule === 'reportes' && hasAccess && <ReportesPage />}

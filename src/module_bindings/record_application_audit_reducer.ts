@@ -18,4 +18,10 @@ export default {
   publicationVerified: __t.bool(),
   languageValidated: __t.bool(),
   observations: __t.string(),
+  suggestedScore: __t.option(__t.f64()),
+  currentWeightedScore: __t.option(__t.f64()),
+  finalWeightedScore: __t.option(__t.f64()),
+  valuationStage: __t.option(__t.string()),
+  finalCategory: __t.option(__t.string()),
+  criteriaPayload: __t.option(__t.string()),
 };

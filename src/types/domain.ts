@@ -21,10 +21,28 @@ export type FormState = {
   isAccreditedSource: boolean;
   yearsInCategory: number;
   hasTrabajoAprobadoCEPI: boolean;
-  titulos: Array<{ titulo: string; nivel: 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' }>;
-  idiomas: Array<{ idioma: string; nivel: 'A2' | 'B1' | 'B2' | 'C1'; convalidacion: 'SI' | 'NO' }>;
+  titulos: Array<{
+    titulo: string;
+    nivel: 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado';
+    supportName?: string;
+    supportPath?: string;
+  }>;
+  idiomas: Array<{
+    idioma: string;
+    nivel: 'A2' | 'B1' | 'B2' | 'C1';
+    convalidacion: 'SI' | 'NO';
+    supportName?: string;
+    supportPath?: string;
+  }>;
   produccion: Array<{ titulo: string; cuartil: 'Q1' | 'Q2' | 'Q3' | 'Q4'; fecha: string; tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'MANUAL' }>;
-  experiencia: Array<{ tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación'; inicio: string; fin: string; certificacion: 'SI' | 'NO' }>;
+  experiencia: Array<{
+    tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación';
+    inicio: string;
+    fin: string;
+    certificacion: 'SI' | 'NO';
+    supportName?: string;
+    supportPath?: string;
+  }>;
   orcid: string;
 };
 
