@@ -621,16 +621,30 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       }
     };
 
+    let onReadyResolve: (() => void) | null = null;
+    let onReadyReject: ((error: unknown) => void) | null = null;
+    const connectionReady = new Promise<void>((resolve, reject) => {
+      onReadyResolve = resolve;
+      onReadyReject = reject;
+    });
+
     const connection = DbConnection.builder()
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect((conn: DbConnection) => {
         setConnected(true);
-        ensurePortalSession(conn).catch((e) => console.warn('Portal session en PerfilesModule:', e));
+        ensurePortalSession(conn)
+          .catch((e) => {
+            console.warn('Portal session en PerfilesModule:', e);
+          })
+          .finally(() => {
+            onReadyResolve?.();
+          });
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('PerfilesModule connect error:', err);
         setConnected(false);
+        onReadyReject?.(err);
       })
       .build();
 
@@ -783,47 +797,9 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
     let liveSubscription: { unsubscribe: () => void } | null = null;
 
-    const QUERY_SETS = {
-      full: [
-        'SELECT * FROM application',
-        'SELECT * FROM application_title',
-        'SELECT * FROM application_language',
-        'SELECT * FROM application_publication',
-        'SELECT * FROM application_experience',
-        'SELECT * FROM application_analysis_version',
-        'SELECT * FROM api_config',
-        'SELECT * FROM openrouter_config',
-        'SELECT * FROM rag_config',
-        'SELECT * FROM rag_document',
-        'SELECT * FROM rag_normative',
-        'SELECT * FROM system_setting',
-        'SELECT * FROM faculty',
-        'SELECT * FROM academic_program',
-        'SELECT * FROM convocatoria',
-      ],
-      compatible: [
-        'SELECT * FROM application',
-        'SELECT * FROM application_title',
-        'SELECT * FROM application_language',
-        'SELECT * FROM application_publication',
-        'SELECT * FROM application_experience',
-        'SELECT * FROM application_analysis_version',
-        'SELECT * FROM api_config',
-        'SELECT * FROM system_setting',
-        'SELECT * FROM faculty',
-        'SELECT * FROM academic_program',
-        'SELECT * FROM convocatoria',
-      ],
-      minimal: [
-        'SELECT * FROM application',
-        'SELECT * FROM application_title',
-        'SELECT * FROM application_language',
-        'SELECT * FROM application_publication',
-        'SELECT * FROM application_experience',
-      ],
-    };
+    const PROFILE_LIST_QUERIES = ['SELECT * FROM application'];
 
-    const subscribeWithQueries = async (queries: string[]) => {
+    const subscribeWithQueries = async (queries: string[], softTimeout = false) => {
       await new Promise<void>((resolve, reject) => {
         let settled = false;
 
@@ -832,6 +808,21 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           liveSubscription = null;
         }
 
+        const timeout = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          if (softTimeout) {
+            try {
+              refreshFromCache();
+            } catch {
+              // ignore cache refresh errors on soft timeout
+            }
+            resolve();
+            return;
+          }
+          reject(new Error('Timeout cargando perfiles de Talento Humano.'));
+        }, 12000);
+
         liveSubscription = connection
           .subscriptionBuilder()
           .onApplied(() => {
@@ -839,11 +830,13 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
               refreshFromCache();
               if (!settled) {
                 settled = true;
+                window.clearTimeout(timeout);
                 resolve();
               }
             } catch (error) {
               if (!settled) {
                 settled = true;
+                window.clearTimeout(timeout);
                 reject(error);
               }
             }
@@ -851,6 +844,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           .onError((ctx: unknown) => {
             if (!settled) {
               settled = true;
+              window.clearTimeout(timeout);
               reject(ctx);
             }
           })
@@ -859,19 +853,15 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     };
 
     const loadOnce = async () => {
+      await connectionReady;
+
       try {
-        await subscribeWithQueries(QUERY_SETS.full);
+        // Keep profile loading simple and resilient in production.
+        await subscribeWithQueries(PROFILE_LIST_QUERIES, true);
         setConnectionWarning('');
-      } catch (fullError) {
-        console.warn('PerfilesModule subscription fallback(full->compatible):', fullError);
-        try {
-          await subscribeWithQueries(QUERY_SETS.compatible);
-          setConnectionWarning('Se cargaron perfiles en modo compatibilidad. Algunas configuraciones avanzadas no estan disponibles.');
-        } catch (compatibleError) {
-          console.warn('PerfilesModule subscription fallback(compatible->minimal):', compatibleError);
-          await subscribeWithQueries(QUERY_SETS.minimal);
-          setConnectionWarning('Se cargaron perfiles en modo minimo por incompatibilidad de esquema en produccion.');
-        }
+      } catch (error) {
+        console.error('PerfilesModule simple profile load failed:', error);
+        setConnectionWarning('No fue posible sincronizar la lista de perfiles en este momento.');
       }
     };
 
