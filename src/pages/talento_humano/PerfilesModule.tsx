@@ -719,6 +719,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
             id: row.trackingId,
             nombre: row.professorName,
             documento: row.documentNumber,
+            programa: row.programName || '',
             facultad: row.facultyName,
             esIngresoNuevo: true,
             finalPts: row.finalPoints,
@@ -1368,7 +1369,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     const formStateForCalc: FormState = {
       nombre: selectedAnalysisRequest.nombre,
       documento: selectedAnalysisRequest.documento,
-      programa: '',
+      programa: selectedAnalysisRequest.programa || '',
       facultad: selectedAnalysisRequest.facultad,
       scopusProfile: '',
       esIngresoNuevo: true,

@@ -50,6 +50,7 @@ export type RequestRecord = {
   id: string;
   nombre: string;
   documento: string;
+  programa?: string;
   facultad: string;
   esIngresoNuevo: boolean;
   finalPts: number;
