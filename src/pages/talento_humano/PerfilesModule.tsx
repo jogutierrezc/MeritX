@@ -796,8 +796,30 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     };
 
     let liveSubscription: { unsubscribe: () => void } | null = null;
+    let ragSubscription: { unsubscribe: () => void } | null = null;
 
-    const PROFILE_LIST_QUERIES = ['SELECT * FROM application'];
+    // Core tables: always exist, profiles + categorization data
+    const CORE_QUERIES = [
+      'SELECT * FROM application',
+      'SELECT * FROM application_title',
+      'SELECT * FROM application_language',
+      'SELECT * FROM application_publication',
+      'SELECT * FROM application_experience',
+      'SELECT * FROM application_analysis_version',
+      'SELECT * FROM faculty',
+      'SELECT * FROM academic_program',
+      'SELECT * FROM convocatoria',
+      'SELECT * FROM api_config',
+    ];
+
+    // RAG/config tables: loaded separately so they never block profile rendering
+    const RAG_QUERIES = [
+      'SELECT * FROM rag_config',
+      'SELECT * FROM rag_document',
+      'SELECT * FROM rag_normative',
+      'SELECT * FROM system_setting',
+      'SELECT * FROM openrouter_config',
+    ];
 
     const subscribeWithQueries = async (queries: string[], softTimeout = false) => {
       await new Promise<void>((resolve, reject) => {
@@ -852,17 +874,40 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       });
     };
 
+    const subscribeRagAsync = () => {
+      // Fire-and-forget: loads RAG/config tables without blocking profile rendering.
+      // If any table is missing from the deployed schema, onApplied may never fire —
+      // that's acceptable here since RAG is not required to show the profiles list.
+      try {
+        if (ragSubscription) {
+          ragSubscription.unsubscribe();
+          ragSubscription = null;
+        }
+        ragSubscription = connection
+          .subscriptionBuilder()
+          .onApplied(() => {
+            try { refreshFromCache(); } catch { /* ignore */ }
+          })
+          .onError(() => { /* RAG tables may not exist in all environments */ })
+          .subscribe(RAG_QUERIES);
+      } catch {
+        // RAG subscription not available — AI analysis will use cached keys only
+      }
+    };
+
     const loadOnce = async () => {
       await connectionReady;
 
       try {
-        // Keep profile loading simple and resilient in production.
-        await subscribeWithQueries(PROFILE_LIST_QUERIES, true);
+        await subscribeWithQueries(CORE_QUERIES, true);
         setConnectionWarning('');
       } catch (error) {
-        console.error('PerfilesModule simple profile load failed:', error);
+        console.error('PerfilesModule core load failed:', error);
         setConnectionWarning('No fue posible sincronizar la lista de perfiles en este momento.');
       }
+
+      // Start RAG subscription independently after core load (non-blocking)
+      subscribeRagAsync();
     };
 
     reloadRef.current = loadOnce;
@@ -873,6 +918,10 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       if (liveSubscription) {
         liveSubscription.unsubscribe();
         liveSubscription = null;
+      }
+      if (ragSubscription) {
+        ragSubscription.unsubscribe();
+        ragSubscription = null;
       }
       connection.disconnect();
       connectionRef.current = null;
