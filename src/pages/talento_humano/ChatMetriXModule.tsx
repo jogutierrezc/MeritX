@@ -42,6 +42,18 @@ const THINKING_STEPS = [
   'Redactando concepto y conclusiones finales',
 ];
 
+const OPENROUTER_DEFAULT_MODELS = ['google/gemma-3-27b-it:free', 'google/gemma-2-9b-it:free'];
+const OPENROUTER_BLOCKED_MODELS = ['meta-llama/llama-3.3-8b-instruct:free'];
+const OPENROUTER_PRESET_METRIX = {
+  temperature: 0.15,
+  topP: 0.9,
+  maxTokens: 2400,
+  modelPriority: OPENROUTER_DEFAULT_MODELS,
+  systemDirective:
+    'Prioriza salida estrictamente estructurada en JSON válido, sin texto adicional fuera del objeto JSON. ' +
+    'Relaciona cada criterio del caso con la matriz del sistema MeritX y conserva coherencia con la reglamentación universitaria aplicable.',
+};
+
 const normalizeForSearch = (value: string) =>
   value
     .normalize('NFD')
@@ -121,6 +133,17 @@ const normalizeAiProvider = (value?: string): 'gemini' | 'apifreellm' | 'openrou
   return normalized.includes('free') ? 'apifreellm' : 'gemini';
 };
 
+const sanitizeOpenRouterModelList = (value?: string) => {
+  const blocked = OPENROUTER_BLOCKED_MODELS.map((item) => normalizeForSearch(item));
+  const cleaned = String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !blocked.includes(normalizeForSearch(item)));
+
+  return Array.from(new Set([...cleaned, ...OPENROUTER_DEFAULT_MODELS])).join(',');
+};
+
 const resolveAiRuntime = (params: {
   provider?: string;
   model?: string;
@@ -153,21 +176,26 @@ const resolveAiRuntime = (params: {
   const model = provider === 'gemini'
     ? (requestedModel && !normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'gemini-2.5-flash')
     : provider === 'openrouter'
-      ? (requestedModel || 'google/gemma-3-27b-it:free,google/gemma-2-9b-it:free')
+      ? sanitizeOpenRouterModelList(requestedModel)
       : (requestedModel && normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'apifreellm');
 
   return { provider, model, activeKey };
 };
 
-const requestOpenRouterText = async (model: string, apiKey: string, systemPrompt: string, userPrompt: string) => {
+const requestOpenRouterText = async (
+  model: string,
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  preset = OPENROUTER_PRESET_METRIX,
+) => {
   const candidates = String(model || '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
   const ordered = Array.from(new Set([
     ...candidates,
-    'google/gemma-3-27b-it:free',
-    'google/gemma-2-9b-it:free',
+    ...preset.modelPriority,
   ]));
 
   let lastError: Error | null = null;
@@ -180,6 +208,9 @@ const requestOpenRouterText = async (model: string, apiKey: string, systemPrompt
       },
       body: JSON.stringify({
         model: candidate,
+        temperature: preset.temperature,
+        top_p: preset.topP,
+        max_tokens: preset.maxTokens,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -322,6 +353,7 @@ const sanitizeFormState = (candidate: any): FormState => {
 const ChatMetriXModule = () => {
   const connectionRef = useRef<DbConnection | null>(null);
   const [connected, setConnected] = useState(false);
+  const [connectionWarning, setConnectionWarning] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -345,6 +377,7 @@ const ChatMetriXModule = () => {
 
   useEffect(() => {
     const { host, databaseName } = getSpacetimeConnectionConfig();
+    setConnectionWarning('');
 
     const ensurePortalSession = async (conn: DbConnection) => {
       const session = getPortalSession();
@@ -381,23 +414,27 @@ const ChatMetriXModule = () => {
       if (apiTable) {
         const apiRows = Array.from(apiTable.iter()) as any[];
         const defaultCfg = apiRows.find((row) => row.configKey === 'default');
-        if (defaultCfg?.geminiApiKey) setGeminiApiKey(defaultCfg.geminiApiKey);
-        if (defaultCfg?.apifreellmApiKey) setApifreellmApiKey(defaultCfg.apifreellmApiKey);
-        if (defaultCfg?.openrouterApiKey) setOpenrouterApiKey(defaultCfg.openrouterApiKey);
-        if (defaultCfg?.aiProvider) setAiProvider(defaultCfg.aiProvider);
-        if (defaultCfg?.aiModel) setAiModel(defaultCfg.aiModel);
+        if (typeof defaultCfg?.geminiApiKey === 'string') setGeminiApiKey(defaultCfg.geminiApiKey.trim());
+        if (typeof defaultCfg?.apifreellmApiKey === 'string') setApifreellmApiKey(defaultCfg.apifreellmApiKey.trim());
+        if (typeof defaultCfg?.openrouterApiKey === 'string') setOpenrouterApiKey(defaultCfg.openrouterApiKey.trim());
+        if (defaultCfg?.aiProvider) setAiProvider(normalizeAiProvider(defaultCfg.aiProvider));
+        if (defaultCfg?.aiModel) {
+          const provider = normalizeAiProvider(defaultCfg?.aiProvider);
+          const model = String(defaultCfg.aiModel || '').trim();
+          setAiModel(provider === 'openrouter' ? sanitizeOpenRouterModelList(model) : model);
+        }
       }
 
       if (settingTable) {
         const settingRows = Array.from(settingTable.iter()) as any[];
         const openrouterRow = settingRows.find((row) => row.key === 'cfg.openrouter.apiKey');
-        if (openrouterRow?.value) setOpenrouterApiKey(String(openrouterRow.value));
+        if (openrouterRow?.value) setOpenrouterApiKey(String(openrouterRow.value).trim());
       }
 
       if (openrouterTable) {
         const openrouterRows = Array.from(openrouterTable.iter()) as any[];
         const defaultOpenrouter = openrouterRows.find((row) => row.configKey === 'default');
-        if (defaultOpenrouter?.apiKey) setOpenrouterApiKey(String(defaultOpenrouter.apiKey));
+        if (defaultOpenrouter?.apiKey) setOpenrouterApiKey(String(defaultOpenrouter.apiKey).trim());
       }
 
       const ragTable = dbView.ragConfig || dbView.rag_config;
@@ -413,36 +450,97 @@ const ChatMetriXModule = () => {
       }
     };
 
-    const loadOnce = async () => {
+    let liveSubscription: { unsubscribe: () => void } | null = null;
+
+    const QUERY_SETS = {
+      full: [
+        'SELECT * FROM api_config',
+        'SELECT * FROM rag_config',
+        'SELECT * FROM rag_document',
+        'SELECT * FROM rag_normative',
+        'SELECT * FROM system_setting',
+        'SELECT * FROM openrouter_config',
+      ],
+      compatible: [
+        'SELECT * FROM api_config',
+        'SELECT * FROM rag_config',
+        'SELECT * FROM rag_document',
+        'SELECT * FROM system_setting',
+      ],
+      minimal: [
+        'SELECT * FROM api_config',
+        'SELECT * FROM system_setting',
+      ],
+    };
+
+    const subscribeWithQueries = async (queries: string[]) => {
       await new Promise<void>((resolve, reject) => {
-        const subscription = connection
+        let settled = false;
+
+        if (liveSubscription) {
+          liveSubscription.unsubscribe();
+          liveSubscription = null;
+        }
+
+        const timeout = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error('Timeout cargando Chat MetriX'));
+        }, 12000);
+
+        liveSubscription = connection
           .subscriptionBuilder()
           .onApplied(() => {
             try {
               refreshFromCache();
-              resolve();
+              if (!settled) {
+                settled = true;
+                window.clearTimeout(timeout);
+                resolve();
+              }
             } catch (error) {
-              reject(error);
+              if (!settled) {
+                settled = true;
+                window.clearTimeout(timeout);
+                reject(error);
+              }
             }
           })
-          .subscribe([
-            'SELECT * FROM api_config',
-            'SELECT * FROM rag_config',
-            'SELECT * FROM rag_document',
-            'SELECT * FROM rag_normative',
-            'SELECT * FROM system_setting',
-            'SELECT * FROM openrouter_config',
-          ]);
-
-        setTimeout(() => reject(new Error('Timeout cargando Chat MetriX')), 6000);
-
-        void subscription;
+          .onError((ctx: unknown) => {
+            if (!settled) {
+              settled = true;
+              window.clearTimeout(timeout);
+              reject(ctx);
+            }
+          })
+          .subscribe(queries);
       });
+    };
+
+    const loadOnce = async () => {
+      try {
+        await subscribeWithQueries(QUERY_SETS.full);
+        setConnectionWarning('');
+      } catch (fullError) {
+        console.warn('ChatMetriX subscription fallback(full->compatible):', fullError);
+        try {
+          await subscribeWithQueries(QUERY_SETS.compatible);
+          setConnectionWarning('MetriX cargado en modo compatibilidad. Algunas fuentes RAG avanzadas no estan disponibles.');
+        } catch (compatibleError) {
+          console.warn('ChatMetriX subscription fallback(compatible->minimal):', compatibleError);
+          await subscribeWithQueries(QUERY_SETS.minimal);
+          setConnectionWarning('MetriX cargado en modo minimo. Se usaran llaves/configuracion basica.');
+        }
+      }
     };
 
     void loadOnce().catch((error) => console.error(error));
 
     return () => {
+      if (liveSubscription) {
+        liveSubscription.unsubscribe();
+        liveSubscription = null;
+      }
       connection.disconnect();
       connectionRef.current = null;
     };
@@ -632,7 +730,7 @@ const ChatMetriXModule = () => {
         .map((entry) => `${entry.role === 'user' ? 'Usuario' : 'MetriX'}: ${entry.content}`)
         .join('\n');
 
-      const systemPrompt = [
+      const baseSystemPrompt = [
         'Eres MetriX, consultor experto en escalafón docente de la Universidad de Santander (UDES) asignado a la Unidad de Talento Humano.',
         'Tu rol combina el conocimiento técnico de un abogado laboral especializado en educación superior, la precisión analítica de un coordinador de escalafón y la capacidad narrativa de un dictaminador institucional.',
         'Cuando respondas, construye un análisis narrativo coherente: explica el razonamiento jurídico-normativo antes de llegar a cifras, cita los artículos o acuerdos relevantes recuperados del RAG si están disponibles, y justifica cada puntaje asignado con base en los criterios reglamentarios.',
@@ -643,6 +741,10 @@ const ChatMetriXModule = () => {
         'En el campo "concepto" desarrolla un dictamen narrativo completo: contexto normativo, análisis de cada bloque de criterios, conclusión sobre categoría proyectada y consideraciones de riesgo o documentos faltantes.',
         'No inventes normas; cuando no hay RAG disponible, razona con los criterios generales del régimen de escalafón colombiano.',
       ].join(' ');
+
+      const systemPrompt = provider === 'openrouter'
+        ? `${baseSystemPrompt} ${OPENROUTER_PRESET_METRIX.systemDirective}`
+        : baseSystemPrompt;
 
       const userPrompt = [
         'SITUACIÓN PLANTEADA EN CHAT:',
@@ -666,7 +768,7 @@ const ChatMetriXModule = () => {
         const data = await res.json();
         aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else if (provider === 'openrouter') {
-        aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt);
+        aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt, OPENROUTER_PRESET_METRIX);
       } else {
         const res = await fetch('/api/apifreellm/chat', {
           method: 'POST',
@@ -847,6 +949,12 @@ const ChatMetriXModule = () => {
                 {connected ? 'Conectado' : 'Sin conexión'}
               </span>
             </div>
+
+            {connectionWarning && (
+              <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-[11px] font-semibold text-amber-800">
+                {connectionWarning}
+              </div>
+            )}
 
             <div className="h-[420px] overflow-y-auto bg-slate-50 p-4 space-y-3">
               {messages.length === 0 && (

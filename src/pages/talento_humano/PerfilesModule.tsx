@@ -539,6 +539,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const [view, setView] = useState<'lista' | 'nuevo'>('lista');
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connectionWarning, setConnectionWarning] = useState('');
 
   const [requests, setRequests] = useState<RequestRecord[]>([]);
   const [formData, setFormData] = useState<FormState>(emptyForm);
@@ -606,6 +607,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
   useEffect(() => {
     const { host, databaseName } = getSpacetimeConnectionConfig();
+    setConnectionWarning('');
 
     const ensurePortalSession = async (conn: DbConnection) => {
       const session = getPortalSession();
@@ -781,9 +783,55 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
     let liveSubscription: { unsubscribe: () => void } | null = null;
 
-    const loadOnce = async () => {
+    const QUERY_SETS = {
+      full: [
+        'SELECT * FROM application',
+        'SELECT * FROM application_title',
+        'SELECT * FROM application_language',
+        'SELECT * FROM application_publication',
+        'SELECT * FROM application_experience',
+        'SELECT * FROM application_analysis_version',
+        'SELECT * FROM api_config',
+        'SELECT * FROM openrouter_config',
+        'SELECT * FROM rag_config',
+        'SELECT * FROM rag_document',
+        'SELECT * FROM rag_normative',
+        'SELECT * FROM system_setting',
+        'SELECT * FROM faculty',
+        'SELECT * FROM academic_program',
+        'SELECT * FROM convocatoria',
+      ],
+      compatible: [
+        'SELECT * FROM application',
+        'SELECT * FROM application_title',
+        'SELECT * FROM application_language',
+        'SELECT * FROM application_publication',
+        'SELECT * FROM application_experience',
+        'SELECT * FROM application_analysis_version',
+        'SELECT * FROM api_config',
+        'SELECT * FROM system_setting',
+        'SELECT * FROM faculty',
+        'SELECT * FROM academic_program',
+        'SELECT * FROM convocatoria',
+      ],
+      minimal: [
+        'SELECT * FROM application',
+        'SELECT * FROM application_title',
+        'SELECT * FROM application_language',
+        'SELECT * FROM application_publication',
+        'SELECT * FROM application_experience',
+      ],
+    };
+
+    const subscribeWithQueries = async (queries: string[]) => {
       await new Promise<void>((resolve, reject) => {
         let settled = false;
+
+        if (liveSubscription) {
+          liveSubscription.unsubscribe();
+          liveSubscription = null;
+        }
+
         liveSubscription = connection
           .subscriptionBuilder()
           .onApplied(() => {
@@ -806,24 +854,25 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
               reject(ctx);
             }
           })
-          .subscribe([
-            'SELECT * FROM application',
-            'SELECT * FROM application_title',
-            'SELECT * FROM application_language',
-            'SELECT * FROM application_publication',
-            'SELECT * FROM application_experience',
-            'SELECT * FROM application_analysis_version',
-            'SELECT * FROM api_config',
-            'SELECT * FROM openrouter_config',
-            'SELECT * FROM rag_config',
-            'SELECT * FROM rag_document',
-            'SELECT * FROM rag_normative',
-            'SELECT * FROM system_setting',
-            'SELECT * FROM faculty',
-            'SELECT * FROM academic_program',
-            'SELECT * FROM convocatoria',
-          ]);
+          .subscribe(queries);
       });
+    };
+
+    const loadOnce = async () => {
+      try {
+        await subscribeWithQueries(QUERY_SETS.full);
+        setConnectionWarning('');
+      } catch (fullError) {
+        console.warn('PerfilesModule subscription fallback(full->compatible):', fullError);
+        try {
+          await subscribeWithQueries(QUERY_SETS.compatible);
+          setConnectionWarning('Se cargaron perfiles en modo compatibilidad. Algunas configuraciones avanzadas no estan disponibles.');
+        } catch (compatibleError) {
+          console.warn('PerfilesModule subscription fallback(compatible->minimal):', compatibleError);
+          await subscribeWithQueries(QUERY_SETS.minimal);
+          setConnectionWarning('Se cargaron perfiles en modo minimo por incompatibilidad de esquema en produccion.');
+        }
+      }
     };
 
     reloadRef.current = loadOnce;
@@ -2422,6 +2471,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        {connectionWarning && (
+          <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-xs font-semibold text-amber-800">
+            {connectionWarning}
+          </div>
+        )}
         <table className="w-full border-collapse text-sm">
           <thead className="bg-slate-900 text-[10px] font-black uppercase tracking-[0.14em] text-white">
             <tr>
