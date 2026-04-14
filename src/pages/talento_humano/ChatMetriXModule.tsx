@@ -48,7 +48,9 @@ const OPENROUTER_PRESET_METRIX = {
   temperature: 0.15,
   topP: 0.9,
   maxTokens: 2400,
-  modelPriority: OPENROUTER_DEFAULT_MODELS,
+  // @preset/merit-x2 is the custom OpenRouter preset tuned for MetriX escalafón analysis.
+  // Falls back to default free models if the preset is unavailable.
+  modelPriority: ['@preset/merit-x2', ...OPENROUTER_DEFAULT_MODELS],
   systemDirective:
     'Prioriza salida estrictamente estructurada en JSON válido, sin texto adicional fuera del objeto JSON. ' +
     'Relaciona cada criterio del caso con la matriz del sistema MeritX y conserva coherencia con la reglamentación universitaria aplicable.',
@@ -740,6 +742,7 @@ const ChatMetriXModule = () => {
         '{"concepto":"análisis narrativo y normativo detallado del caso","rows":[{"seccion":"ESTUDIOS CURSADOS|EXPERIENCIA|OTROS","criterio":"...","documentoSoporte":"...","soporteValido":true,"cantidad":1,"valor":300,"puntajeBase":300,"puntajeIa":0,"puntajeSugerido":120,"comentario":"justificación normativa del puntaje"}],"formState":{"nombre":"...","documento":"...","programa":"...","facultad":"...","titulos":[{"titulo":"...","nivel":"Pregrado|Especialización|Maestría|Doctorado"}],"idiomas":[{"idioma":"...","nivel":"A2|B1|B2|C1","convalidacion":"SI|NO"}],"produccion":[{"titulo":"...","cuartil":"Q1|Q2|Q3|Q4","fecha":"2024","tipo":"...","autores":1,"fuente":"SCOPUS|ORCID|MANUAL"}],"experiencia":[{"tipo":"Profesional|Docencia Universitaria|Investigación","inicio":"YYYY-MM-DD","fin":"YYYY-MM-DD","certificacion":"SI|NO"}]}}',
         'En el campo "concepto" desarrolla un dictamen narrativo completo: contexto normativo, análisis de cada bloque de criterios, conclusión sobre categoría proyectada y consideraciones de riesgo o documentos faltantes.',
         'No inventes normas; cuando no hay RAG disponible, razona con los criterios generales del régimen de escalafón colombiano.',
+        'RESTRICCIÓN NORMATIVA CRÍTICA: SOLO cita artículos, acuerdos, resoluciones o normativas que estén EXPLÍCITAMENTE transcritos en el CONTEXTO RAG que se te proporciona. Si una norma no aparece en el RAG, NO la menciones ni la cites; indica que el punto requiere verificación documental adicional.',
       ].join(' ');
 
       const systemPrompt = provider === 'openrouter'
@@ -768,7 +771,24 @@ const ChatMetriXModule = () => {
         const data = await res.json();
         aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else if (provider === 'openrouter') {
-        aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt, OPENROUTER_PRESET_METRIX);
+        try {
+          aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt, OPENROUTER_PRESET_METRIX);
+        } catch (orError) {
+          console.warn('[ChatMetriX] OpenRouter falló, reintentando con Gemini:', orError);
+          const fallbackKey = geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
+          if (!fallbackKey) throw orError;
+          const fallbackRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${fallbackKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: userPrompt }] }],
+              systemInstruction: { parts: [{ text: baseSystemPrompt }] },
+            }),
+          });
+          if (!fallbackRes.ok) throw new Error(await fallbackRes.text());
+          const fallbackData = await fallbackRes.json();
+          aiText = fallbackData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        }
       } else {
         const res = await fetch('/api/apifreellm/chat', {
           method: 'POST',

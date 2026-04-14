@@ -23,7 +23,7 @@ export type FormState = {
   hasTrabajoAprobadoCEPI: boolean;
   titulos: Array<{
     titulo: string;
-    nivel: 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado';
+    nivel: 'Pregrado' | 'Especialización' | 'Especialización Médico Quirúrgica' | 'Maestría' | 'Maestría de Profundización' | 'Maestría de Investigación' | 'Doctorado';
     supportName?: string;
     supportPath?: string;
   }>;
@@ -34,9 +34,9 @@ export type FormState = {
     supportName?: string;
     supportPath?: string;
   }>;
-  produccion: Array<{ titulo: string; cuartil: 'Q1' | 'Q2' | 'Q3' | 'Q4'; fecha: string; tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
+  produccion: Array<{ titulo: string; cuartil: 'Q1' | 'Q2' | 'Q3' | 'Q4'; fecha: string; tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL'; supportName?: string; supportPath?: string }>;
   experiencia: Array<{
-    tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación';
+    tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación' | 'Colciencias Senior' | 'Colciencias Junior';
     inicio: string;
     fin: string;
     certificacion: 'SI' | 'NO';

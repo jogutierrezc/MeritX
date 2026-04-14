@@ -213,7 +213,10 @@ const NuevoView: React.FC<Props> = ({
                 >
                   <option>Pregrado</option>
                   <option>Especialización</option>
+                  <option>Especialización Médico Quirúrgica</option>
                   <option>Maestría</option>
+                  <option>Maestría de Profundización</option>
+                  <option>Maestría de Investigación</option>
                   <option>Doctorado</option>
                 </select>
                 <label className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
@@ -363,7 +366,8 @@ const NuevoView: React.FC<Props> = ({
           </div>
           <div className="space-y-3">
             {formData.produccion.map((art, i) => (
-              <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-2 border border-slate-200 p-3 bg-slate-50">
+              <div key={i} className="border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
                 <input
                   value={art.titulo}
                   onChange={(e) => {
@@ -408,6 +412,48 @@ const NuevoView: React.FC<Props> = ({
                 >
                   <Minus size={14} className="mx-auto" />
                 </button>
+                </div>
+                {(!art.fuente || art.fuente === 'MANUAL') && (
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                    <select
+                      value={art.tipo || 'Artículo'}
+                      onChange={(e) => {
+                        const arr = [...formData.produccion];
+                        arr[i] = { ...arr[i], tipo: e.target.value };
+                        setFormData({ ...formData, produccion: arr });
+                      }}
+                      className="md:col-span-6 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                    >
+                      <option value="Artículo">Artículo Científico</option>
+                      <option value="Patente de Investigación">Patente de Investigación</option>
+                      <option value="Modelo de Utilidad">Modelo de Utilidad</option>
+                      <option value="Libro de Investigación">Libro de Investigación</option>
+                      <option value="Software Especializado">Software Especializado</option>
+                      <option value="Diseño Industrial">Diseño Industrial</option>
+                      <option value="Libro de Texto">Libro de Texto</option>
+                      <option value="Proyecto Estado-Empresa">Proyecto Estado-Empresa</option>
+                      <option value="Capítulo de Libro de Investigación">Capítulo de Libro de Investigación</option>
+                      <option value="Traducción de Obra Extranjera">Traducción de Obra Extranjera</option>
+                    </select>
+                    <label className="md:col-span-6 flex items-center gap-2 p-3 border border-dashed border-slate-300 bg-white cursor-pointer hover:bg-slate-50">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.jpg,.png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const arr = [...formData.produccion];
+                          arr[i] = { ...arr[i], supportName: file.name, supportPath: URL.createObjectURL(file) };
+                          setFormData({ ...formData, produccion: arr });
+                        }}
+                      />
+                      <span className="text-[10px] font-black uppercase text-slate-500 truncate">
+                        {art.supportName ? art.supportName : 'SUBIR SOPORTE'}
+                      </span>
+                    </label>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -442,6 +488,8 @@ const NuevoView: React.FC<Props> = ({
                   <option>Profesional</option>
                   <option>Docencia Universitaria</option>
                   <option>Investigación</option>
+                  <option>Colciencias Senior</option>
+                  <option>Colciencias Junior</option>
                 </select>
                 <input
                   type="date"

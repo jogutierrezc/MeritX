@@ -9,10 +9,23 @@ export const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-export const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
+export const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especialización' | 'Especialización Médico Quirúrgica' | 'Maestría' | 'Maestría de Profundización' | 'Maestría de Investigación' | 'Doctorado' => {
+  // Preserve exact known values stored in DB
+  const exact = level.trim();
+  if (exact === 'Doctorado') return 'Doctorado';
+  if (exact === 'Maestría de Investigación') return 'Maestría de Investigación';
+  if (exact === 'Maestría de Profundización') return 'Maestría de Profundización';
+  if (exact === 'Maestría') return 'Maestría';
+  if (exact === 'Especialización Médico Quirúrgica') return 'Especialización Médico Quirúrgica';
+  if (exact === 'Especialización') return 'Especialización';
+  if (exact === 'Pregrado') return 'Pregrado';
+  // Fuzzy fallback for legacy / free-text data
   const normalized = normalizeText(level);
   if (normalized.includes('doctor')) return 'Doctorado';
+  if (normalized.includes('investigac') && (normalized.includes('maestr') || normalized.includes('magister'))) return 'Maestría de Investigación';
+  if (normalized.includes('profundizac') && (normalized.includes('maestr') || normalized.includes('magister'))) return 'Maestría de Profundización';
   if (normalized.includes('maestr') || normalized.includes('magister')) return 'Maestría';
+  if (normalized.includes('medico') || normalized.includes('quirurg')) return 'Especialización Médico Quirúrgica';
   if (normalized.includes('especial')) return 'Especialización';
   return 'Pregrado';
 };
@@ -25,8 +38,16 @@ export const normalizeLanguageLevel = (level: string): 'A2' | 'B1' | 'B2' | 'C1'
   return 'A2';
 };
 
-export const normalizeExperienceType = (value: string): 'Profesional' | 'Docencia Universitaria' | 'Investigación' => {
+export const normalizeExperienceType = (value: string): 'Profesional' | 'Docencia Universitaria' | 'Investigación' | 'Colciencias Senior' | 'Colciencias Junior' => {
+  const exact = value.trim();
+  if (exact === 'Colciencias Senior') return 'Colciencias Senior';
+  if (exact === 'Colciencias Junior') return 'Colciencias Junior';
+  if (exact === 'Investigación') return 'Investigación';
+  if (exact === 'Docencia Universitaria') return 'Docencia Universitaria';
+  if (exact === 'Profesional') return 'Profesional';
   const normalized = normalizeText(value);
+  if (normalized.includes('colciencias') && normalized.includes('senior')) return 'Colciencias Senior';
+  if (normalized.includes('colciencias') && normalized.includes('junior')) return 'Colciencias Junior';
   if (normalized.includes('invest')) return 'Investigación';
   if (normalized.includes('docenc')) return 'Docencia Universitaria';
   return 'Profesional';

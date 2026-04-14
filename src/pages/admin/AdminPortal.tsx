@@ -507,9 +507,23 @@ const AdminPortal = () => {
 
     const loadConfigOnce = async () => {
       await new Promise<void>((resolve, reject) => {
+        let settled = false;
+
+        // Soft timeout: if onApplied never fires (schema mismatch / table missing),
+        // resolve with whatever is already in cache so the portal is not blocked.
+        const timeout = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          try { refreshFromCache(); } catch { /* ignore */ }
+          resolve();
+        }, 15000);
+
         const subscription = connection
           .subscriptionBuilder()
           .onApplied(() => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
             try {
               refreshFromCache();
               resolve();
@@ -520,6 +534,9 @@ const AdminPortal = () => {
             }
           })
           .onError((ctx: unknown) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
             subscription.unsubscribe();
             reject(ctx);
           })

@@ -18,8 +18,11 @@ export const ESCALAFON_CONFIG = {
   PUNTOS_TITULOS: {
     'Pregrado': 300,
     'Especialización': 90,
+    'Especialización Médico Quirúrgica': 300,
     'Maestría': 200,
-    'Doctorado': 500
+    'Maestría de Profundización': 200,
+    'Maestría de Investigación': 300,
+    'Doctorado': 500,
   },
   PUNTOS_IDIOMA: {
     'A2': 20,
@@ -77,13 +80,41 @@ export const getSuggestedCategoryByPoints = (points: number) => {
   return 'SIN CATEGORIA';
 };
 
+const canonicalTitleLevel = (nivel: string): string => {
+  if (nivel === 'Doctorado') return 'Doctorado';
+  if (nivel.startsWith('Maestría')) return 'Maestría';
+  if (nivel.startsWith('Especialización')) return 'Especialización';
+  if (nivel === 'Pregrado') return 'Pregrado';
+  const n = nivel.toLowerCase();
+  if (n.includes('doctor')) return 'Doctorado';
+  if (n.includes('maestr') || n.includes('magister')) return 'Maestría';
+  if (n.includes('especial')) return 'Especialización';
+  return 'Pregrado';
+};
+
+const PRODUCTION_TIPO_WEIGHTS: Record<string, number> = {
+  'Patente de Investigación': 300,
+  'Modelo de Utilidad': 120,
+  'Libro de Investigación': 100,
+  'Software Especializado': 70,
+  'Diseño Industrial': 70,
+  'Libro de Texto': 50,
+  'Proyecto Estado-Empresa': 50,
+  'Capítulo de Libro de Investigación': 40,
+  'Traducción de Obra Extranjera': 40,
+  // compatibilidad con valores legacy
+  'Patente': 300,
+  'Libro': 100,
+};
+
 export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => {
   // --- FASE 1: ASIGNACIÓN MATEMÁTICA DE TÍTULOS E IDIOMAS ---
   const ptsAcad = data.titulos.reduce((acc, t) => acc + (ESCALAFON_CONFIG.PUNTOS_TITULOS[t.nivel as keyof typeof ESCALAFON_CONFIG.PUNTOS_TITULOS] || 0), 0);
   
   const highestLevel = data.titulos.reduce((max, t) => {
     const levels = ['Ninguno', 'Pregrado', 'Especialización', 'Maestría', 'Doctorado'];
-    return levels.indexOf(t.nivel) > levels.indexOf(max) ? t.nivel : max;
+    const canonical = canonicalTitleLevel(t.nivel);
+    return levels.indexOf(canonical) > levels.indexOf(max) ? canonical : max;
   }, 'Ninguno');
 
   const ptsIdioma = data.idiomas.reduce(
@@ -98,9 +129,10 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
 
   // --- FASE 2: EVALUACIÓN DE PRODUCCIÓN INTELECTUAL (CEPI) ---
   const ptsPI = data.produccion.reduce((acc, art) => {
-    let base = { Q1: 70, Q2: 50, Q3: 30, Q4: 20 }[art.cuartil as string] || 0;
-    if (art.tipo === 'Libro') base = CRITERIO_REFERENCIA.produccion.LibroInvestigacion;
-    if (art.tipo === 'Patente') base = CRITERIO_REFERENCIA.produccion.PatenteInvencion;
+    const tipoWeight = PRODUCTION_TIPO_WEIGHTS[art.tipo || ''];
+    let base = tipoWeight !== undefined
+      ? tipoWeight
+      : ({ Q1: 70, Q2: 50, Q3: 30, Q4: 20 }[art.cuartil as string] || 0);
     
     // Regla de Coautoría
     const autores = art.autores || 1;
@@ -142,11 +174,13 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
 
       // Tolerancia mínima para asegurar que la experiencia cubre el segmento
       if (expStart <= segmentStart + 1000 && expEnd >= segmentEnd - 1000) {
-        const weight = { 
-          'Profesional': CRITERIO_REFERENCIA.experienciaAnual.Profesional, 
-          'Docencia Universitaria': CRITERIO_REFERENCIA.experienciaAnual.DocenciaUniversitaria, 
-          'Investigación': CRITERIO_REFERENCIA.experienciaAnual.Investigacion 
-        }[exp.tipo] || 0;
+        const weight = ({
+          'Profesional': CRITERIO_REFERENCIA.experienciaAnual.Profesional,
+          'Docencia Universitaria': CRITERIO_REFERENCIA.experienciaAnual.DocenciaUniversitaria,
+          'Investigación': CRITERIO_REFERENCIA.experienciaAnual.Investigacion,
+          'Colciencias Senior': CRITERIO_REFERENCIA.experienciaAnual.ColcienciasSenior,
+          'Colciencias Junior': CRITERIO_REFERENCIA.experienciaAnual.ColcienciasJunior,
+        } as Record<string, number>)[exp.tipo] || 0;
         
         if (weight > maxWeightInSegment) {
           maxWeightInSegment = weight;
@@ -155,15 +189,6 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     });
 
     ptsExpBruta += segmentDurationYears * maxWeightInSegment;
-  }
-
-  // 3.3 Bono Único de Colciencias (si aplica, extraer del state genérico o simular)
-  // Nota: Asegúrate de tener este campo en FormState (ej. data.colciencias)
-  const categoriaColciencias = (data as any).colciencias;
-  if (categoriaColciencias === 'Senior') {
-    ptsExpBruta += CRITERIO_REFERENCIA.experienciaAnual.ColcienciasSenior;
-  } else if (categoriaColciencias === 'Junior') {
-    ptsExpBruta += CRITERIO_REFERENCIA.experienciaAnual.ColcienciasJunior;
   }
 
   // Puntos base puramente de méritos no dependientes de topes
