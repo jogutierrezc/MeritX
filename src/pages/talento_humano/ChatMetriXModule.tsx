@@ -6,6 +6,7 @@ import { getPortalCredentialsForRole, getPortalSession } from '../../services/po
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import type { FormState } from '../../types/domain';
 import { calculateAdvancedEscalafon, getSuggestedCategoryByPoints } from '../../utils/calculateEscalafon';
+import { normativeToRagChunks } from '../../utils/ragNormativeParser';
 
 type ChatMessage = {
   id: string;
@@ -82,12 +83,129 @@ const scoreRagChunk = (chunk: string, queryTerms: string[]) => {
     if (!term) continue;
     if (normalizedChunk.includes(term)) score += term.length > 8 ? 4 : 2;
   }
+
+  const normativeTerms = [
+    'reglamento',
+    'escalafon',
+    'udes',
+    'acuerdo',
+    'resolucion',
+    'articulo',
+    'categoria',
+    'puntaje',
+    'titulo',
+    'idioma',
+    'publicacion',
+    'experiencia',
+    'auxiliar',
+    'asistente',
+    'asociado',
+    'titular',
+  ];
+
+  for (const term of normativeTerms) {
+    if (normalizedChunk.includes(term)) score += 1;
+  }
+
   return score;
 };
 
 const toSafeNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeAiProvider = (value?: string): 'gemini' | 'apifreellm' | 'openrouter' => {
+  const normalized = normalizeForSearch(String(value || ''));
+  if (normalized.includes('openrouter') || normalized.includes('router')) return 'openrouter';
+  return normalized.includes('free') ? 'apifreellm' : 'gemini';
+};
+
+const resolveAiRuntime = (params: {
+  provider?: string;
+  model?: string;
+  geminiKey?: string;
+  apifreellmKey?: string;
+  openrouterKey?: string;
+}) => {
+  const configuredProvider = normalizeAiProvider(params.provider);
+  const geminiKey = String(params.geminiKey || '').trim();
+  const apifreellmKey = String(params.apifreellmKey || '').trim();
+  const openrouterKey = String(params.openrouterKey || '').trim();
+
+  let provider: 'gemini' | 'apifreellm' | 'openrouter' = configuredProvider;
+  let activeKey = provider === 'gemini' ? geminiKey : provider === 'openrouter' ? openrouterKey : apifreellmKey;
+
+  if (!activeKey) {
+    if (openrouterKey) {
+      provider = 'openrouter';
+      activeKey = openrouterKey;
+    } else if (apifreellmKey) {
+      provider = 'apifreellm';
+      activeKey = apifreellmKey;
+    } else if (geminiKey) {
+      provider = 'gemini';
+      activeKey = geminiKey;
+    }
+  }
+
+  const requestedModel = String(params.model || '').trim();
+  const model = provider === 'gemini'
+    ? (requestedModel && !normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'gemini-2.5-flash')
+    : provider === 'openrouter'
+      ? (requestedModel || 'google/gemma-3-27b-it:free,google/gemma-2-9b-it:free')
+      : (requestedModel && normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'apifreellm');
+
+  return { provider, model, activeKey };
+};
+
+const requestOpenRouterText = async (model: string, apiKey: string, systemPrompt: string, userPrompt: string) => {
+  const candidates = String(model || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const ordered = Array.from(new Set([
+    ...candidates,
+    'google/gemma-3-27b-it:free',
+    'google/gemma-2-9b-it:free',
+  ]));
+
+  let lastError: Error | null = null;
+  for (const candidate of ordered) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: candidate,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) return content.map((item: any) => String(item?.text || '')).join(' ');
+      return '';
+    }
+
+    lastError = new Error(await res.text());
+  }
+
+  throw lastError || new Error('OpenRouter no respondió con contenido válido.');
+};
+
+const normalizePublicationSource = (value: unknown): 'SCOPUS' | 'ORCID' | 'MANUAL' => {
+  const normalized = normalizeForSearch(String(value || ''));
+  if (normalized.includes('scopus')) return 'SCOPUS';
+  if (normalized.includes('orcid')) return 'ORCID';
+  return 'MANUAL';
 };
 
 const inferSectionFromCriterion = (criterion: string) => {
@@ -128,7 +246,7 @@ const sanitizeFormState = (candidate: any): FormState => {
   const mapTitleLevel = (value: string): 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
     const normalized = normalizeForSearch(String(value || ''));
     if (normalized.includes('doctor')) return 'Doctorado';
-    if (normalized.includes('maestr')) return 'Maestría';
+    if (normalized.includes('maestr') || normalized.includes('magister')) return 'Maestría';
     if (normalized.includes('especial')) return 'Especialización';
     return 'Pregrado';
   };
@@ -170,7 +288,7 @@ const sanitizeFormState = (candidate: any): FormState => {
       fecha: String(row?.fecha || row?.year || new Date().getFullYear()),
       tipo: String(row?.tipo || row?.type || 'Artículo'),
       autores: toSafeNumber(row?.autores ?? row?.authors, 1),
-      fuente: String(row?.fuente || row?.source || 'MANUAL').toUpperCase() === 'SCOPUS' ? 'SCOPUS' as const : 'MANUAL' as const,
+      fuente: normalizePublicationSource(row?.fuente || row?.source),
     }))
     : [];
 
@@ -210,6 +328,7 @@ const ChatMetriXModule = () => {
 
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [apifreellmApiKey, setApifreellmApiKey] = useState('');
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
   const [aiProvider, setAiProvider] = useState('gemini');
   const [aiModel, setAiModel] = useState('gemini-2.5-flash');
   const [ragSystemContext, setRagSystemContext] = useState('');
@@ -256,14 +375,29 @@ const ChatMetriXModule = () => {
 
     const refreshFromCache = () => {
       const dbView = connection.db as any;
+      const settingTable = dbView.systemSetting || dbView.system_setting;
+      const openrouterTable = dbView.openrouterConfig || dbView.openrouter_config;
       const apiTable = dbView.apiConfig || dbView.api_config;
       if (apiTable) {
         const apiRows = Array.from(apiTable.iter()) as any[];
         const defaultCfg = apiRows.find((row) => row.configKey === 'default');
         if (defaultCfg?.geminiApiKey) setGeminiApiKey(defaultCfg.geminiApiKey);
         if (defaultCfg?.apifreellmApiKey) setApifreellmApiKey(defaultCfg.apifreellmApiKey);
+        if (defaultCfg?.openrouterApiKey) setOpenrouterApiKey(defaultCfg.openrouterApiKey);
         if (defaultCfg?.aiProvider) setAiProvider(defaultCfg.aiProvider);
         if (defaultCfg?.aiModel) setAiModel(defaultCfg.aiModel);
+      }
+
+      if (settingTable) {
+        const settingRows = Array.from(settingTable.iter()) as any[];
+        const openrouterRow = settingRows.find((row) => row.key === 'cfg.openrouter.apiKey');
+        if (openrouterRow?.value) setOpenrouterApiKey(String(openrouterRow.value));
+      }
+
+      if (openrouterTable) {
+        const openrouterRows = Array.from(openrouterTable.iter()) as any[];
+        const defaultOpenrouter = openrouterRows.find((row) => row.configKey === 'default');
+        if (defaultOpenrouter?.apiKey) setOpenrouterApiKey(String(defaultOpenrouter.apiKey));
       }
 
       const ragTable = dbView.ragConfig || dbView.rag_config;
@@ -295,6 +429,9 @@ const ChatMetriXModule = () => {
             'SELECT * FROM api_config',
             'SELECT * FROM rag_config',
             'SELECT * FROM rag_document',
+            'SELECT * FROM rag_normative',
+            'SELECT * FROM system_setting',
+            'SELECT * FROM openrouter_config',
           ]);
 
         setTimeout(() => reject(new Error('Timeout cargando Chat MetriX')), 6000);
@@ -333,11 +470,15 @@ const ChatMetriXModule = () => {
     const ragRows = ragDocumentTable ? (Array.from(ragDocumentTable.iter()) as any[]) : [];
 
     return ragRows
-      .filter((row) => row.active)
+      .filter((row) => Boolean(row?.active ?? row?.is_active ?? true))
       .map((row) => ({
-        fileName: row.fileName,
-        active: row.active,
-        contentBase64: row.contentBase64 ?? undefined,
+        fileName: String(row.fileName ?? row.file_name ?? row.documentKey ?? row.document_key ?? 'documento-rag'),
+        active: Boolean(row.active ?? row.is_active ?? true),
+        contentBase64: typeof row.contentBase64 === 'string'
+          ? row.contentBase64
+          : typeof row.content_base64 === 'string'
+            ? row.content_base64
+            : undefined,
       }));
   };
 
@@ -351,6 +492,7 @@ const ChatMetriXModule = () => {
     );
 
     const rankedChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
+    const fallbackNormativeChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
     const docs = getActiveRagDocuments();
     for (const doc of docs) {
       const decoded = decodeBase64Document(doc.contentBase64);
@@ -362,7 +504,82 @@ const ChatMetriXModule = () => {
       }
     }
 
-    const selected = rankedChunks
+    // Read normatives from rag_normative DB table; fall back to system_setting
+    try {
+      const dbView = connectionRef.current?.db as any;
+      const normTable = dbView?.rag_normative || dbView?.ragNormative;
+      if (normTable) {
+        const normRows = Array.from(normTable.iter()) as any[];
+        for (const row of normRows) {
+          if (!row || !(row.active ?? row.is_active ?? true)) continue;
+          let jsonStr = '';
+          const jsonRaw = row.jsonContent ?? row.json_content ?? row.content ?? row.json;
+          if (typeof jsonRaw === 'string') {
+            jsonStr = jsonRaw;
+          } else if (jsonRaw && typeof jsonRaw === 'object') {
+            jsonStr = JSON.stringify(jsonRaw);
+          }
+          try {
+            const maybeString = JSON.parse(jsonStr);
+            if (typeof maybeString === 'string') jsonStr = maybeString;
+          } catch {
+            // keep original string
+          }
+          const sourceName = String(
+            row.title ?? row.normativeKey ?? row.normative_key ?? row.documentId ?? row.document_id ?? 'normativa',
+          );
+          const parsedNormChunks = jsonStr
+            ? normativeToRagChunks(jsonStr).filter(Boolean)
+            : [];
+          const chunks = parsedNormChunks.length > 0
+            ? parsedNormChunks
+            : chunkText(jsonStr, ragChunkSize, ragChunkOverlap);
+          for (const chunk of chunks) {
+            const score = scoreRagChunk(chunk, queryTerms);
+            if (score > 0) {
+              rankedChunks.push({ fileName: sourceName, chunk, score });
+            } else if (fallbackNormativeChunks.length < Math.max(6, ragTopK * 3)) {
+              fallbackNormativeChunks.push({ fileName: sourceName, chunk, score: 0.5 });
+            }
+          }
+        }
+      } else {
+        // fallback: system_setting legacy storage
+        const settingTable = dbView?.system_setting || dbView?.systemSetting;
+        if (settingTable) {
+          const settingRows = Array.from(settingTable.iter()) as any[];
+          const settingMap = new Map(settingRows.map((r) => [r.key, r.value]));
+          const rawNorms = settingMap.get('cfg.rag.normatives');
+          if (rawNorms) {
+            const parsed = JSON.parse(String(rawNorms));
+            if (Array.isArray(parsed)) {
+              for (const norm of parsed) {
+                if (!norm || !norm.active) continue;
+                const text = typeof norm.content === 'string' ? norm.content : JSON.stringify(norm.content);
+                const parsedNormChunks = normativeToRagChunks(text).filter(Boolean);
+                const normChunks = parsedNormChunks.length > 0
+                  ? parsedNormChunks
+                  : chunkText(text, ragChunkSize, ragChunkOverlap);
+                for (const chunk of normChunks) {
+                  const score = scoreRagChunk(chunk, queryTerms);
+                  if (score > 0) {
+                    rankedChunks.push({ fileName: norm.title || norm.normativeKey || 'normativa', chunk, score });
+                  } else if (fallbackNormativeChunks.length < Math.max(6, ragTopK * 3)) {
+                    fallbackNormativeChunks.push({ fileName: norm.title || norm.normativeKey || 'normativa', chunk, score: 0.5 });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore errors reading normatives
+    }
+
+    const effectiveChunks = rankedChunks.length > 0 ? rankedChunks : fallbackNormativeChunks;
+
+    const selected = effectiveChunks
       .sort((left, right) => right.score - left.score)
       .slice(0, Math.max(1, ragTopK));
 
@@ -380,14 +597,19 @@ const ChatMetriXModule = () => {
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    const provider = aiProvider || 'gemini';
-    const model = aiModel || 'gemini-2.5-flash';
-    const activeKey = provider === 'gemini'
-      ? (geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '')
-      : apifreellmApiKey;
+    const runtime = resolveAiRuntime({
+      provider: aiProvider,
+      model: aiModel,
+      geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      apifreellmKey: apifreellmApiKey,
+      openrouterKey: openrouterApiKey,
+    });
+    const provider = runtime.provider;
+    const model = runtime.model;
+    const activeKey = runtime.activeKey;
 
     if (!activeKey) {
-      window.alert(`No se encontró API Key para ${provider === 'gemini' ? 'Gemini' : 'APIFreeLLM'}.`);
+      window.alert('No se encontró API Key activa. Configura Gemini o APIFreeLLM en Configuración > API.');
       return;
     }
 
@@ -411,11 +633,15 @@ const ChatMetriXModule = () => {
         .join('\n');
 
       const systemPrompt = [
-        'Eres MetriX, asistente experto de escalafón docente UDES para Talento Humano.',
-        'NO dependes de expedientes almacenados: analiza únicamente la situación conversada por el usuario.',
+        'Eres MetriX, consultor experto en escalafón docente de la Universidad de Santander (UDES) asignado a la Unidad de Talento Humano.',
+        'Tu rol combina el conocimiento técnico de un abogado laboral especializado en educación superior, la precisión analítica de un coordinador de escalafón y la capacidad narrativa de un dictaminador institucional.',
+        'Cuando respondas, construye un análisis narrativo coherente: explica el razonamiento jurídico-normativo antes de llegar a cifras, cita los artículos o acuerdos relevantes recuperados del RAG si están disponibles, y justifica cada puntaje asignado con base en los criterios reglamentarios.',
+        'Si el usuario plantea un caso sin soporte claro, señala explícitamente qué documentación regiría el reconocimiento y cuál sería el impacto en puntos.',
+        'NO dependes de expedientes almacenados: analiza únicamente la situación conversada.',
         'Debes devolver SIEMPRE JSON válido con esta forma exacta:',
-        '{"concepto":"explicación técnica y normativa","rows":[{"seccion":"ESTUDIOS CURSADOS|EXPERIENCIA|OTROS","criterio":"...","documentoSoporte":"...","soporteValido":true,"cantidad":1,"valor":300,"puntajeBase":300,"puntajeIa":0,"puntajeSugerido":120,"comentario":"..."}],"formState":{"nombre":"...","documento":"...","programa":"...","facultad":"...","titulos":[{"titulo":"...","nivel":"Pregrado|Especialización|Maestría|Doctorado"}],"idiomas":[{"idioma":"...","nivel":"A2|B1|B2|C1","convalidacion":"SI|NO"}],"produccion":[{"titulo":"...","cuartil":"Q1|Q2|Q3|Q4","fecha":"2024","tipo":"...","autores":1,"fuente":"SCOPUS|MANUAL"}],"experiencia":[{"tipo":"Profesional|Docencia Universitaria|Investigación","inicio":"YYYY-MM-DD","fin":"YYYY-MM-DD","certificacion":"SI|NO"}]}}',
-        'No inventes normas; usa RAG cuando exista y menciona fuentes en el concepto.',
+        '{"concepto":"análisis narrativo y normativo detallado del caso","rows":[{"seccion":"ESTUDIOS CURSADOS|EXPERIENCIA|OTROS","criterio":"...","documentoSoporte":"...","soporteValido":true,"cantidad":1,"valor":300,"puntajeBase":300,"puntajeIa":0,"puntajeSugerido":120,"comentario":"justificación normativa del puntaje"}],"formState":{"nombre":"...","documento":"...","programa":"...","facultad":"...","titulos":[{"titulo":"...","nivel":"Pregrado|Especialización|Maestría|Doctorado"}],"idiomas":[{"idioma":"...","nivel":"A2|B1|B2|C1","convalidacion":"SI|NO"}],"produccion":[{"titulo":"...","cuartil":"Q1|Q2|Q3|Q4","fecha":"2024","tipo":"...","autores":1,"fuente":"SCOPUS|ORCID|MANUAL"}],"experiencia":[{"tipo":"Profesional|Docencia Universitaria|Investigación","inicio":"YYYY-MM-DD","fin":"YYYY-MM-DD","certificacion":"SI|NO"}]}}',
+        'En el campo "concepto" desarrolla un dictamen narrativo completo: contexto normativo, análisis de cada bloque de criterios, conclusión sobre categoría proyectada y consideraciones de riesgo o documentos faltantes.',
+        'No inventes normas; cuando no hay RAG disponible, razona con los criterios generales del régimen de escalafón colombiano.',
       ].join(' ');
 
       const userPrompt = [
@@ -439,6 +665,8 @@ const ChatMetriXModule = () => {
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else if (provider === 'openrouter') {
+        aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt);
       } else {
         const res = await fetch('/api/apifreellm/chat', {
           method: 'POST',
@@ -470,22 +698,33 @@ const ChatMetriXModule = () => {
         return;
       }
 
+      const formState = sanitizeFormState(parsed?.formState || {});
+      const hasIndexedProductionSupport = formState.produccion.some((pub) => pub.fuente === 'SCOPUS' || pub.fuente === 'ORCID');
+
       const scenarioRows: ScenarioRow[] = Array.isArray(parsed?.rows)
-        ? parsed.rows.map((row: any) => ({
+        ? parsed.rows.map((row: any) => {
+          const criterionText = normalizeForSearch(String(row?.criterio || row?.seccion || ''));
+          const isResearchCriterion =
+            criterionText.includes('produccion') ||
+            criterionText.includes('publicacion') ||
+            criterionText.includes('articulo') ||
+            criterionText.includes('investig');
+          const providedSupportFlag = Boolean(row?.soporteValido);
+          return {
           criterio: String(row?.criterio || '').trim(),
           seccion: String(row?.seccion || inferSectionFromCriterion(String(row?.criterio || ''))).trim() || 'CRITERIO GENERAL',
           documentoSoporte: String(row?.documentoSoporte || row?.soporte || row?.documento || 'No especificado').trim(),
-          soporteValido: Boolean(row?.soporteValido),
+          soporteValido: isResearchCriterion ? hasIndexedProductionSupport : providedSupportFlag,
           cantidad: Math.max(0, toSafeNumber(row?.cantidad, 1)),
           valor: Math.max(0, toSafeNumber(row?.valor, 0)),
           puntajeBase: Math.max(0, toSafeNumber(row?.puntajeBase, toSafeNumber(row?.puntajeSugerido, 0))),
           puntajeIa: Math.max(0, toSafeNumber(row?.puntajeIa, 0)),
           puntajeSugerido: toSafeNumber(row?.puntajeSugerido, 0),
           comentario: String(row?.comentario || '').trim(),
-        }))
+          };
+        })
         : [];
 
-      const formState = sanitizeFormState(parsed?.formState || {});
       const calc = calculateAdvancedEscalafon(formState);
       const concept = String(parsed?.concepto || parsed?.narrativa || '').trim() || 'MetriX no devolvió concepto textual.';
 

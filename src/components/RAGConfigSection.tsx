@@ -18,17 +18,21 @@ import type {
   ModelTestConditions,
   RagConfig,
   RagDocument,
+  RagNormative,
 } from '../types/config';
 import { getModelAlternatives } from '../services/modelAdvisor';
 
 type Props = {
   ragConfig: RagConfig;
   ragDocuments: RagDocument[];
+  ragNormatives: RagNormative[];
   apiConfig: ApiConfig;
   onChangeRagConfig: (next: RagConfig) => void;
   onSaveRagConfig: () => Promise<void>;
   onUploadDocument: (file: File) => Promise<void>;
   onDeactivateDocument: (documentKey: string) => Promise<void>;
+  onUploadNormative: (title: string, json: string, file?: File) => Promise<void>;
+  onDeactivateNormative: (normativeKey: string) => Promise<void>;
 };
 
 const prettyBytes = (bytes: number) => {
@@ -46,17 +50,23 @@ const prettyBytes = (bytes: number) => {
 export const RAGConfigSection: React.FC<Props> = ({
   ragConfig,
   ragDocuments,
+  ragNormatives,
   apiConfig,
   onChangeRagConfig,
   onSaveRagConfig,
   onUploadDocument,
   onDeactivateDocument,
+  onUploadNormative,
+  onDeactivateNormative,
 }) => {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [alternatives, setAlternatives] = useState<ModelAlternative[]>([]);
   const [recommended, setRecommended] = useState<ModelAlternative | null>(null);
+  const [jsonTitle, setJsonTitle] = useState('');
+  const [jsonUploading, setJsonUploading] = useState(false);
+  const [jsonPaste, setJsonPaste] = useState('');
 
   const [conditions, setConditions] = useState<ModelTestConditions>({
     taskType: 'legal',
@@ -70,10 +80,12 @@ export const RAGConfigSection: React.FC<Props> = ({
 
   const hasApiKeyForSelected = useMemo(() => {
     if (ragConfig.selectedProvider === 'gemini') return !!apiConfig.geminiApiKey.trim();
+    if (ragConfig.selectedProvider === 'openrouter') return !!apiConfig.openrouterApiKey.trim();
     return !!apiConfig.apifreellmApiKey.trim();
-  }, [ragConfig.selectedProvider, apiConfig.geminiApiKey, apiConfig.apifreellmApiKey]);
+  }, [ragConfig.selectedProvider, apiConfig.geminiApiKey, apiConfig.apifreellmApiKey, apiConfig.openrouterApiKey]);
 
   const activeDocuments = ragDocuments.filter((doc) => doc.active);
+  const activeNormatives = ragNormatives.filter((n) => n.active);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files?.[0];
@@ -179,6 +191,7 @@ export const RAGConfigSection: React.FC<Props> = ({
               >
                 <option value="gemini">Gemini</option>
                 <option value="apifreellm">APIFreeLLM</option>
+                <option value="openrouter">OpenRouter</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -199,6 +212,7 @@ export const RAGConfigSection: React.FC<Props> = ({
               >
                 <option value="gemini">Gemini</option>
                 <option value="apifreellm">APIFreeLLM</option>
+                <option value="openrouter">OpenRouter</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -270,6 +284,104 @@ export const RAGConfigSection: React.FC<Props> = ({
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+        <div className="space-y-6 rounded-[2rem] border border-slate-100 bg-white p-8 shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileText className="text-violet-600" size={20} />
+              <h3 className="text-lg font-black tracking-tight text-slate-800">Normatividad (JSON)</h3>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <input
+                placeholder="Título de la estructura JSON"
+                value={jsonTitle}
+                onChange={(e) => setJsonTitle(e.target.value)}
+                className="col-span-2 w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
+              />
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white">
+                <Plus size={14} />
+                {jsonUploading ? 'Subiendo...' : 'Cargar JSON'}
+                <input
+                  type="file"
+                  accept="application/json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    try {
+                      setJsonUploading(true);
+                      const text = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onerror = () => reject(new Error('No fue posible leer el JSON.'));
+                        reader.onload = () => resolve(String(reader.result ?? ''));
+                        reader.readAsText(f);
+                      });
+                      await onUploadNormative(jsonTitle || f.name.replace(/\.[^.]+$/, ''), text, f);
+                      setJsonTitle('');
+                      setJsonPaste('');
+                    } finally {
+                      setJsonUploading(false);
+                      if (e.target) e.target.value = '';
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            <div>
+              <textarea
+                rows={6}
+                placeholder="Pega aquí la estructura JSON si no usas archivo..."
+                value={jsonPaste}
+                onChange={(e) => setJsonPaste(e.target.value)}
+                className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-medium outline-none transition-all focus:border-blue-500 focus:bg-white"
+              />
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    if (!jsonPaste || !jsonPaste.trim()) return;
+                    try {
+                      setJsonUploading(true);
+                      await onUploadNormative(jsonTitle || 'normativa', jsonPaste);
+                      setJsonTitle('');
+                      setJsonPaste('');
+                    } finally {
+                      setJsonUploading(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-violet-200 transition-all hover:bg-violet-700 disabled:opacity-60"
+                >
+                  <Save size={16} /> {jsonUploading ? 'Guardando...' : 'Guardar JSON'}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {(activeNormatives.length === 0) && (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
+                  No hay estructuras JSON activas.
+                </p>
+              )}
+
+              {activeNormatives.map((n) => (
+                <div key={n.normativeKey} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-800">{n.title}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">JSON · {n.uploadedAt ?? ''}</p>
+                  </div>
+                  <button
+                    onClick={() => onDeactivateNormative(n.normativeKey)}
+                    className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100"
+                  >
+                    Desactivar
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

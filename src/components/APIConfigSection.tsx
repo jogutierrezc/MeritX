@@ -6,6 +6,7 @@ import {
   testOrcidConnection,
   testGeminiConnection,
   testApifreellmConnection,
+  testOpenRouterConnection,
   generateRegistrationCode,
   type IntegrationTestResult,
   type RegistrationCode,
@@ -35,6 +36,12 @@ export const APIConfigSection: React.FC<Props> = ({ apiConfig, onUpdateApiConfig
       const result = await testApifreellmConnection(apiConfig.apifreellmApiKey);
       setTestResults((p) => ({ ...p, apifreellmApiKey: result }));
       setTesting((p) => ({ ...p, apifreellmApiKey: false }));
+    },
+    openrouterApiKey: async () => {
+      setTesting((p) => ({ ...p, openrouterApiKey: true }));
+      const result = await testOpenRouterConnection(apiConfig.openrouterApiKey);
+      setTestResults((p) => ({ ...p, openrouterApiKey: result }));
+      setTesting((p) => ({ ...p, openrouterApiKey: false }));
     },
     scopusApiKey: async () => {
       setTesting((p) => ({ ...p, scopusApiKey: true }));
@@ -206,6 +213,12 @@ export const APIConfigSection: React.FC<Props> = ({ apiConfig, onUpdateApiConfig
           field="apifreellmApiKey"
           label="APIFreeLLM API Key"
           testFn={testConnections.apifreellmApiKey}
+        />
+
+        <APIField
+          field="openrouterApiKey"
+          label="OpenRouter API Key"
+          testFn={testConnections.openrouterApiKey}
         />
 
         <APIField

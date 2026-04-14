@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, LockKeyhole, ShieldCheck, Users } from 'lucide-react';
 
+import AppLogo from '../components/Common/AppLogo';
 import PortalLoginPage from './PortalLoginPage';
 import type { PortalRole, PortalSession } from '../services/portalAuth';
 
@@ -54,8 +55,11 @@ const AuthPage = ({ onLogin }: Props) => {
       <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.08)] md:p-12">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_32%),linear-gradient(180deg,_rgba(15,23,42,0.02),_transparent_55%)]" />
         <div className="relative space-y-8">
-          <div className="inline-flex items-center gap-3 rounded-full bg-slate-950 px-4 py-2 text-[10px] font-black uppercase tracking-[0.35em] text-white">
-            <LockKeyhole size={14} /> Acceso por roles
+          <div className="space-y-4">
+            <AppLogo className="flex items-center" imgClassName="h-14 w-auto md:h-16" />
+            <div className="inline-flex items-center gap-3 rounded-full bg-slate-950 px-4 py-2 text-[10px] font-black uppercase tracking-[0.35em] text-white">
+              <LockKeyhole size={14} /> Acceso por roles
+            </div>
           </div>
 
           <div className="space-y-4">

@@ -53,6 +53,7 @@ export const IAModule = ({ aiConfig, onAiConfigChange, actions, onActionsChange 
           >
             <option value="gemini">Gemini</option>
             <option value="apifreellm">APIFreeLLM</option>
+            <option value="openrouter">OpenRouter</option>
           </select>
         </div>
 
@@ -64,6 +65,19 @@ export const IAModule = ({ aiConfig, onAiConfigChange, actions, onActionsChange 
             placeholder="gemini-2.5-flash"
             className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
           />
+          <button
+            type="button"
+            onClick={() =>
+              onAiConfigChange({
+                ...aiConfig,
+                provider: 'openrouter',
+                model: 'google/gemma-3-27b-it:free,google/gemma-2-9b-it:free',
+              })
+            }
+            className="mt-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-800 hover:bg-emerald-100"
+          >
+            Preset OpenRouter Free (Gemma prioritized)
+          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

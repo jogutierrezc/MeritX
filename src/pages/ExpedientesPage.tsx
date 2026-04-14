@@ -5,6 +5,7 @@ import type { AcademicProgram, Application, ApplicationAnalysisVersion, Faculty 
 import type { AppExperience, AppLanguage, AppPublication, AppTitle, FormState, RequestRecord } from '../types/domain';
 import { CATEGORIES, emptyForm } from '../types/escalafon';
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
+import { normativeToRagChunks } from '../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
@@ -43,6 +44,104 @@ const normalizeForSearch = (value: string) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+
+const normalizeAiProvider = (value?: string): 'gemini' | 'apifreellm' | 'openrouter' => {
+  const normalized = normalizeForSearch(String(value || ''));
+  if (normalized.includes('openrouter') || normalized.includes('router')) return 'openrouter';
+  return normalized.includes('free') ? 'apifreellm' : 'gemini';
+};
+
+const resolveAiRuntime = (params: {
+  provider?: string;
+  model?: string;
+  geminiKey?: string;
+  apifreellmKey?: string;
+  openrouterKey?: string;
+}) => {
+  const configuredProvider = normalizeAiProvider(params.provider);
+  const geminiKey = String(params.geminiKey || '').trim();
+  const apifreellmKey = String(params.apifreellmKey || '').trim();
+  const openrouterKey = String(params.openrouterKey || '').trim();
+
+  let provider: 'gemini' | 'apifreellm' | 'openrouter' = configuredProvider;
+  let activeKey = provider === 'gemini' ? geminiKey : provider === 'openrouter' ? openrouterKey : apifreellmKey;
+
+  if (!activeKey) {
+    if (openrouterKey) {
+      provider = 'openrouter';
+      activeKey = openrouterKey;
+    } else if (apifreellmKey) {
+      provider = 'apifreellm';
+      activeKey = apifreellmKey;
+    } else if (geminiKey) {
+      provider = 'gemini';
+      activeKey = geminiKey;
+    }
+  }
+
+  const requestedModel = String(params.model || '').trim();
+  const model = provider === 'gemini'
+    ? (requestedModel && !normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'gemini-2.5-flash')
+    : provider === 'openrouter'
+      ? (requestedModel || 'google/gemma-3-27b-it:free,google/gemma-2-9b-it:free')
+      : (requestedModel && normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'apifreellm');
+
+  return { provider, model, activeKey };
+};
+
+const requestOpenRouterText = async (model: string, apiKey: string, systemPrompt: string, userPrompt: string) => {
+  const candidates = String(model || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const ordered = Array.from(new Set([
+    ...candidates,
+    'google/gemma-3-27b-it:free',
+    'google/gemma-2-9b-it:free',
+  ]));
+
+  let lastError: Error | null = null;
+  for (const candidate of ordered) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: candidate,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) return content.map((item: any) => String(item?.text || '')).join(' ');
+      return '';
+    }
+
+    lastError = new Error(await res.text());
+  }
+
+  throw lastError || new Error('OpenRouter no respondió con contenido válido.');
+};
+
+const normalizePublicationSource = (value?: string) => {
+  const normalized = normalizeForSearch(String(value || ''));
+  if (normalized.includes('scopus')) return 'SCOPUS' as const;
+  if (normalized.includes('orcid')) return 'ORCID' as const;
+  return 'MANUAL' as const;
+};
+
+const isIndexedPublicationSource = (value?: string) => {
+  const source = normalizePublicationSource(value);
+  return source === 'SCOPUS' || source === 'ORCID';
+};
 
 const compactText = (value: string) =>
   value
@@ -137,6 +236,7 @@ const ExpedientesPage = (_props: Props) => {
   const [connected, setConnected] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [apifreellmApiKey, setApifreellmApiKey] = useState('');
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
   const [scopusApiKey, setScopusApiKey] = useState('');
   const [orcidClientId, setOrcidClientId] = useState('');
   const [orcidClientSecret, setOrcidClientSecret] = useState('');
@@ -201,17 +301,32 @@ const ExpedientesPage = (_props: Props) => {
       const auditMap = new Map(auditRows.map((a) => [a.trackingId, a]));
 
       // Load API key and AI config
+      const settingTable = dbView.systemSetting || dbView.system_setting;
+      const openrouterTable = dbView.openrouterConfig || dbView.openrouter_config;
       const apiTable = dbView.apiConfig || dbView.api_config;
       if (apiTable) {
         const apiRows = Array.from(apiTable.iter()) as any[];
         const defaultCfg = apiRows.find((r) => r.configKey === 'default');
         if (defaultCfg?.geminiApiKey) setGeminiApiKey(defaultCfg.geminiApiKey);
         if (defaultCfg?.apifreellmApiKey) setApifreellmApiKey(defaultCfg.apifreellmApiKey);
+        if (defaultCfg?.openrouterApiKey) setOpenrouterApiKey(defaultCfg.openrouterApiKey);
         if (defaultCfg?.scopusApiKey) setScopusApiKey(defaultCfg.scopusApiKey);
         if (defaultCfg?.orcidClientId) setOrcidClientId(defaultCfg.orcidClientId);
         if (defaultCfg?.orcidClientSecret) setOrcidClientSecret(defaultCfg.orcidClientSecret);
         if (defaultCfg?.aiProvider) setAiProvider(defaultCfg.aiProvider);
         if (defaultCfg?.aiModel) setAiModel(defaultCfg.aiModel);
+      }
+
+      if (settingTable) {
+        const settingRows = Array.from(settingTable.iter()) as any[];
+        const openrouterRow = settingRows.find((row) => row.key === 'cfg.openrouter.apiKey');
+        if (openrouterRow?.value) setOpenrouterApiKey(String(openrouterRow.value));
+      }
+
+      if (openrouterTable) {
+        const openrouterRows = Array.from(openrouterTable.iter()) as any[];
+        const defaultOpenrouter = openrouterRows.find((row) => row.configKey === 'default');
+        if (defaultOpenrouter?.apiKey) setOpenrouterApiKey(String(defaultOpenrouter.apiKey));
       }
 
       // Load RAG config
@@ -391,7 +506,10 @@ const ExpedientesPage = (_props: Props) => {
             'SELECT * FROM application_experience',
             'SELECT * FROM application_audit',
             'SELECT * FROM api_config',
+            'SELECT * FROM openrouter_config',
             'SELECT * FROM rag_config',
+            'SELECT * FROM rag_document',
+            'SELECT * FROM rag_normative',
             'SELECT * FROM system_setting',
             'SELECT * FROM faculty',
             'SELECT * FROM academic_program',
@@ -548,13 +666,17 @@ const ExpedientesPage = (_props: Props) => {
     const ragDocumentRows = ragDocumentTable ? (Array.from(ragDocumentTable.iter()) as any[]) : [];
 
     return ragDocumentRows
-      .filter((row) => row.active)
+      .filter((row) => Boolean(row?.active ?? row?.is_active ?? true))
       .map((row) => ({
-        documentKey: row.documentKey,
-        fileName: row.fileName,
-        fileType: row.fileType,
-        active: row.active,
-        contentBase64: row.contentBase64 ?? undefined,
+        documentKey: String(row.documentKey ?? row.document_key ?? row.fileName ?? row.file_name ?? 'rag-doc'),
+        fileName: String(row.fileName ?? row.file_name ?? row.documentKey ?? row.document_key ?? 'documento-rag'),
+        fileType: String(row.fileType ?? row.file_type ?? 'text/plain'),
+        active: Boolean(row.active ?? row.is_active ?? true),
+        contentBase64: typeof row.contentBase64 === 'string'
+          ? row.contentBase64
+          : typeof row.content_base64 === 'string'
+            ? row.content_base64
+            : undefined,
       }));
   };
 
@@ -579,6 +701,7 @@ const ExpedientesPage = (_props: Props) => {
     );
 
     const rankedChunks: RankedRagChunk[] = [];
+    const fallbackNormativeChunks: RankedRagChunk[] = [];
     const activeRagDocuments = getActiveRagDocuments();
     for (const document of activeRagDocuments) {
       const decoded = decodeBase64Document(document.contentBase64);
@@ -592,7 +715,79 @@ const ExpedientesPage = (_props: Props) => {
       }
     }
 
-    const selectedChunks = rankedChunks
+    // Read normatives from rag_normative DB table; fall back to system_setting
+    try {
+      const dbView = connectionRef.current?.db as any;
+      const normTable = dbView?.rag_normative || dbView?.ragNormative;
+      if (normTable) {
+        const normRows = Array.from(normTable.iter()) as any[];
+        for (const row of normRows) {
+          if (!row || !(row.active ?? row.is_active ?? true)) continue;
+          let jsonStr = '';
+          const jsonRaw = row.jsonContent ?? row.json_content ?? row.content ?? row.json;
+          if (typeof jsonRaw === 'string') {
+            jsonStr = jsonRaw;
+          } else if (jsonRaw && typeof jsonRaw === 'object') {
+            jsonStr = JSON.stringify(jsonRaw);
+          }
+          try {
+            const maybeString = JSON.parse(jsonStr);
+            if (typeof maybeString === 'string') jsonStr = maybeString;
+          } catch {
+            // keep original string
+          }
+          const sourceName = String(
+            row.title ?? row.normativeKey ?? row.normative_key ?? row.documentId ?? row.document_id ?? 'normativa',
+          );
+          const parsedNormChunks = normativeToRagChunks(jsonStr).filter(Boolean);
+          const normChunks = parsedNormChunks.length > 0
+            ? parsedNormChunks
+            : chunkText(jsonStr, ragChunkSize, ragChunkOverlap);
+          for (const chunk of normChunks) {
+            const score = scoreRagChunk(chunk, queryTerms);
+            if (score > 0) {
+              rankedChunks.push({ fileName: sourceName, chunk, score });
+            } else if (fallbackNormativeChunks.length < Math.max(6, ragTopK * 3)) {
+              fallbackNormativeChunks.push({ fileName: sourceName, chunk, score: 0.5 });
+            }
+          }
+        }
+      } else {
+        const settingTable = dbView?.system_setting || dbView?.systemSetting;
+        if (settingTable) {
+          const settingRows = Array.from(settingTable.iter()) as any[];
+          const settingMap = new Map(settingRows.map((r) => [r.key, r.value]));
+          const rawNorms = settingMap.get('cfg.rag.normatives');
+          if (rawNorms) {
+            const parsed = JSON.parse(String(rawNorms));
+            if (Array.isArray(parsed)) {
+              for (const norm of parsed) {
+                if (!norm || !norm.active) continue;
+                const text = typeof norm.content === 'string' ? norm.content : JSON.stringify(norm.content);
+                const parsedNormChunks = normativeToRagChunks(text).filter(Boolean);
+                const normChunks = parsedNormChunks.length > 0
+                  ? parsedNormChunks
+                  : chunkText(text, ragChunkSize, ragChunkOverlap);
+                for (const chunk of normChunks) {
+                  const score = scoreRagChunk(chunk, queryTerms);
+                  if (score > 0) {
+                    rankedChunks.push({ fileName: norm.title || norm.normativeKey || 'normativa', chunk, score });
+                  } else if (fallbackNormativeChunks.length < Math.max(6, ragTopK * 3)) {
+                    fallbackNormativeChunks.push({ fileName: norm.title || norm.normativeKey || 'normativa', chunk, score: 0.5 });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const effectiveChunks = rankedChunks.length > 0 ? rankedChunks : fallbackNormativeChunks;
+
+    const selectedChunks = effectiveChunks
       .sort((left, right) => right.score - left.score)
       .slice(0, Math.max(1, ragTopK))
       .map((item, index) => `[Fuente ${index + 1}: ${item.fileName}]\n${item.chunk.slice(0, 1800)}`);
@@ -603,14 +798,18 @@ const ExpedientesPage = (_props: Props) => {
   };
 
   const generateAI = async (req: RequestRecord) => {
-    const provider = aiProvider || 'gemini';
-    const model = aiModel || 'gemini-2.5-flash';
-    const geminiKey = geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
-    const freellmKey = apifreellmApiKey || '';
-
-    const activeKey = provider === 'gemini' ? geminiKey : freellmKey;
+    const runtime = resolveAiRuntime({
+      provider: aiProvider,
+      model: aiModel,
+      geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      apifreellmKey: apifreellmApiKey,
+      openrouterKey: openrouterApiKey,
+    });
+    const provider = runtime.provider;
+    const model = runtime.model;
+    const activeKey = runtime.activeKey;
     if (!activeKey) {
-      setAiAnalysis(`No se encontró API Key para ${provider === 'gemini' ? 'Gemini' : 'APIFreeLLM'}. Configúrala en el módulo de Configuración > API.`);
+      setAiAnalysis('No se encontró API Key activa. Configúrala en Configuración > API (Gemini o APIFreeLLM).');
       return;
     }
     setAiGenerating(true);
@@ -627,6 +826,9 @@ const ExpedientesPage = (_props: Props) => {
       const expTxt = selectedExperiences.length > 0
         ? selectedExperiences.map((e) => `${e.experienceType}: ${e.startedAt} a ${e.endedAt || 'Presente'}${e.certified ? ' (certificado)' : ''}`).join('; ')
         : 'Sin experiencia registrada';
+
+      const indexedSelectedPublications = selectedPublications.filter((item) => isIndexedPublicationSource(item.sourceKind));
+      const manualSelectedPublications = selectedPublications.filter((item) => !isIndexedPublicationSource(item.sourceKind));
 
       const provisionalBreakdown = calculateAdvancedEscalafon({
         nombre: req.nombre,
@@ -648,13 +850,13 @@ const ExpedientesPage = (_props: Props) => {
           nivel: l.languageLevel as 'A2' | 'B1' | 'B2' | 'C1',
           convalidacion: l.convalidation ? 'SI' as const : 'NO' as const,
         })),
-        produccion: selectedPublications.map((p) => ({
+        produccion: indexedSelectedPublications.map((p) => ({
           titulo: p.publicationTitle,
           cuartil: p.quartile as 'Q1' | 'Q2' | 'Q3' | 'Q4',
           fecha: p.publicationYear,
           tipo: p.publicationType,
           autores: p.authorsCount,
-          fuente: p.sourceKind as 'SCOPUS' | 'MANUAL',
+          fuente: normalizePublicationSource(p.sourceKind),
         })),
         experiencia: selectedExperiences.map((e) => ({
           tipo: e.experienceType as 'Profesional' | 'Docencia Universitaria' | 'Investigación',
@@ -713,8 +915,13 @@ const ExpedientesPage = (_props: Props) => {
           section: 'Producción',
           criterion: 'Puntaje de producción preliminar',
           suggestedScore: provisionalBreakdown.ptsPI,
-          hasSupport: selectedPublications.length > 0,
-          comment: selectedPublications.length > 0 ? 'Derivado de publicaciones cargadas.' : 'Sin publicaciones cargadas.',
+          hasSupport: indexedSelectedPublications.length > 0,
+          comment:
+            indexedSelectedPublications.length === 0
+              ? 'Sin soporte: publicaciones manuales o sin fuente indexada.'
+              : manualSelectedPublications.length === 0
+                ? 'Derivado de publicaciones indexadas (SCOPUS/ORCID).'
+                : `Derivado parcialmente de publicaciones indexadas (${indexedSelectedPublications.length}) y manuales (${manualSelectedPublications.length}).`,
         },
         {
           section: 'Experiencia',
@@ -797,6 +1004,8 @@ Reglas de salida:
         }
         const data = await res.json();
         aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      } else if (provider === 'openrouter') {
+        aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userMessage);
       } else {
         // APIFreeLLM is proxied through Vite in local development to avoid browser CORS issues.
         const res = await fetch('/api/apifreellm/chat', {

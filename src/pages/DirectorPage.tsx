@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 import LoadingOverlay from '../components/LoadingOverlay';
+import AppLogo from '../components/Common/AppLogo';
 import { DbConnection } from '../module_bindings';
 import type {
   Application,
@@ -120,7 +121,7 @@ const mapCriterionStatus = (status?: string): DirectorCriterionStatus => {
 const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
   const normalized = normalizeText(level);
   if (normalized.includes('doctor')) return 'Doctorado';
-  if (normalized.includes('maestr')) return 'Maestría';
+  if (normalized.includes('maestr') || normalized.includes('magister')) return 'Maestría';
   if (normalized.includes('especial')) return 'Especialización';
   return 'Pregrado';
 };
@@ -214,7 +215,7 @@ const buildFallbackItems = (evidence: RequestEvidence, request: DirectorRequest)
       fecha: publication.publicationYear,
       tipo: publication.publicationType,
       autores: Number(publication.authorsCount || 1),
-      fuente: (publication.sourceKind as 'SCOPUS' | 'MANUAL') || 'MANUAL',
+      fuente: (publication.sourceKind as 'SCOPUS' | 'ORCID' | 'MANUAL') || 'MANUAL',
     })),
     experiencia: evidence.experiences.map((experience) => ({
       tipo: normalizeExperienceType(experience.experienceType),
@@ -704,9 +705,7 @@ const DirectorPage = () => {
               <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-700 px-6 py-6 text-white md:px-8">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                   <div>
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] text-emerald-100">
-                      <ShieldCheck size={14} /> Portal Director
-                    </div>
+                    <AppLogo className="inline-flex items-center rounded-2xl bg-white/10 px-4 py-3 backdrop-blur" imgClassName="h-10 w-auto" />
                     <h2 className="mt-4 text-3xl font-black tracking-tight md:text-4xl">
                       Revision final por <span className="text-emerald-300">convocatoria</span>
                     </h2>

@@ -185,7 +185,7 @@ const BandejaAuditarModule: React.FC<BandejaAuditarModuleProps> = ({ onClose }) 
   const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
     const normalized = normalizeText(level);
     if (normalized.includes('doctor')) return 'Doctorado';
-    if (normalized.includes('maestr')) return 'Maestría';
+    if (normalized.includes('maestr') || normalized.includes('magister')) return 'Maestría';
     if (normalized.includes('especial')) return 'Especialización';
     return 'Pregrado';
   };
@@ -256,7 +256,7 @@ const BandejaAuditarModule: React.FC<BandejaAuditarModuleProps> = ({ onClose }) 
         fecha: publication.publicationYear,
         tipo: publication.publicationType,
         autores: Number(publication.authorsCount || 1),
-        fuente: (publication.sourceKind as 'SCOPUS' | 'MANUAL') || 'MANUAL',
+        fuente: (publication.sourceKind as 'SCOPUS' | 'ORCID' | 'MANUAL') || 'MANUAL',
       })),
       experiencia: evidence.experiences.map((experience) => ({
         tipo: normalizeExperienceType(experience.experienceType),

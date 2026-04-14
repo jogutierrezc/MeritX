@@ -26,7 +26,7 @@ export type PostulacionFormState = {
   idiomas: Array<{ idioma: string; nivel: NivelIdioma; convalidacion: 'SI' | 'NO' }>;
   produccion: Array<{
     titulo: string; cuartil: Cuartil; fecha: string;
-    tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'MANUAL';
+    tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL';
   }>;
   experiencia: Array<{ tipo: TipoExperiencia; inicio: string; fin: string; certificacion: 'SI' | 'NO' }>;
   orcid: string;

@@ -34,7 +34,7 @@ export type FormState = {
     supportName?: string;
     supportPath?: string;
   }>;
-  produccion: Array<{ titulo: string; cuartil: 'Q1' | 'Q2' | 'Q3' | 'Q4'; fecha: string; tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'MANUAL' }>;
+  produccion: Array<{ titulo: string; cuartil: 'Q1' | 'Q2' | 'Q3' | 'Q4'; fecha: string; tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
   experiencia: Array<{
     tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación';
     inicio: string;

@@ -10,8 +10,10 @@ import {
   FileText,
   Hash,
   History,
+  Pencil,
   Printer,
   User,
+  X,
 } from 'lucide-react';
 import type { RequestRecord } from '../../../types/domain';
 import { normalizeText, toSafeNumber } from './helpers';
@@ -49,6 +51,37 @@ interface Props {
   onSetManualNarrative: (value: string) => void;
   onApproveVersion: (versionId: string) => void;
   onViewVersion: (version: AnalysisVersionRecord) => void;
+  meritxNarrative: {
+    analisisMatriz: string;
+    analisisMotor: string;
+    analisisOficial: string;
+    analisisNormativo: string;
+    conclusionIntermedia: string;
+    puntajeIntermedio: number;
+  } | null;
+  meritxNarrativeLoading: boolean;
+  onGenerateMeritxNarrative: () => void;
+  ragDebugInfo?: {
+    generatedAt: string;
+    queryTerms: number;
+    activeDocs: number;
+    detectedNormatives: number;
+    activeNormatives: number;
+    docChunks: number;
+    normativeChunks: number;
+    rankedMatches: number;
+    fallbackCandidates: number;
+    selectedChunks: number;
+    usedFallback: boolean;
+    forcedProtocolDetected: boolean;
+    forcedProtocolIncluded: boolean;
+    sources: string[];
+  } | null;
+  onSaveProfileEvidence: (payload: {
+    titles: Array<{ id: number; supportName: string; supportPath: string }>;
+    experiences: Array<{ id: number; supportName: string; supportPath: string }>;
+    publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
+  }) => Promise<void>;
 }
 
 const DetailItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
@@ -117,7 +150,60 @@ export const AnalysisDetailView: React.FC<Props> = ({
   onSetManualNarrative,
   onApproveVersion,
   onViewVersion,
+  meritxNarrative,
+  meritxNarrativeLoading,
+  onGenerateMeritxNarrative,
+  ragDebugInfo = null,
+  onSaveProfileEvidence,
 }) => {
+  const [experienceModalOpen, setExperienceModalOpen] = React.useState(false);
+  const [publicationModalOpen, setPublicationModalOpen] = React.useState(false);
+  const [profileEditOpen, setProfileEditOpen] = React.useState(false);
+  const [savingProfileEvidence, setSavingProfileEvidence] = React.useState(false);
+
+  const [titleDraft, setTitleDraft] = React.useState(selectedAnalysis.titles);
+  const [experienceDraft, setExperienceDraft] = React.useState(selectedAnalysis.experiences);
+  const [publicationDraft, setPublicationDraft] = React.useState(selectedAnalysis.publications);
+
+  React.useEffect(() => {
+    setTitleDraft(selectedAnalysis.titles);
+    setExperienceDraft(selectedAnalysis.experiences);
+    setPublicationDraft(selectedAnalysis.publications);
+    setExperienceModalOpen(false);
+    setPublicationModalOpen(false);
+    setProfileEditOpen(false);
+  }, [selectedAnalysis]);
+
+  const saveProfileEvidence = async () => {
+    try {
+      setSavingProfileEvidence(true);
+      await onSaveProfileEvidence({
+        titles: titleDraft.map((row) => ({
+          id: row.id,
+          supportName: row.supportName || '',
+          supportPath: row.supportPath || '',
+        })),
+        experiences: experienceDraft.map((row) => ({
+          id: row.id,
+          supportName: row.supportName || '',
+          supportPath: row.supportPath || '',
+        })),
+        publications: publicationDraft.map((row) => ({
+          id: row.id,
+          sourceKind: row.sourceKind,
+        })),
+      });
+      setProfileEditOpen(false);
+    } finally {
+      setSavingProfileEvidence(false);
+    }
+  };
+
+  const buildSupportPath = (scope: 'titles' | 'experience', rowId: number, fileName: string) => {
+    const safeName = fileName.replace(/\s+/g, '_');
+    return `professor-supports/${scope}/${selectedAnalysisRequest.id}/${rowId}-${Date.now()}-${safeName}`;
+  };
+
   const latestByType = (['MOTOR', 'IA', 'MANUAL_TH'] as const).map((type) => {
     const rows = versionRowsForSelected.filter((v) => v.sourceType === type);
     if (rows.length === 0) return null;
@@ -151,6 +237,12 @@ export const AnalysisDetailView: React.FC<Props> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setProfileEditOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm font-medium text-sm"
+            >
+              <Pencil size={18} /> Editar perfil y soportes
+            </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium text-sm">
               <Printer size={18} /> Imprimir
             </button>
@@ -218,12 +310,44 @@ export const AnalysisDetailView: React.FC<Props> = ({
                     : item.hasSupport
                       ? 'Sin ajuste IA. Se mantiene el puntaje base por soporte.'
                       : 'Sin soporte documental. Puntaje sugerido en 0.';
+                  const scoreComment = `Calculo base: ${item.cantidad.toFixed(1)} x ${item.valor.toFixed(1)} = ${item.puntaje.toFixed(1)}.`;
+                  const supportComment = item.hasSupport
+                    ? `Se considera por soporte verificable (${item.supportNote}).`
+                    : `Se limita por falta de soporte verificable (${item.supportNote}).`;
 
                   return (
                     <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-6 py-4 font-semibold text-xs text-slate-500 uppercase">{item.section}</td>
                       <td className="px-6 py-4 font-bold text-slate-700 uppercase">{item.criterio}</td>
-                      <td className="px-6 py-4 text-slate-500">{item.detalle || '-'}</td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {item.section === 'Experiencia' ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-slate-700">
+                              {selectedAnalysis.experiences.length} registro(s) de experiencia reportados.
+                            </p>
+                            <button
+                              onClick={() => setExperienceModalOpen(true)}
+                              className="text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700 underline hover:no-underline"
+                            >
+                              Ver más
+                            </button>
+                          </div>
+                        ) : item.criterio === 'PRODUCCIÓN INTELECTUAL' ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-slate-700">
+                              {selectedAnalysis.publications.length} producción(es) científica(s) reportadas.
+                            </p>
+                            <button
+                              onClick={() => setPublicationModalOpen(true)}
+                              className="text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700 underline hover:no-underline"
+                            >
+                              Ver más
+                            </button>
+                          </div>
+                        ) : (
+                          item.detalle || '-'
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-md text-[10px] font-bold border uppercase ${
                           item.hasSupport
@@ -237,7 +361,11 @@ export const AnalysisDetailView: React.FC<Props> = ({
                       <td className="px-6 py-4 text-right font-medium">{item.valor.toFixed(1)}</td>
                       <td className="px-6 py-4 text-right font-bold text-indigo-600">{item.puntaje.toFixed(1)}</td>
                       <td className="px-6 py-4 text-center font-bold text-orange-600">{aiScore.toFixed(1)}</td>
-                      <td className="px-6 py-4 text-xs text-slate-400 italic max-w-xs">{aiComment}</td>
+                      <td className="px-6 py-4 max-w-xs">
+                        <p className="text-[11px] font-semibold text-slate-700">{scoreComment}</p>
+                        <p className="mt-1 text-[11px] font-semibold text-slate-600">{supportComment}</p>
+                        <p className="mt-1 text-[11px] italic text-slate-500">{aiComment}</p>
+                      </td>
                     </tr>
                   );
                 })}
@@ -255,11 +383,47 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
           <div className="p-6 bg-slate-50 flex flex-wrap gap-3 border-t border-slate-200">
             <ActionButton label={aiLoading ? 'Analizando con IA...' : 'Generar Tabla IA'} color="bg-indigo-600 text-white" disabled={aiLoading} onClick={onRunAiSuggestion} />
+            <ActionButton
+              label={meritxNarrativeLoading ? 'Preparando informe MeritX...' : 'Abrir informe MeritX'}
+              color="bg-cyan-600 text-white"
+              disabled={meritxNarrativeLoading}
+              onClick={onGenerateMeritxNarrative}
+            />
             <ActionButton label="Guardar Versión Motor" color="bg-white border-indigo-200 text-indigo-600" outline onClick={onSaveMotorVersion} />
             <ActionButton label="Guardar Versión IA" color="bg-white border-indigo-200 text-indigo-600" outline disabled={aiRows.length === 0} onClick={onSaveAiVersion} />
             <ActionButton label={manualMode ? 'Ocultar Tabla Manual TH' : 'Crear Tabla Manual TH'} color="bg-white border-slate-200 text-slate-600" outline onClick={onToggleManualMode} />
           </div>
         </div>
+
+        {ragDebugInfo && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">Diagnóstico RAG (trazabilidad)</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3 text-[11px] font-semibold text-amber-900">
+              <p>Términos de consulta: {ragDebugInfo.queryTerms}</p>
+              <p>Documentos activos: {ragDebugInfo.activeDocs}</p>
+              <p>Normas detectadas: {ragDebugInfo.detectedNormatives}</p>
+              <p>Normas activas: {ragDebugInfo.activeNormatives}</p>
+              <p>Chunks documentos: {ragDebugInfo.docChunks}</p>
+              <p>Chunks normativos: {ragDebugInfo.normativeChunks}</p>
+              <p>Matches por score: {ragDebugInfo.rankedMatches}</p>
+              <p>Candidatos fallback: {ragDebugInfo.fallbackCandidates}</p>
+              <p>Chunks enviados al prompt: {ragDebugInfo.selectedChunks}</p>
+              <p>Protocolo vacío legal detectado: {ragDebugInfo.forcedProtocolDetected ? 'Sí' : 'No'}</p>
+              <p>Protocolo vacío legal incluido: {ragDebugInfo.forcedProtocolIncluded ? 'Sí' : 'No'}</p>
+            </div>
+            <p className="mt-2 text-[11px] font-semibold text-amber-800">
+              Modo de selección: {ragDebugInfo.usedFallback ? 'Fallback normativo' : 'Ranking por score'}
+            </p>
+            {ragDebugInfo.sources.length > 0 && (
+              <p className="mt-1 text-[11px] text-amber-800">
+                Fuentes: {ragDebugInfo.sources.join(' | ')}
+              </p>
+            )}
+            <p className="mt-1 text-[10px] text-amber-700">
+              Última ejecución: {new Date(ragDebugInfo.generatedAt).toLocaleString('es-CO')}
+            </p>
+          </div>
+        )}
 
         {(aiNarrative || aiRows.length > 0) && (
           <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
@@ -281,6 +445,35 @@ export const AnalysisDetailView: React.FC<Props> = ({
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {meritxNarrative && (
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700">Narrativa de MeritX (IA)</p>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              <div className="rounded-lg border border-cyan-100 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-cyan-700">Analisis 1: Matriz</p>
+                <p className="mt-1 text-xs text-slate-700 whitespace-pre-wrap">{meritxNarrative.analisisMatriz}</p>
+              </div>
+              <div className="rounded-lg border border-cyan-100 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-cyan-700">Analisis 2: Motor</p>
+                <p className="mt-1 text-xs text-slate-700 whitespace-pre-wrap">{meritxNarrative.analisisMotor}</p>
+              </div>
+              <div className="rounded-lg border border-cyan-100 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-cyan-700">Analisis 3: Oficial</p>
+                <p className="mt-1 text-xs text-slate-700 whitespace-pre-wrap">{meritxNarrative.analisisOficial}</p>
+              </div>
+              <div className="rounded-lg border border-cyan-100 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-cyan-700">Analisis 4: Normativo</p>
+                <p className="mt-1 text-xs text-slate-700 whitespace-pre-wrap">{meritxNarrative.analisisNormativo}</p>
+              </div>
+            </div>
+            <div className="mt-3 rounded-lg border-2 border-cyan-300 bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-cyan-700">Conclusion integradora</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800 whitespace-pre-wrap">{meritxNarrative.conclusionIntermedia}</p>
+              <p className="mt-2 text-xs font-black uppercase text-cyan-800">Punto intermedio sugerido: {meritxNarrative.puntajeIntermedio.toFixed(1)} pts</p>
+            </div>
           </div>
         )}
 
@@ -577,6 +770,240 @@ export const AnalysisDetailView: React.FC<Props> = ({
             <h3 className="text-3xl font-black text-slate-800">{selectedAnalysisRequest.finalPts.toFixed(1)}</h3>
           </div>
         </div>
+
+        {experienceModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Detalle ampliado</p>
+                  <h3 className="text-lg font-black text-slate-900">Experiencia reportada</h3>
+                </div>
+                <button onClick={() => setExperienceModalOpen(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-100">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[70vh] overflow-auto p-5">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 border-b border-slate-200">
+                      <th className="pb-2">Tipo</th>
+                      <th className="pb-2">Inicio</th>
+                      <th className="pb-2">Fin</th>
+                      <th className="pb-2">Certificada</th>
+                      <th className="pb-2">Soporte</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedAnalysis.experiences.map((row) => (
+                      <tr key={row.id}>
+                        <td className="py-2 font-semibold text-slate-700">{row.experienceType}</td>
+                        <td className="py-2 text-slate-600">{row.startedAt || '-'}</td>
+                        <td className="py-2 text-slate-600">{row.endedAt || 'Actual'}</td>
+                        <td className="py-2 text-slate-600">{row.certified ? 'Sí' : 'No'}</td>
+                        <td className="py-2 text-slate-600">{row.supportName || row.supportPath || 'Sin soporte'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {publicationModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Detalle ampliado</p>
+                  <h3 className="text-lg font-black text-slate-900">Producción científica reportada</h3>
+                </div>
+                <button onClick={() => setPublicationModalOpen(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-100">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[70vh] overflow-auto p-5">
+                <table className="w-full min-w-[700px] text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 border-b border-slate-200">
+                      <th className="pb-2">Título de investigación</th>
+                      <th className="pb-2">Quartil certificado</th>
+                      <th className="pb-2">Origen</th>
+                      <th className="pb-2">Año</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedAnalysis.publications.map((row) => (
+                      <tr key={row.id}>
+                        <td className="py-2 text-slate-700 font-semibold">{row.publicationTitle}</td>
+                        <td className="py-2 text-slate-600">{row.quartile || 'Q4'}</td>
+                        <td className="py-2 text-slate-600">{row.sourceKind}</td>
+                        <td className="py-2 text-slate-600">{row.publicationYear || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {profileEditOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <div className="w-full max-w-6xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Edición de expediente</p>
+                  <h3 className="text-lg font-black text-slate-900">Agregar soportes faltantes y corregir origen de producción</h3>
+                </div>
+                <button onClick={() => setProfileEditOpen(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-100">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-auto p-5 space-y-5">
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Títulos académicos</p>
+                  <div className="space-y-2">
+                    {titleDraft.map((row, index) => (
+                      <div key={row.id} className="grid gap-2 md:grid-cols-[1.6fr_1fr] rounded-lg border border-slate-200 p-3">
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{row.titleName}</p>
+                          <p className="text-[11px] text-slate-500">{row.titleLevel}</p>
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
+                          </p>
+                        </div>
+                        <label className="flex items-center justify-center rounded border border-dashed border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
+                          Cargar soporte
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              const next = [...titleDraft];
+                              next[index] = {
+                                ...row,
+                                supportName: file.name,
+                                supportPath: buildSupportPath('titles', row.id, file.name),
+                              };
+                              setTitleDraft(next);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Experiencia</p>
+                  <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                    <p className="text-[11px] font-semibold text-indigo-800">Carga única de certificado consolidado</p>
+                    <p className="mt-1 text-[11px] text-indigo-700">
+                      Si tienes un solo documento que certifica todas las experiencias, cárgalo aquí y se aplicará a todos los registros.
+                    </p>
+                    <label className="mt-2 inline-flex cursor-pointer items-center rounded border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50">
+                      Cargar archivo único
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          setExperienceDraft((prev) => prev.map((item) => ({
+                            ...item,
+                            supportName: file.name,
+                            supportPath: buildSupportPath('experience', item.id, file.name),
+                          })));
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    {experienceDraft.map((row, index) => (
+                      <div key={row.id} className="grid gap-2 md:grid-cols-[1.3fr_1fr] rounded-lg border border-slate-200 p-3">
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{row.experienceType}</p>
+                          <p className="text-[11px] text-slate-500">{row.startedAt} - {row.endedAt || 'Actual'}</p>
+                          <p className="mt-1 text-[11px] text-slate-500">
+                            Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
+                          </p>
+                        </div>
+                        <label className="flex items-center justify-center rounded border border-dashed border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
+                          Cargar soporte
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              const next = [...experienceDraft];
+                              next[index] = {
+                                ...row,
+                                supportName: file.name,
+                                supportPath: buildSupportPath('experience', row.id, file.name),
+                              };
+                              setExperienceDraft(next);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Producción científica</p>
+                  <div className="space-y-2">
+                    {publicationDraft.map((row, index) => (
+                      <div key={row.id} className="grid gap-2 md:grid-cols-[1.8fr_0.8fr_0.8fr] rounded-lg border border-slate-200 p-3">
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{row.publicationTitle}</p>
+                          <p className="text-[11px] text-slate-500">Quartil: {row.quartile || 'Q4'} · Año: {row.publicationYear || '-'}</p>
+                        </div>
+                        <select
+                          value={row.sourceKind}
+                          onChange={(event) => {
+                            const next = [...publicationDraft];
+                            next[index] = { ...row, sourceKind: event.target.value as 'SCOPUS' | 'ORCID' | 'MANUAL' };
+                            setPublicationDraft(next);
+                          }}
+                          className="rounded border border-slate-200 px-2 py-1 text-xs"
+                        >
+                          <option value="SCOPUS">SCOPUS</option>
+                          <option value="ORCID">ORCID</option>
+                          <option value="MANUAL">MANUAL</option>
+                        </select>
+                        <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 text-center">
+                          {row.sourceKind === 'MANUAL' ? 'Sin soporte' : 'Con soporte'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 bg-slate-50">
+                <button
+                  onClick={() => setProfileEditOpen(false)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-slate-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveProfileEvidence}
+                  disabled={savingProfileEvidence}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-white disabled:opacity-50"
+                >
+                  {savingProfileEvidence ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-lg flex items-center gap-3 text-indigo-700 text-sm">
           <CheckCircle2 size={20} className="shrink-0" />

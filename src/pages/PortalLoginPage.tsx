@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Lock, ShieldCheck } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
+import AppLogo from '../components/Common/AppLogo';
 import { DbConnection } from '../module_bindings';
 import type { PortalRole, PortalSession } from '../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
@@ -119,8 +120,9 @@ const PortalLoginPage = ({ role, onLogin, compact = false }: Props) => {
     <div className={`${compact ? 'mx-auto max-w-none rounded-[28px] bg-white p-6 md:p-8' : 'mx-auto max-w-xl rounded-[32px] border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.08)] md:p-12'}`}>
       <div className="space-y-8">
         <div className="space-y-4">
-          <div className="inline-flex items-center gap-3 rounded-full bg-blue-600 px-4 py-2 text-[10px] font-black uppercase tracking-[0.35em] text-white">
-            <ShieldCheck size={16} /> {labels.badge}
+          <AppLogo className="flex items-center" imgClassName="h-12 w-auto md:h-14" />
+          <div className="inline-flex items-center rounded-full bg-blue-600 px-4 py-2 text-[10px] font-black uppercase tracking-[0.35em] text-white">
+            {labels.badge}
           </div>
           <h2 className="text-4xl font-black uppercase tracking-tighter text-slate-950 md:text-5xl">
             {labels.title}

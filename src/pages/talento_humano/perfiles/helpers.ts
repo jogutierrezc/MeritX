@@ -12,7 +12,7 @@ export const normalizeText = (value: string) =>
 export const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
   const normalized = normalizeText(level);
   if (normalized.includes('doctor')) return 'Doctorado';
-  if (normalized.includes('maestr')) return 'Maestría';
+  if (normalized.includes('maestr') || normalized.includes('magister')) return 'Maestría';
   if (normalized.includes('especial')) return 'Especialización';
   return 'Pregrado';
 };

@@ -95,9 +95,6 @@ const application_language = table(
     language_name: t.string().index('btree'),
     language_level: t.string().index('btree'),
     convalidation: t.bool(),
-    support_name: t.string().optional(),
-    support_url: t.string().optional(),
-    support_path: t.string().optional(),
   },
 );
 
@@ -257,6 +254,15 @@ const api_config = table(
   },
 );
 
+const openrouter_config = table(
+  { name: 'openrouter_config', public: true },
+  {
+    config_key: t.string().primaryKey(),
+    api_key: t.string(),
+    updated_at: t.timestamp(),
+  },
+);
+
 const resend_config = table(
   { name: 'resend_config', public: true },
   {
@@ -309,6 +315,22 @@ const rag_document = table(
     bucket_name: t.string().index('btree'),
     storage_path: t.string(),
     content_base64: t.string().optional(),
+    active: t.bool().index('btree'),
+    uploaded_by: t.string().optional(),
+    uploaded_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const rag_normative = table(
+  { name: 'rag_normative', public: true },
+  {
+    normative_key: t.string().primaryKey(),
+    title: t.string().index('btree'),
+    document_id: t.string().index('btree'),
+    json_content: t.string(),
+    bucket_name: t.string().index('btree'),
+    storage_path: t.string(),
     active: t.bool().index('btree'),
     uploaded_by: t.string().optional(),
     uploaded_at: t.timestamp(),
@@ -447,10 +469,12 @@ const spacetimedb = schema({
   system_setting,
   report_snapshot,
   api_config,
+  openrouter_config,
   resend_config,
   email_template,
   rag_config,
   rag_document,
+  rag_normative,
   convocatoria,
   application_convocatoria,
   faculty,
@@ -955,6 +979,15 @@ export const init = spacetimedb.init((ctx) => {
       orcid_client_secret: '',
       ai_provider: 'gemini',
       ai_model: 'gemini-2.5-flash',
+      updated_at: ctx.timestamp,
+    });
+  }
+
+  const openrouterDefault = ctx.db.openrouter_config.config_key.find('default');
+  if (!openrouterDefault) {
+    ctx.db.openrouter_config.insert({
+      config_key: 'default',
+      api_key: '',
       updated_at: ctx.timestamp,
     });
   }
@@ -1505,16 +1538,16 @@ export const add_application_language = spacetimedb.reducer(
     language_name: t.string(),
     language_level: t.string(),
     convalidation: t.bool(),
-    support_name: t.string().optional(),
-    support_url: t.string().optional(),
-    support_path: t.string().optional(),
   },
   (ctx, args) => {
     const app = ctx.db.application.tracking_id.find(args.tracking_id);
     if (!app) throw new SenderError('La postulación no existe.');
     ctx.db.application_language.insert({
       id: nextId(),
-      ...args,
+      tracking_id: args.tracking_id,
+      language_name: args.language_name,
+      language_level: args.language_level,
+      convalidation: args.convalidation,
     });
   },
 );
@@ -1556,6 +1589,66 @@ export const add_application_experience = spacetimedb.reducer(
     ctx.db.application_experience.insert({
       id: nextId(),
       ...args,
+    });
+  },
+);
+
+export const update_application_title_support = spacetimedb.reducer(
+  {
+    id: t.u32(),
+    support_name: t.string().optional(),
+    support_path: t.string().optional(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['talento_humano', 'cap']);
+    const current = ctx.db.application_title.id.find(args.id);
+    if (!current) throw new SenderError('El título no existe.');
+
+    ctx.db.application_title.id.update({
+      ...current,
+      support_name: args.support_name,
+      support_path: args.support_path,
+    });
+  },
+);
+
+export const update_application_experience_support = spacetimedb.reducer(
+  {
+    id: t.u32(),
+    support_name: t.string().optional(),
+    support_path: t.string().optional(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['talento_humano', 'cap']);
+    const current = ctx.db.application_experience.id.find(args.id);
+    if (!current) throw new SenderError('La experiencia no existe.');
+
+    ctx.db.application_experience.id.update({
+      ...current,
+      support_name: args.support_name,
+      support_path: args.support_path,
+    });
+  },
+);
+
+export const update_application_publication_source_kind = spacetimedb.reducer(
+  {
+    id: t.u32(),
+    source_kind: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['talento_humano', 'cap']);
+    const current = ctx.db.application_publication.id.find(args.id);
+    if (!current) throw new SenderError('La publicación no existe.');
+
+    const normalized = String(args.source_kind || '').trim().toUpperCase();
+    if (!['SCOPUS', 'ORCID', 'MANUAL'].includes(normalized)) {
+      throw new SenderError('source_kind inválido. Usa SCOPUS, ORCID o MANUAL.');
+    }
+
+    ctx.db.application_publication.id.update({
+      ...current,
+      source_kind: normalized,
     });
   },
 );
@@ -2006,6 +2099,32 @@ export const upsert_api_config = spacetimedb.reducer(
   },
 );
 
+export const upsert_openrouter_config = spacetimedb.reducer(
+  {
+    config_key: t.string(),
+    api_key: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, 'admin');
+    requireNonEmpty(args.config_key, 'Config key');
+
+    const existing = ctx.db.openrouter_config.config_key.find(args.config_key);
+    if (existing) {
+      ctx.db.openrouter_config.config_key.update({
+        ...existing,
+        api_key: args.api_key,
+        updated_at: ctx.timestamp,
+      });
+    } else {
+      ctx.db.openrouter_config.insert({
+        config_key: args.config_key,
+        api_key: args.api_key,
+        updated_at: ctx.timestamp,
+      });
+    }
+  },
+);
+
 export const upsert_resend_config = spacetimedb.reducer(
   {
     config_key: t.string(),
@@ -2149,6 +2268,78 @@ export const deactivate_rag_document = spacetimedb.reducer(
     if (!existing) throw new SenderError('Documento RAG no encontrado.');
 
     ctx.db.rag_document.document_key.update({
+      ...existing,
+      active: false,
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const upsert_rag_normative = spacetimedb.reducer(
+  {
+    normative_key: t.string(),
+    title: t.string(),
+    document_id: t.string(),
+    json_content: t.string(),
+    bucket_name: t.string(),
+    storage_path: t.string(),
+    active: t.bool(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, 'admin');
+    requireNonEmpty(args.normative_key, 'Normative key');
+    requireNonEmpty(args.title, 'Título de normativa');
+    requireNonEmpty(args.json_content, 'Contenido JSON');
+
+    // Minimal JSON validation
+    try {
+      JSON.parse(args.json_content);
+    } catch {
+      throw new SenderError('json_content no es un JSON válido.');
+    }
+
+    const existing = ctx.db.rag_normative.normative_key.find(args.normative_key);
+    if (existing) {
+      ctx.db.rag_normative.normative_key.update({
+        ...existing,
+        title: args.title,
+        document_id: args.document_id,
+        json_content: args.json_content,
+        bucket_name: args.bucket_name,
+        storage_path: args.storage_path,
+        active: args.active,
+        uploaded_by: session.username,
+        updated_at: ctx.timestamp,
+      });
+    } else {
+      ctx.db.rag_normative.insert({
+        normative_key: args.normative_key,
+        title: args.title,
+        document_id: args.document_id,
+        json_content: args.json_content,
+        bucket_name: args.bucket_name,
+        storage_path: args.storage_path,
+        active: args.active,
+        uploaded_by: session.username,
+        uploaded_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+      });
+    }
+  },
+);
+
+export const deactivate_rag_normative = spacetimedb.reducer(
+  {
+    normative_key: t.string(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, 'admin');
+    requireNonEmpty(args.normative_key, 'Normative key');
+
+    const existing = ctx.db.rag_normative.normative_key.find(args.normative_key);
+    if (!existing) throw new SenderError('Normativa RAG no encontrada.');
+
+    ctx.db.rag_normative.normative_key.update({
       ...existing,
       active: false,
       updated_at: ctx.timestamp,

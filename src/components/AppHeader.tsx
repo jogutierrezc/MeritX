@@ -1,5 +1,6 @@
 import React from 'react';
 import { BarChart3, ChevronDown, Home, LogOut, Settings, ShieldCheck, User as UserIcon, Users, Zap } from 'lucide-react';
+import AppLogo from './Common/AppLogo';
 import Files from './icons/Files';
 import type { PortalSession } from '../services/portalAuth';
 
@@ -67,17 +68,7 @@ const AppHeader: React.FC<Props> = ({
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto flex h-20 items-center justify-between px-6 md:px-8">
         <div className="flex items-center gap-4 md:gap-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 shadow-[0_12px_24px_rgba(15,23,42,0.18)]">
-            <ShieldCheck className="w-6 h-6 text-white" />
-          </div>
-          <div className="hidden border-l border-slate-200 pl-5 lg:block">
-            <h1 className="text-lg font-black tracking-tighter leading-none uppercase text-slate-950">
-              Sistema <span className="text-blue-600">Escalafón</span>
-            </h1>
-            <span className="mt-1 block text-[9px] font-bold uppercase tracking-[0.5em] text-slate-400">
-              Gestión Rectoría UDES
-            </span>
-          </div>
+          <AppLogo className="flex items-center" imgClassName="h-12 w-auto md:h-14" />
         </div>
 
         <nav className="hidden items-center gap-2 md:flex">

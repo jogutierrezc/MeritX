@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
+import AppLogo from '../../components/Common/AppLogo';
 import type {
   Application,
   ApplicationExperience,
@@ -322,9 +323,7 @@ const DecanoPage = () => {
       <section className="relative overflow-hidden rounded-[2.5rem] bg-[#003366] p-12 text-white shadow-2xl">
         <div className="pointer-events-none absolute right-0 top-0 h-96 w-96 -translate-y-1/2 translate-x-1/2 rounded-full bg-blue-400/10 blur-[80px]" />
         <div className="relative z-10 space-y-4">
-          <span className="rounded-full bg-white/10 px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.3em] backdrop-blur-md">
-            Consejo de Facultad
-          </span>
+          <AppLogo className="inline-flex items-center rounded-2xl bg-white/10 px-4 py-3 backdrop-blur-md" imgClassName="h-10 w-auto" />
           <h2 className="text-5xl font-black uppercase leading-none tracking-tighter">
             Verificación de <br />
             <span className="text-blue-300">Credenciales</span>

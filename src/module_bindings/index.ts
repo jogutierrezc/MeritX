@@ -45,6 +45,7 @@ import CreateConvocatoriaReducer from "./create_convocatoria_reducer";
 import CreatePortalUserReducer from "./create_portal_user_reducer";
 import CreateReportSnapshotReducer from "./create_report_snapshot_reducer";
 import DeactivateRagDocumentReducer from "./deactivate_rag_document_reducer";
+import DeactivateRagNormativeReducer from "./deactivate_rag_normative_reducer";
 import ImportFacultyProgramsReducer from "./import_faculty_programs_reducer";
 import InitPortalRolesReducer from "./init_portal_roles_reducer";
 import LinkApplicationConvocatoriaReducer from "./link_application_convocatoria_reducer";
@@ -55,16 +56,21 @@ import RecordDecanoReviewReducer from "./record_decano_review_reducer";
 import RegisterProfessorReducer from "./register_professor_reducer";
 import RegisterUserProfileReducer from "./register_user_profile_reducer";
 import SaveApplicationAnalysisVersionReducer from "./save_application_analysis_version_reducer";
+import UpdateApplicationExperienceSupportReducer from "./update_application_experience_support_reducer";
+import UpdateApplicationPublicationSourceKindReducer from "./update_application_publication_source_kind_reducer";
 import UpdateApplicationStatusReducer from "./update_application_status_reducer";
+import UpdateApplicationTitleSupportReducer from "./update_application_title_support_reducer";
 import UpdateConvocatoriaReducer from "./update_convocatoria_reducer";
 import UpdateUserProfileReducer from "./update_user_profile_reducer";
 import UpsertAcademicProgramReducer from "./upsert_academic_program_reducer";
 import UpsertApiConfigReducer from "./upsert_api_config_reducer";
 import UpsertEmailTemplateReducer from "./upsert_email_template_reducer";
 import UpsertFacultyReducer from "./upsert_faculty_reducer";
+import UpsertOpenrouterConfigReducer from "./upsert_openrouter_config_reducer";
 import UpsertPortalRoleReducer from "./upsert_portal_role_reducer";
 import UpsertRagConfigReducer from "./upsert_rag_config_reducer";
 import UpsertRagDocumentReducer from "./upsert_rag_document_reducer";
+import UpsertRagNormativeReducer from "./upsert_rag_normative_reducer";
 import UpsertResendConfigReducer from "./upsert_resend_config_reducer";
 import UpsertSystemSettingReducer from "./upsert_system_setting_reducer";
 
@@ -90,10 +96,12 @@ import AuditScoreSnapshotRow from "./audit_score_snapshot_table";
 import ConvocatoriaRow from "./convocatoria_table";
 import EmailTemplateRow from "./email_template_table";
 import FacultyRow from "./faculty_table";
+import OpenrouterConfigRow from "./openrouter_config_table";
 import PortalRoleRow from "./portal_role_table";
 import PortalSessionRow from "./portal_session_table";
 import RagConfigRow from "./rag_config_table";
 import RagDocumentRow from "./rag_document_table";
+import RagNormativeRow from "./rag_normative_table";
 import ReportSnapshotRow from "./report_snapshot_table";
 import ResendConfigRow from "./resend_config_table";
 import SystemSettingRow from "./system_setting_table";
@@ -459,6 +467,17 @@ const tablesSchema = __schema({
       { name: 'faculty_faculty_name_key', constraint: 'unique', columns: ['facultyName'] },
     ],
   }, FacultyRow),
+  openrouter_config: __table({
+    name: 'openrouter_config',
+    indexes: [
+      { accessor: 'config_key', name: 'openrouter_config_config_key_idx_btree', algorithm: 'btree', columns: [
+        'configKey',
+      ] },
+    ],
+    constraints: [
+      { name: 'openrouter_config_config_key_key', constraint: 'unique', columns: ['configKey'] },
+    ],
+  }, OpenrouterConfigRow),
   portal_role: __table({
     name: 'portal_role',
     indexes: [
@@ -539,6 +558,29 @@ const tablesSchema = __schema({
       { name: 'rag_document_document_key_key', constraint: 'unique', columns: ['documentKey'] },
     ],
   }, RagDocumentRow),
+  rag_normative: __table({
+    name: 'rag_normative',
+    indexes: [
+      { accessor: 'active', name: 'rag_normative_active_idx_btree', algorithm: 'btree', columns: [
+        'active',
+      ] },
+      { accessor: 'bucket_name', name: 'rag_normative_bucket_name_idx_btree', algorithm: 'btree', columns: [
+        'bucketName',
+      ] },
+      { accessor: 'document_id', name: 'rag_normative_document_id_idx_btree', algorithm: 'btree', columns: [
+        'documentId',
+      ] },
+      { accessor: 'normative_key', name: 'rag_normative_normative_key_idx_btree', algorithm: 'btree', columns: [
+        'normativeKey',
+      ] },
+      { accessor: 'title', name: 'rag_normative_title_idx_btree', algorithm: 'btree', columns: [
+        'title',
+      ] },
+    ],
+    constraints: [
+      { name: 'rag_normative_normative_key_key', constraint: 'unique', columns: ['normativeKey'] },
+    ],
+  }, RagNormativeRow),
   report_snapshot: __table({
     name: 'report_snapshot',
     indexes: [
@@ -646,6 +688,7 @@ const reducersSchema = __reducers(
   __reducerSchema("create_portal_user", CreatePortalUserReducer),
   __reducerSchema("create_report_snapshot", CreateReportSnapshotReducer),
   __reducerSchema("deactivate_rag_document", DeactivateRagDocumentReducer),
+  __reducerSchema("deactivate_rag_normative", DeactivateRagNormativeReducer),
   __reducerSchema("import_faculty_programs", ImportFacultyProgramsReducer),
   __reducerSchema("init_portal_roles", InitPortalRolesReducer),
   __reducerSchema("link_application_convocatoria", LinkApplicationConvocatoriaReducer),
@@ -656,16 +699,21 @@ const reducersSchema = __reducers(
   __reducerSchema("register_professor", RegisterProfessorReducer),
   __reducerSchema("register_user_profile", RegisterUserProfileReducer),
   __reducerSchema("save_application_analysis_version", SaveApplicationAnalysisVersionReducer),
+  __reducerSchema("update_application_experience_support", UpdateApplicationExperienceSupportReducer),
+  __reducerSchema("update_application_publication_source_kind", UpdateApplicationPublicationSourceKindReducer),
   __reducerSchema("update_application_status", UpdateApplicationStatusReducer),
+  __reducerSchema("update_application_title_support", UpdateApplicationTitleSupportReducer),
   __reducerSchema("update_convocatoria", UpdateConvocatoriaReducer),
   __reducerSchema("update_user_profile", UpdateUserProfileReducer),
   __reducerSchema("upsert_academic_program", UpsertAcademicProgramReducer),
   __reducerSchema("upsert_api_config", UpsertApiConfigReducer),
   __reducerSchema("upsert_email_template", UpsertEmailTemplateReducer),
   __reducerSchema("upsert_faculty", UpsertFacultyReducer),
+  __reducerSchema("upsert_openrouter_config", UpsertOpenrouterConfigReducer),
   __reducerSchema("upsert_portal_role", UpsertPortalRoleReducer),
   __reducerSchema("upsert_rag_config", UpsertRagConfigReducer),
   __reducerSchema("upsert_rag_document", UpsertRagDocumentReducer),
+  __reducerSchema("upsert_rag_normative", UpsertRagNormativeReducer),
   __reducerSchema("upsert_resend_config", UpsertResendConfigReducer),
   __reducerSchema("upsert_system_setting", UpsertSystemSettingReducer),
 );

@@ -20,11 +20,42 @@ import {
   type PortalSession,
 } from './services/portalAuth';
 
+const moduleToPath: Record<string, string> = {
+  inicio: '/',
+  auth: '/auth',
+  decano: '/decano',
+  cap: '/cap',
+  cepi: '/cepi',
+  talento_humano: '/talento_humano',
+  expedientes: '/expedientes',
+  reportes: '/reportes',
+  config: '/config',
+};
+
+const getModuleFromPath = (pathname: string): string => {
+  const normalized = pathname.replace(/\/+$/, '') || '/';
+  const aliasMap: Record<string, string> = {
+    '/': 'inicio',
+    '/inicio': 'inicio',
+    '/auth': 'auth',
+    '/decano': 'decano',
+    '/cap': 'cap',
+    '/cepi': 'cepi',
+    '/talento_humano': 'talento_humano',
+    '/talento-humano': 'talento_humano',
+    '/expedientes': 'expedientes',
+    '/reportes': 'reportes',
+    '/config': 'config',
+  };
+
+  return aliasMap[normalized] || 'inicio';
+};
+
 // -- App ------------------------------------------------------------------------
 const App = () => {
   const standalonePortal = new URLSearchParams(window.location.search).get('portal');
   const isStandaloneAutoregistro = standalonePortal === 'autoregistro';
-  const [activeModule, setActiveModule] = useState('inicio');
+  const [activeModule, setActiveModule] = useState(() => getModuleFromPath(window.location.pathname));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [portalSession, setPortalSession] = useState<PortalSession | null>(() => getPortalSession());
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -37,6 +68,19 @@ const App = () => {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    const onPopState = () => setActiveModule(getModuleFromPath(window.location.pathname));
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    const targetPath = moduleToPath[activeModule] || '/';
+    if (window.location.pathname === targetPath) return;
+    const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
+    window.history.pushState({}, '', nextUrl);
+  }, [activeModule]);
 
   const logout = async () => {
     clearPortalSession();

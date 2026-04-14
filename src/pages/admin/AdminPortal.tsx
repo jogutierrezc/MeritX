@@ -24,7 +24,10 @@ import type {
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
 import { APIConfigSection } from '../../components/APIConfigSection';
-import { RAGConfigSection } from '../../components/RAGConfigSection';
+import AppLogo from '../../components/Common/AppLogo';
+import { RagSettingsModule } from './modules/RagSettingsModule';
+import { RagDocumentosModule } from './modules/RagDocumentosModule';
+import { RagNormativaModule } from './modules/RagNormativaModule';
 import type {
   AIConfig,
   ApiConfig,
@@ -32,6 +35,7 @@ import type {
   NewUserForm,
   RagConfig,
   RagDocument,
+  RagNormative,
   ResendConfig,
   RoleConfig,
   RoleKey,
@@ -51,8 +55,10 @@ import { PlantillasModule } from './PlantillasModule';
 const SETTING_KEYS = {
   ai: 'cfg.ai',
   actions: 'cfg.actions',
+  openrouterApiKey: 'cfg.openrouter.apiKey',
   ragConfig: 'cfg.rag.config',
   ragDocuments: 'cfg.rag.documents',
+  ragNormatives: 'cfg.rag.normatives',
 } as const;
 
 const DEFAULT_ROLES: RoleConfig[] = [
@@ -96,6 +102,7 @@ const DEFAULT_ROLES: RoleConfig[] = [
 const DEFAULT_API_CONFIG: ApiConfig = {
   geminiApiKey: '',
   apifreellmApiKey: '',
+  openrouterApiKey: '',
   scopusApiKey: '',
   orcidClientId: '',
   orcidClientSecret: '',
@@ -224,6 +231,7 @@ const AdminPortal = () => {
   const [actions, setActions] = useState<WorkflowActions>(DEFAULT_ACTIONS);
   const [ragConfig, setRagConfig] = useState<RagConfig>(DEFAULT_RAG_CONFIG);
   const [ragDocuments, setRagDocuments] = useState<RagDocument[]>([]);
+  const [ragNormatives, setRagNormatives] = useState<RagNormative[]>([]);
 
   // ── Portal session ─────────────────────────────────────────────────────────
 
@@ -300,10 +308,14 @@ const AdminPortal = () => {
         ? (Array.from(assignmentTable.iter()) as UserFacultyAssignment[])
         : [];
       const apiRows = db.api_config ? (Array.from(db.api_config.iter()) as any[]) : [];
+      const openrouterRows = db.openrouter_config
+        ? (Array.from(db.openrouter_config.iter()) as any[])
+        : [];
       const resendRows = db.resend_config ? (Array.from(db.resend_config.iter()) as any[]) : [];
       const templateRows = db.email_template ? (Array.from(db.email_template.iter()) as any[]) : [];
       const ragConfigRows = db.rag_config ? (Array.from(db.rag_config.iter()) as any[]) : [];
       const ragDocumentRows = db.rag_document ? (Array.from(db.rag_document.iter()) as any[]) : [];
+      const ragNormativeRows = db.rag_normative ? (Array.from(db.rag_normative.iter()) as any[]) : [];
 
       // Roles
       if (roleRows.length > 0) {
@@ -342,10 +354,16 @@ const AdminPortal = () => {
 
       // API config
       const defaultApi = apiRows.find((row) => row.configKey === 'default');
+      const openrouterTableValue =
+        openrouterRows.find((row) => row.configKey === 'default')?.apiKey || '';
+      const openrouterSetting =
+        settingRows.find((row) => row.key === SETTING_KEYS.openrouterApiKey)?.value || '';
+      const effectiveOpenrouterKey = openrouterTableValue || openrouterSetting;
       if (defaultApi) {
         setApiConfig({
           geminiApiKey: defaultApi.geminiApiKey,
           apifreellmApiKey: defaultApi.apifreellmApiKey,
+          openrouterApiKey: effectiveOpenrouterKey,
           scopusApiKey: defaultApi.scopusApiKey,
           orcidClientId: defaultApi.orcidClientId,
           orcidClientSecret: defaultApi.orcidClientSecret,
@@ -354,6 +372,11 @@ const AdminPortal = () => {
           window.localStorage.setItem('meritx.scopusApiKey', String(defaultApi.scopusApiKey));
           window.localStorage.setItem('scopusApiKey', String(defaultApi.scopusApiKey));
         }
+      } else {
+        setApiConfig((prev) => ({
+          ...prev,
+          openrouterApiKey: effectiveOpenrouterKey,
+        }));
       }
 
       // Resend config
@@ -459,6 +482,25 @@ const AdminPortal = () => {
           : safeJSONParse<RagDocument[]>(settingMap.get(SETTING_KEYS.ragDocuments), []),
       );
 
+      const mappedNormatives = ragNormativeRows
+        .map((row: any) => ({
+          normativeKey: String(row.normativeKey ?? row.normative_key ?? ''),
+          title: String(row.title ?? ''),
+          content: String(row.jsonContent ?? row.json_content ?? ''),
+          active: Boolean(row.active),
+          documentId: String(row.documentId ?? row.document_id ?? ''),
+          uploadedBy: row.uploadedBy ?? row.uploaded_by,
+          uploadedAt: row.uploadedAt ?? row.uploaded_at,
+          storagePath: String(row.storagePath ?? row.storage_path ?? ''),
+        }))
+        .filter((r: any) => r.normativeKey);
+
+      setRagNormatives(
+        mappedNormatives.length > 0
+          ? mappedNormatives
+          : safeJSONParse<RagNormative[]>(settingMap.get(SETTING_KEYS.ragNormatives), []),
+      );
+
       setAiConfig(safeJSONParse(settingMap.get(SETTING_KEYS.ai), DEFAULT_AI_CONFIG));
       setActions(safeJSONParse(settingMap.get(SETTING_KEYS.actions), DEFAULT_ACTIONS));
     };
@@ -487,11 +529,13 @@ const AdminPortal = () => {
             'SELECT * FROM faculty',
             'SELECT * FROM user_faculty_assignment',
             'SELECT * FROM api_config',
+            'SELECT * FROM openrouter_config',
             'SELECT * FROM resend_config',
             'SELECT * FROM email_template',
             'SELECT * FROM system_setting',
             'SELECT * FROM rag_config',
             'SELECT * FROM rag_document',
+            'SELECT * FROM rag_normative',
           ]);
       });
     };
@@ -645,6 +689,23 @@ const AdminPortal = () => {
         value: item.value,
       });
     }
+
+    try {
+      await runReducer('upsert_openrouter_config', {
+        configKey: 'default',
+        apiKey: apiConfig.openrouterApiKey || '',
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('Reducer no disponible: upsert_openrouter_config')) {
+        throw error;
+      }
+      await runReducer('upsert_system_setting', {
+        key: SETTING_KEYS.openrouterApiKey,
+        scope: 'CONFIG',
+        campus: undefined,
+        value: apiConfig.openrouterApiKey || '',
+      });
+    }
   };
 
   const saveRagConfig = async () => {
@@ -733,6 +794,69 @@ const AdminPortal = () => {
         campus: undefined,
         value: safeJSONStringify(docs),
       });
+    }
+  };
+
+  const uploadRagNormative = async (title: string, json: string, file?: File) => {
+    const normativeKey = `${Date.now()}-${title}`.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase();
+    const bucketName = ragConfig.bucketName.trim() || DEFAULT_RAG_CONFIG.bucketName;
+    const nextNorm = {
+      normativeKey,
+      title: title || (file ? file.name.replace(/\.[^.]+$/, '') : 'normativa'),
+      content: json,
+      active: true,
+      uploadedAt: new Date().toISOString(),
+      storagePath: `${bucketName}/${normativeKey}`,
+    } as RagNormative;
+
+    try {
+      await runReducer('upsert_rag_normative', {
+        normativeKey,
+        title: nextNorm.title,
+        jsonContent: json,
+        bucketName,
+        storagePath: nextNorm.storagePath,
+        active: true,
+      });
+    } catch (error) {
+      if (!isReducerMissingError(error, 'upsert_rag_normative')) throw error;
+      const items = [nextNorm, ...ragNormatives.filter((r) => r.normativeKey !== nextNorm.normativeKey)];
+      setRagNormatives(items);
+      await runReducer('upsert_system_setting', {
+        key: SETTING_KEYS.ragNormatives,
+        scope: 'CONFIG',
+        campus: undefined,
+        value: safeJSONStringify(items),
+      });
+    }
+  };
+
+  const deactivateRagNormative = async (normativeKey: string) => {
+    try {
+      await runReducer('deactivate_rag_normative', { normativeKey });
+    } catch (error) {
+      // If the reducer isn't present (older deployments), fall back to system_setting.
+      // Also handle the case where the reducer exists but the normative is only stored in system_setting
+      // (reducer will throw a SenderError with message 'Normativa RAG no encontrada.').
+      const errMsg = (error && (error as any).message) || String(error);
+      if (!isReducerMissingError(error, 'deactivate_rag_normative') && !/Normativa RAG no encontrada/i.test(errMsg)) {
+        throw error;
+      }
+
+      // Mark local copy as inactive and persist to legacy system_setting storage.
+      const items = ragNormatives.map((r) => (r.normativeKey === normativeKey ? { ...r, active: false } : r));
+      setRagNormatives(items);
+      try {
+        await runReducer('upsert_system_setting', {
+          key: SETTING_KEYS.ragNormatives,
+          scope: 'CONFIG',
+          campus: undefined,
+          value: safeJSONStringify(items),
+        });
+      } catch (e) {
+        // If persisting legacy setting fails, at least keep in-memory state updated and log.
+        console.error('Failed to persist legacy rag normatives after deactivate fallback', e);
+      }
     }
   };
 
@@ -825,13 +949,27 @@ const AdminPortal = () => {
     try {
       setSaving(true);
       setStatusMessage('');
-      await saveRoles();
       await saveSettings();
       await saveRagConfig();
+      await saveRoles();
       setStatusMessage('Configuracion guardada en SpacetimeDB.');
     } catch (error) {
       console.error(error);
       setStatusMessage('No fue posible guardar. Verifica sesion admin en Spacetime.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveApiOnly = async () => {
+    try {
+      setSaving(true);
+      setStatusMessage('');
+      await saveSettings();
+      setStatusMessage('Configuracion de APIs guardada en SpacetimeDB.');
+    } catch (error) {
+      console.error(error);
+      setStatusMessage('No fue posible guardar APIs. Verifica sesion admin en Spacetime.');
     } finally {
       setSaving(false);
     }
@@ -858,19 +996,7 @@ const AdminPortal = () => {
       {/* ── Top bar ── */}
       <div className="border-b border-slate-200 bg-white/80 px-6 backdrop-blur-md">
         <div className="flex h-20 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 p-2 shadow-lg shadow-blue-200">
-              <ShieldCheck className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-black uppercase leading-none tracking-tight text-blue-900">
-                Panel <span className="text-blue-600">Admin</span>
-              </h1>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                SpacetimeDB · Configuracion avanzada
-              </p>
-            </div>
-          </div>
+          <AppLogo className="flex items-center" imgClassName="h-11 w-auto md:h-12" />
 
           <div className="flex items-center gap-4">
             <button className="relative p-2 text-slate-400 transition-colors hover:text-blue-600">
@@ -991,11 +1117,21 @@ const AdminPortal = () => {
 
           {activeTab === 'api' && (
             <div className="space-y-6">
-              <div>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
                 <h2 className="text-3xl font-black tracking-tight text-slate-800">Configuracion de API</h2>
                 <p className="font-medium text-slate-500">
                   Conecta el sistema con Gemini, APIFreeLLM, SCOPUS y ORCID.
                 </p>
+                </div>
+                <button
+                  onClick={saveApiOnly}
+                  disabled={saving || loading}
+                  className="flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {saving ? 'Guardando...' : 'Guardar APIs'}
+                </button>
               </div>
               <APIConfigSection apiConfig={apiConfig} onUpdateApiConfig={setApiConfig} />
             </div>
@@ -1025,41 +1161,27 @@ const AdminPortal = () => {
                   con recomendacion.
                 </p>
               </div>
-              <RAGConfigSection
+              <RagSettingsModule
                 ragConfig={ragConfig}
-                ragDocuments={ragDocuments}
                 apiConfig={apiConfig}
                 onChangeRagConfig={setRagConfig}
-                onSaveRagConfig={async () => {
-                  try {
-                    setStatusMessage('');
-                    await saveRagConfig();
-                    setStatusMessage('Configuracion RAG guardada correctamente.');
-                  } catch (error) {
-                    console.error(error);
-                    setStatusMessage('No fue posible guardar la configuracion RAG.');
-                  }
+                onSaveRagConfig={saveRagConfig}
+                onStatus={setStatusMessage}
+              />
+              <RagDocumentosModule
+                ragDocuments={ragDocuments}
+                ragConfig={ragConfig}
+                onUpload={uploadRagDocument}
+                onDeactivate={deactivateRagDocument}
+                onStatus={setStatusMessage}
+              />
+              <RagNormativaModule
+                ragNormatives={ragNormatives}
+                onUpload={async (title, json, documentId, file) => {
+                  await uploadRagNormative(title, json, file);
                 }}
-                onUploadDocument={async (file) => {
-                  try {
-                    setStatusMessage('');
-                    await uploadRagDocument(file);
-                    setStatusMessage(`Documento ${file.name} cargado al bucket RAG.`);
-                  } catch (error) {
-                    console.error(error);
-                    setStatusMessage('No fue posible cargar el documento RAG.');
-                  }
-                }}
-                onDeactivateDocument={async (documentKey) => {
-                  try {
-                    setStatusMessage('');
-                    await deactivateRagDocument(documentKey);
-                    setStatusMessage('Documento RAG desactivado correctamente.');
-                  } catch (error) {
-                    console.error(error);
-                    setStatusMessage('No fue posible desactivar el documento RAG.');
-                  }
-                }}
+                onDeactivate={deactivateRagNormative}
+                onStatus={setStatusMessage}
               />
             </div>
           )}

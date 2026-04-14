@@ -254,6 +254,60 @@ export const testApifreellmConnection = async (apiKey: string): Promise<Integrat
 };
 
 /**
+ * Prueba conexión a OpenRouter API
+ */
+export const testOpenRouterConnection = async (apiKey: string): Promise<IntegrationTestResult> => {
+  if (!apiKey || apiKey.trim() === '') {
+    return {
+      success: false,
+      message: 'API Key de OpenRouter no proporcionada',
+      timestamp: new Date(),
+    };
+  }
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const total = Array.isArray(data?.data) ? data.data.length : 0;
+      return {
+        success: true,
+        message: 'Conexión exitosa con OpenRouter. API Key válida.',
+        timestamp: new Date(),
+        metadata: { modelsAvailable: total },
+      };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        success: false,
+        message: 'API Key de OpenRouter inválida o sin permisos (401/403)',
+        timestamp: new Date(),
+      };
+    }
+
+    return {
+      success: false,
+      message: `Error de OpenRouter: ${response.status} ${response.statusText}`,
+      timestamp: new Date(),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Error al conectar con OpenRouter: ${error instanceof Error ? error.message : String(error)}`,
+      timestamp: new Date(),
+    };
+  }
+};
+
+/**
  * Genera código de registro para servicios externos
  */
 export const generateRegistrationCode = (service: 'scopus' | 'orcid' | 'gemini'): RegistrationCode => {

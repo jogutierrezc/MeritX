@@ -54,6 +54,32 @@ export type AnalysisVersionRecord = {
   createdAt: string;
 };
 
+export type SelectedTitleDetail = {
+  id: number;
+  titleName: string;
+  titleLevel: string;
+  supportName?: string;
+  supportPath?: string;
+};
+
+export type SelectedExperienceDetail = {
+  id: number;
+  experienceType: string;
+  startedAt: string;
+  endedAt: string;
+  certified: boolean;
+  supportName?: string;
+  supportPath?: string;
+};
+
+export type SelectedPublicationDetail = {
+  id: number;
+  publicationTitle: string;
+  quartile: string;
+  publicationYear: string;
+  sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL';
+};
+
 export type SelectedAnalysis = {
   rows: MatrixRow[];
   matrixTotal: number;
@@ -63,4 +89,7 @@ export type SelectedAnalysis = {
     outputMessage?: string;
   };
   hasDocumentSupports: boolean;
+  titles: SelectedTitleDetail[];
+  experiences: SelectedExperienceDetail[];
+  publications: SelectedPublicationDetail[];
 };

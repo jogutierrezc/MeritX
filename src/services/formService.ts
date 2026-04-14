@@ -27,7 +27,7 @@ export type ProductionItem = {
   fecha: string;
   tipo?: string;
   autores?: number;
-  fuente?: 'SCOPUS' | 'MANUAL' | 'scopus' | 'manual';
+  fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL' | 'scopus' | 'orcid' | 'manual';
 };
 
 export type ExperienceItem = {

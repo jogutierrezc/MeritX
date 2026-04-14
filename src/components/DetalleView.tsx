@@ -97,7 +97,7 @@ const DetalleView: React.FC<Props> = ({
           fecha: p.publicationYear,
           tipo: p.publicationType,
           autores: p.authorsCount,
-          fuente: p.sourceKind as 'SCOPUS' | 'MANUAL',
+          fuente: p.sourceKind as 'SCOPUS' | 'ORCID' | 'MANUAL',
         })),
         experiencia: experiences.map((e) => ({
           tipo: e.experienceType as 'Profesional' | 'Docencia Universitaria' | 'Investigación',

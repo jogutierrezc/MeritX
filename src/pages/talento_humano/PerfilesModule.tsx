@@ -16,11 +16,13 @@ import NuevoView from '../../components/NuevoView';
 import type { FormState, RequestRecord } from '../../types/domain';
 import { CATEGORIES, emptyForm } from '../../types/escalafon';
 import { calculateAdvancedEscalafon, getSuggestedCategoryByPoints } from '../../utils/calculateEscalafon';
+import { normativeToRagChunks } from '../../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../../services/orcid';
 import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { AnalysisDetailView } from './perfiles/AnalysisDetailView';
+import { openMeritxReportWindow, renderMeritxReportError, renderMeritxReportWindow } from './perfiles/meritxReportWindow';
 import { VersionDetailModal } from './perfiles/VersionDetailModal';
 import {
   diffYears,
@@ -32,9 +34,31 @@ import {
   parseAiJson,
   toSafeNumber,
 } from './perfiles/helpers';
-import type { AnalysisVersionRecord, AiCriterionRow, ArrayKey, ChatMessage, ManualRow, MatrixRow } from './perfiles/types';
+import type {
+  AnalysisVersionRecord,
+  AiCriterionRow,
+  ArrayKey,
+  ChatMessage,
+  ManualRow,
+  MatrixRow,
+  SelectedExperienceDetail,
+  SelectedPublicationDetail,
+  SelectedTitleDetail,
+} from './perfiles/types';
 
 const clamp = (value: number) => (Number.isFinite(value) ? value : 0);
+
+const normalizePublicationSource = (value?: string) => {
+  const normalized = normalizeText(value || '');
+  if (normalized.includes('scopus')) return 'SCOPUS' as const;
+  if (normalized.includes('orcid')) return 'ORCID' as const;
+  return 'MANUAL' as const;
+};
+
+const isIndexedPublicationSource = (value?: string) => {
+  const source = normalizePublicationSource(value);
+  return source === 'SCOPUS' || source === 'ORCID';
+};
 
 type StoredRagDocument = {
   documentKey: string;
@@ -50,6 +74,64 @@ const normalizeForSearch = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
+const normalizeAiProvider = (value?: string): 'gemini' | 'apifreellm' | 'openrouter' => {
+  const normalized = normalizeForSearch(String(value || ''));
+  if (normalized.includes('openrouter') || normalized.includes('router')) return 'openrouter';
+  return normalized.includes('free') ? 'apifreellm' : 'gemini';
+};
+
+const OPENROUTER_DEFAULT_MODELS = ['google/gemma-3-27b-it:free', 'google/gemma-2-9b-it:free'];
+const OPENROUTER_BLOCKED_MODELS = ['meta-llama/llama-3.3-8b-instruct:free'];
+
+const sanitizeOpenRouterModelList = (value?: string) => {
+  const blocked = OPENROUTER_BLOCKED_MODELS.map((item) => normalizeForSearch(item));
+  const cleaned = String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !blocked.includes(normalizeForSearch(item)));
+
+  return Array.from(new Set([...cleaned, ...OPENROUTER_DEFAULT_MODELS])).join(',');
+};
+
+const resolveAiRuntime = (params: {
+  provider?: string;
+  model?: string;
+  geminiKey?: string;
+  apifreellmKey?: string;
+  openrouterKey?: string;
+}) => {
+  const configuredProvider = normalizeAiProvider(params.provider);
+  const geminiKey = String(params.geminiKey || '').trim();
+  const apifreellmKey = String(params.apifreellmKey || '').trim();
+  const openrouterKey = String(params.openrouterKey || '').trim();
+
+  let provider: 'gemini' | 'apifreellm' | 'openrouter' = configuredProvider;
+  let activeKey = provider === 'gemini' ? geminiKey : provider === 'openrouter' ? openrouterKey : apifreellmKey;
+
+  if (!activeKey) {
+    if (openrouterKey) {
+      provider = 'openrouter';
+      activeKey = openrouterKey;
+    } else if (apifreellmKey) {
+      provider = 'apifreellm';
+      activeKey = apifreellmKey;
+    } else if (geminiKey) {
+      provider = 'gemini';
+      activeKey = geminiKey;
+    }
+  }
+
+  const requestedModel = String(params.model || '').trim();
+  const model = provider === 'gemini'
+    ? (requestedModel && !normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'gemini-2.5-flash')
+    : provider === 'openrouter'
+      ? sanitizeOpenRouterModelList(requestedModel)
+      : (requestedModel && normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'apifreellm');
+
+  return { provider, model, activeKey };
+};
+
 const compactText = (value: string) =>
   value
     .replace(/[^\x20-\x7E\u00A0-\u024F\n\r\t]/g, ' ')
@@ -57,6 +139,328 @@ const compactText = (value: string) =>
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
+
+const sanitizeNarrativeText = (value: unknown) =>
+  String(value || '')
+    .replace(/\*\*/g, '')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+const extractFirstJsonObject = (text: string) => {
+  const source = String(text || '');
+  const start = source.indexOf('{');
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < source.length; i += 1) {
+    const ch = source[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{') depth += 1;
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+
+  return null;
+};
+
+const parseAiJsonObjectLoose = (raw: string) => {
+  const cleaned = String(raw || '')
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+
+  const extracted = extractFirstJsonObject(cleaned);
+  const candidates = [cleaned, extracted]
+    .filter((item): item is string => Boolean(item && item.trim().length > 0));
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try sanitized JSON variant
+    }
+
+    try {
+      const sanitized = candidate
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(sanitized);
+    } catch {
+      // continue with next candidate
+    }
+  }
+
+  return null;
+};
+
+const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+const waitMs = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+const requestGeminiText = async (params: {
+  model: string;
+  apiKey: string;
+  userPrompt: string;
+  systemPrompt?: string;
+  maxRetries?: number;
+}) => {
+  const { model, apiKey, userPrompt, systemPrompt, maxRetries = 3 } = params;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: userPrompt }] }],
+        ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    }
+
+    const bodyText = await res.text();
+    lastError = new Error(`Gemini HTTP ${res.status}: ${bodyText}`);
+
+    if (RETRYABLE_HTTP_STATUS.has(res.status) && attempt < maxRetries) {
+      await waitMs(500 * attempt);
+      continue;
+    }
+
+    throw lastError;
+  }
+
+  throw lastError || new Error('Gemini no respondió con contenido válido.');
+};
+
+const requestApifreellmText = async (params: {
+  model: string;
+  apiKey: string;
+  message: string;
+}) => {
+  const { model, apiKey, message } = params;
+  const res = await fetch('/api/apifreellm/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      message,
+      model: model || 'apifreellm',
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data.response || data.message || data.content || data.text || '';
+};
+
+const getOpenRouterAvailableFreeModels = async (apiKey: string) => {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+    if (!res.ok) return [] as string[];
+
+    const data = await res.json();
+    const allIds = Array.isArray(data?.data)
+      ? data.data
+        .map((item: any) => String(item?.id || '').trim())
+        .filter(Boolean)
+      : [];
+
+    const preferredFree = allIds.filter((id: string) => {
+      const normalized = normalizeForSearch(id);
+      if (!normalized.includes('free')) return false;
+      return (
+        normalized.includes('gemma') ||
+        normalized.includes('llama') ||
+        normalized.includes('qwen') ||
+        normalized.includes('mistral')
+      );
+    });
+
+    return preferredFree.slice(0, 8);
+  } catch {
+    return [] as string[];
+  }
+};
+
+const requestOpenRouterText = async (params: {
+  model: string;
+  apiKey: string;
+  userPrompt: string;
+  systemPrompt?: string;
+}) => {
+  const { model, apiKey, userPrompt, systemPrompt } = params;
+  const modelCandidates = String(model || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const defaultCandidates = ['google/gemma-3-27b-it:free', 'google/gemma-2-9b-it:free'];
+  const orderedModels = Array.from(new Set([
+    ...modelCandidates,
+    ...defaultCandidates,
+  ]));
+
+  const tryCandidate = async (candidate: string) => {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: candidate,
+        messages: [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        return content.map((item: any) => String(item?.text || '')).join(' ').trim();
+      }
+      return '';
+    }
+
+    const bodyText = await res.text();
+    throw new Error(`OpenRouter HTTP ${res.status}: ${bodyText}`);
+  };
+
+  let lastError: Error | null = null;
+  for (const candidate of orderedModels) {
+    try {
+      return await tryCandidate(candidate);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  const discoveredCandidates = await getOpenRouterAvailableFreeModels(apiKey);
+  const retryCandidates = discoveredCandidates.filter((candidate: string) => !orderedModels.includes(candidate));
+  for (const candidate of retryCandidates) {
+    try {
+      return await tryCandidate(candidate);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw lastError || new Error('OpenRouter no respondió con contenido válido.');
+};
+
+const requestAiTextWithFallback = async (params: {
+  runtime: { provider: 'gemini' | 'apifreellm' | 'openrouter'; model: string; activeKey: string };
+  userPrompt: string;
+  systemPrompt?: string;
+  fallbackApifreellmKey?: string;
+  fallbackGeminiKey?: string;
+}) => {
+  const { runtime, userPrompt, systemPrompt, fallbackApifreellmKey, fallbackGeminiKey } = params;
+
+  if (runtime.provider === 'openrouter') {
+    try {
+      return await requestOpenRouterText({
+        model: runtime.model,
+        apiKey: runtime.activeKey,
+        userPrompt,
+        systemPrompt,
+      });
+    } catch (openrouterError) {
+      const fallbackKey = String(fallbackApifreellmKey || '').trim();
+      if (!fallbackKey) throw openrouterError;
+
+      console.warn('[AI][Perfiles] OpenRouter no disponible, usando fallback APIFreeLLM.', openrouterError);
+      return requestApifreellmText({
+        model: 'apifreellm',
+        apiKey: fallbackKey,
+        message: systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt,
+      });
+    }
+  }
+
+  if (runtime.provider === 'gemini') {
+    try {
+      return await requestGeminiText({
+        model: runtime.model,
+        apiKey: runtime.activeKey,
+        userPrompt,
+        systemPrompt,
+        maxRetries: 3,
+      });
+    } catch (geminiError) {
+      const fallbackKey = String(fallbackApifreellmKey || '').trim();
+      if (!fallbackKey) throw geminiError;
+
+      console.warn('[AI][Perfiles] Gemini no disponible, usando fallback APIFreeLLM.', geminiError);
+      return requestApifreellmText({
+        model: 'apifreellm',
+        apiKey: fallbackKey,
+        message: systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt,
+      });
+    }
+  }
+
+  try {
+    return await requestApifreellmText({
+      model: runtime.model || 'apifreellm',
+      apiKey: runtime.activeKey,
+      message: systemPrompt ? `${systemPrompt}\n\n${userPrompt}` : userPrompt,
+    });
+  } catch (apifreeError) {
+    const fallbackGemini = String(fallbackGeminiKey || '').trim();
+    if (!fallbackGemini) throw apifreeError;
+    console.warn('[AI][Perfiles] APIFreeLLM no disponible, usando fallback Gemini.', apifreeError);
+    return requestGeminiText({
+      model: 'gemini-2.5-flash',
+      apiKey: fallbackGemini,
+      userPrompt,
+      systemPrompt,
+      maxRetries: 2,
+    });
+  }
+};
 
 const decodeBase64Document = (contentBase64?: string) => {
   if (!contentBase64) return '';
@@ -149,6 +553,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const [orcidClientSecret, setOrcidClientSecret] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [apifreellmApiKey, setApifreellmApiKey] = useState('');
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
   const [aiProvider, setAiProvider] = useState('gemini');
   const [aiModel, setAiModel] = useState('gemini-2.5-flash');
   const [ragSystemContext, setRagSystemContext] = useState('');
@@ -159,6 +564,31 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNarrative, setAiNarrative] = useState('');
   const [aiRows, setAiRows] = useState<AiCriterionRow[]>([]);
+  const [meritxNarrativeLoading, setMeritxNarrativeLoading] = useState(false);
+  const [ragDiagnostics, setRagDiagnostics] = useState<{
+    generatedAt: string;
+    queryTerms: number;
+    activeDocs: number;
+    detectedNormatives: number;
+    activeNormatives: number;
+    docChunks: number;
+    normativeChunks: number;
+    rankedMatches: number;
+    fallbackCandidates: number;
+    selectedChunks: number;
+    usedFallback: boolean;
+    forcedProtocolDetected: boolean;
+    forcedProtocolIncluded: boolean;
+    sources: string[];
+  } | null>(null);
+  const [meritxNarrative, setMeritxNarrative] = useState<{
+    analisisMatriz: string;
+    analisisMotor: string;
+    analisisOficial: string;
+    analisisNormativo: string;
+    conclusionIntermedia: string;
+    puntajeIntermedio: number;
+  } | null>(null);
   const [metriXChat, setMetriXChat] = useState<ChatMessage[]>([]);
   const [metriXInput, setMetriXInput] = useState('');
   const [metriXLoading, setMetriXLoading] = useState(false);
@@ -220,6 +650,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       const experienceTable = dbView.applicationExperience || dbView.application_experience;
       const analysisVersionTable = dbView.applicationAnalysisVersion || dbView.application_analysis_version;
       const ragTable = dbView.ragConfig || dbView.rag_config;
+      const settingTable = dbView.systemSetting || dbView.system_setting;
+      const openrouterTable = dbView.openrouterConfig || dbView.openrouter_config;
 
       const apiTable = dbView.apiConfig || dbView.api_config;
       if (apiTable) {
@@ -230,8 +662,27 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         if (defaultCfg?.orcidClientSecret) setOrcidClientSecret(defaultCfg.orcidClientSecret);
         if (defaultCfg?.geminiApiKey) setGeminiApiKey(defaultCfg.geminiApiKey);
         if (defaultCfg?.apifreellmApiKey) setApifreellmApiKey(defaultCfg.apifreellmApiKey);
-        if (defaultCfg?.aiProvider) setAiProvider(defaultCfg.aiProvider);
-        if (defaultCfg?.aiModel) setAiModel(defaultCfg.aiModel);
+        if (defaultCfg?.openrouterApiKey) setOpenrouterApiKey(defaultCfg.openrouterApiKey);
+        const cfgProvider = normalizeAiProvider(defaultCfg?.aiProvider);
+        const cfgModel = String(defaultCfg?.aiModel || '').trim();
+        setAiProvider(cfgProvider);
+        if (cfgProvider === 'openrouter') {
+          setAiModel(sanitizeOpenRouterModelList(cfgModel));
+        } else if (cfgModel) {
+          setAiModel(cfgModel);
+        }
+      }
+
+      if (settingTable) {
+        const settingRows = Array.from(settingTable.iter()) as any[];
+        const openrouterRow = settingRows.find((r) => r.key === 'cfg.openrouter.apiKey');
+        if (openrouterRow?.value) setOpenrouterApiKey(String(openrouterRow.value));
+      }
+
+      if (openrouterTable) {
+        const openrouterRows = Array.from(openrouterTable.iter()) as any[];
+        const defaultOpenrouter = openrouterRows.find((r) => r.configKey === 'default');
+        if (defaultOpenrouter?.apiKey) setOpenrouterApiKey(String(defaultOpenrouter.apiKey));
       }
 
       if (ragTable) {
@@ -328,23 +779,32 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       );
     };
 
+    let liveSubscription: { unsubscribe: () => void } | null = null;
+
     const loadOnce = async () => {
       await new Promise<void>((resolve, reject) => {
-        const subscription = connection
+        let settled = false;
+        liveSubscription = connection
           .subscriptionBuilder()
           .onApplied(() => {
             try {
               refreshFromCache();
-              resolve();
+              if (!settled) {
+                settled = true;
+                resolve();
+              }
             } catch (error) {
-              reject(error);
-            } finally {
-              subscription.unsubscribe();
+              if (!settled) {
+                settled = true;
+                reject(error);
+              }
             }
           })
           .onError((ctx: unknown) => {
-            subscription.unsubscribe();
-            reject(ctx);
+            if (!settled) {
+              settled = true;
+              reject(ctx);
+            }
           })
           .subscribe([
             'SELECT * FROM application',
@@ -354,6 +814,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
             'SELECT * FROM application_experience',
             'SELECT * FROM application_analysis_version',
             'SELECT * FROM api_config',
+            'SELECT * FROM openrouter_config',
+            'SELECT * FROM rag_config',
+            'SELECT * FROM rag_document',
+            'SELECT * FROM rag_normative',
+            'SELECT * FROM system_setting',
             'SELECT * FROM faculty',
             'SELECT * FROM academic_program',
             'SELECT * FROM convocatoria',
@@ -366,6 +831,10 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
     return () => {
       reloadRef.current = null;
+      if (liveSubscription) {
+        liveSubscription.unsubscribe();
+        liveSubscription = null;
+      }
       connection.disconnect();
       connectionRef.current = null;
     };
@@ -564,7 +1033,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     const experiences = allExperiences.filter((row) => row.trackingId === trackingId);
     const hasDocumentSupports =
       titles.some((row) => hasSupport(row.supportName, row.supportPath)) ||
-      experiences.some((row) => hasSupport(row.supportName, row.supportPath));
+      experiences.some((row) => hasSupport(row.supportName, row.supportPath)) ||
+      publications.some((row) => isIndexedPublicationSource(row.sourceKind));
 
     const pregrados = titles.filter((row) => normalizeTitleLevel(row.titleLevel) === 'Pregrado');
     const especializaciones = titles.filter((row) => normalizeTitleLevel(row.titleLevel) === 'Especialización');
@@ -779,27 +1249,28 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       puntaje: Number((row.cantidad * row.valor).toFixed(1)),
     }));
 
-    const productionScore = publications.reduce((acc, row) => {
+    const otherRows: MatrixRow[] = publications.map((row, index) => {
+      const source = normalizePublicationSource(row.sourceKind);
+      const isIndexed = source === 'SCOPUS' || source === 'ORCID';
       const quartileValue = { q1: 70, q2: 50, q3: 30, q4: 20 }[normalizeText(row.quartile) as 'q1' | 'q2' | 'q3' | 'q4'] || 20;
       const authors = Number(row.authorsCount || 1);
-      const factor = authors <= 2 ? 1 : authors <= 4 ? 0.5 : 1 / authors;
-      return acc + quartileValue * factor;
-    }, 0);
+      const factor = authors <= 2 ? 1 : authors <= 4 ? 0.5 : 1 / Math.max(1, authors);
+      const valorUnitario = Number((quartileValue * factor).toFixed(1));
+      const puntajeFinal = isIndexed ? valorUnitario : 0;
 
-    const otherRows: MatrixRow[] = [
-      {
+      return {
         section: 'Otros',
-        criterio: 'PRODUCCIÓN INTELECTUAL',
-        detalle: publications
-          .map((row) => `${row.publicationTitle} (${row.quartile}, ${row.publicationYear})`)
-          .join(' | ') || '-',
-        cantidad: publications.length,
-        valor: 0,
-        puntaje: Number(productionScore.toFixed(1)),
-        hasSupport: false,
-        supportNote: 'Sin soporte documental explícito',
-      },
-    ];
+        criterio: `PRODUCCIÓN INTELECTUAL ${index + 1}`,
+        detalle: `${row.publicationTitle} (${String(row.quartile || 'Q4').toUpperCase()}, ${row.publicationYear}, ${source})`,
+        cantidad: 1,
+        valor: valorUnitario,
+        puntaje: puntajeFinal,
+        hasSupport: isIndexed,
+        supportNote: isIndexed
+          ? `Validado por fuente indexada (${source})`
+          : 'Registro manual sin soporte indexado (no puntúa)',
+      };
+    });
 
     const matrixRows = [...studiesRows, ...experienceRows, ...otherRows].filter(
       (row) => row.cantidad > 0 || row.puntaje > 0,
@@ -833,7 +1304,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         fecha: row.publicationYear,
         tipo: row.publicationType,
         autores: Number(row.authorsCount || 1),
-        fuente: (row.sourceKind as 'SCOPUS' | 'MANUAL') || 'MANUAL',
+        fuente: normalizePublicationSource(row.sourceKind),
       })),
       experiencia: experiences.map((row) => ({
         tipo: normalizeExperienceType(row.experienceType),
@@ -848,18 +1319,93 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
     const suggested = calculateAdvancedEscalafon(formStateForCalc);
 
+    const titleDetails: SelectedTitleDetail[] = titles.map((row) => ({
+      id: Number(row.id),
+      titleName: row.titleName,
+      titleLevel: row.titleLevel,
+      supportName: row.supportName || undefined,
+      supportPath: row.supportPath || undefined,
+    }));
+
+    const experienceDetails: SelectedExperienceDetail[] = experiences.map((row) => ({
+      id: Number(row.id),
+      experienceType: row.experienceType,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      certified: Boolean(row.certified),
+      supportName: row.supportName || undefined,
+      supportPath: row.supportPath || undefined,
+    }));
+
+    const publicationDetails: SelectedPublicationDetail[] = publications.map((row) => ({
+      id: Number(row.id),
+      publicationTitle: row.publicationTitle,
+      quartile: row.quartile,
+      publicationYear: row.publicationYear,
+      sourceKind: normalizePublicationSource(row.sourceKind),
+    }));
+
     return {
       rows: matrixRows,
       matrixTotal,
       suggested,
       hasDocumentSupports,
+      titles: titleDetails,
+      experiences: experienceDetails,
+      publications: publicationDetails,
     };
   }, [selectedAnalysisRequest, allExperiences, allLanguages, allPublications, allTitles]);
+
+  const handleSaveProfileEvidence = async (
+    payload: {
+      titles: Array<{ id: number; supportName: string; supportPath: string }>;
+      experiences: Array<{ id: number; supportName: string; supportPath: string }>;
+      publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
+    },
+  ) => {
+    if (!selectedAnalysisRequest) return;
+
+    try {
+      setLoading(true);
+
+      for (const row of payload.titles) {
+        await runReducer('update_application_title_support', {
+          id: row.id,
+          supportName: row.supportName.trim() || undefined,
+          supportPath: row.supportPath.trim() || undefined,
+        });
+      }
+
+      for (const row of payload.experiences) {
+        await runReducer('update_application_experience_support', {
+          id: row.id,
+          supportName: row.supportName.trim() || undefined,
+          supportPath: row.supportPath.trim() || undefined,
+        });
+      }
+
+      for (const row of payload.publications) {
+        await runReducer('update_application_publication_source_kind', {
+          id: row.id,
+          sourceKind: row.sourceKind,
+        });
+      }
+
+      if (reloadRef.current) await reloadRef.current();
+      window.alert('Perfil actualizado. Se guardaron soportes y fuentes de producción.');
+    } catch (error) {
+      console.error(error);
+      window.alert(error instanceof Error ? error.message : 'No fue posible actualizar los soportes del perfil.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedAnalysis) {
       setAiRows([]);
       setAiNarrative('');
+      setMeritxNarrative(null);
       setMetriXChat([]);
       setMetriXInput('');
       setManualRows([]);
@@ -870,6 +1416,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
     setAiRows([]);
     setAiNarrative('');
+    setMeritxNarrative(null);
     setMetriXChat([]);
     setMetriXInput('');
     setManualRows(
@@ -892,12 +1439,19 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const runAiSuggestion = async () => {
     if (!selectedAnalysisRequest || !selectedAnalysis) return;
 
-    const provider = aiProvider || 'gemini';
-    const model = aiModel || 'gemini-2.5-flash';
-    const activeKey = provider === 'gemini' ? (geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '') : apifreellmApiKey;
+    const runtime = resolveAiRuntime({
+      provider: aiProvider,
+      model: aiModel,
+      geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      apifreellmKey: apifreellmApiKey,
+      openrouterKey: openrouterApiKey,
+    });
+    const provider = runtime.provider;
+    const model = runtime.model;
+    const activeKey = runtime.activeKey;
 
     if (!activeKey) {
-      window.alert(`No se encontró API Key para ${provider === 'gemini' ? 'Gemini' : 'APIFreeLLM'}.`);
+      window.alert('No se encontró API Key activa. Configura Gemini o APIFreeLLM en Configuración > API.');
       return;
     }
 
@@ -915,12 +1469,14 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       }));
 
       const systemPrompt = [
-        'Eres una analista de escalafón docente UDES.',
-        'Debes evaluar los criterios presentados y devolver JSON válido.',
-        'Si no hay soporte documental en un criterio, asigna 0 o puntaje mínimo prudente (max 10% del base) y justifica.',
-        'No inventes soportes.',
+        'Eres una especialista en escalafón docente de la Universidad de Santander (UDES), con formación en derecho laboral y administración de educación superior.',
+        'Tu función en este módulo es revisar la matriz de criterios de un expediente docente y emitir un dictamen fundamentado.',
+        'Para cada criterio, analiza si la documentación soporte es suficiente, pertinente y verificable; fundamenta tu posición en los acuerdos normativos de la institución recuperados del contexto RAG cuando estén disponibles.',
+        'Tu respuesta siempre debe incluir una "narrativa" que sea un dictamen técnico: explica el razonamiento completo, señala inconsistencias, cita normas y concluye con la categoría recomendada y su puntaje justificado.',
+        'Si no hay soporte documental en un criterio, asigna 0 o puntaje mínimo prudente (máx. 10% del base) y justifica normativamente por qué no puede reconocerse ese mérito.',
+        'No inventes soportes ni cites normas que no aparezcan en el RAG o en el acervo ampliamente conocido del escalafón colombiano.',
         'Responde solo JSON con esta forma:',
-        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"..."}],"narrativa":"..."}',
+        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"razón normativa del puntaje asignado o negado"}],"narrativa":"dictamen técnico narrativo completo con interpretación normativa, análisis de soportes y conclusión sobre categoría y puntaje recomendados"}',
       ].join(' ');
 
       const userPrompt = [
@@ -933,36 +1489,13 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         JSON.stringify(baseRows),
       ].join('\n');
 
-      let aiText = '';
-
-      if (provider === 'gemini') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: userPrompt }] }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      } else {
-        const res = await fetch('/api/apifreellm/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${activeKey}`,
-          },
-          body: JSON.stringify({
-            message: `${systemPrompt}\n\n${userPrompt}`,
-            model: model || 'apifreellm',
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        aiText = data.response || data.message || data.content || data.text || '';
-      }
+      const aiText = await requestAiTextWithFallback({
+        runtime: { provider, model, activeKey },
+        userPrompt,
+        systemPrompt,
+        fallbackApifreellmKey: apifreellmApiKey,
+        fallbackGeminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      });
 
       const parsed = parseAiJson(aiText);
       if (!parsed) {
@@ -996,17 +1529,39 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     if (!connection) return [];
 
     const dbView = connection.db as any;
-    const ragDocumentTable = dbView.ragDocument || dbView.rag_document;
+    const ragDocumentTable =
+      dbView.ragDocument || dbView.rag_document || dbView.ragDocumentTable || dbView.rag_document_table;
     const ragDocumentRows = ragDocumentTable ? (Array.from(ragDocumentTable.iter()) as any[]) : [];
 
+    // Dev logs to diagnose why RAG tables may appear empty at runtime
+    try {
+      console.groupCollapsed('[RAG][Perfiles] dbView and rag_document info');
+      console.log('dbView keys (sample):', dbView ? Object.keys(dbView).slice(0, 80) : []);
+      console.log('ragDocumentTable present:', !!ragDocumentTable);
+      console.log('ragDocumentRows length:', ragDocumentRows.length);
+      if (ragDocumentRows.length > 0) {
+        console.log(
+          'ragDocumentRows sample',
+          ragDocumentRows.slice(0, 5).map((r) => ({ fileName: r.fileName ?? r.file_name, documentKey: r.documentKey ?? r.document_key, active: r.active ?? r.is_active })),
+        );
+      }
+      console.groupEnd();
+    } catch (err) {
+      // ignore logging errors
+    }
+
     return ragDocumentRows
-      .filter((row) => row.active)
+      .filter((row) => Boolean(row?.active ?? row?.is_active ?? true))
       .map((row) => ({
-        documentKey: row.documentKey,
-        fileName: row.fileName,
-        fileType: row.fileType,
-        active: row.active,
-        contentBase64: row.contentBase64 ?? undefined,
+        documentKey: String(row.documentKey ?? row.document_key ?? row.fileName ?? row.file_name ?? 'rag-doc'),
+        fileName: String(row.fileName ?? row.file_name ?? row.documentKey ?? row.document_key ?? 'documento-rag'),
+        fileType: String(row.fileType ?? row.file_type ?? 'text/plain'),
+        active: Boolean(row.active ?? row.is_active ?? true),
+        contentBase64: typeof row.contentBase64 === 'string'
+          ? row.contentBase64
+          : typeof row.content_base64 === 'string'
+            ? row.content_base64
+            : undefined,
       }));
   };
 
@@ -1021,41 +1576,310 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     const publications = allPublications.filter((row) => row.trackingId === trackingId);
     const experiences = allExperiences.filter((row) => row.trackingId === trackingId);
 
+    // Build a richer retrieval query using matrix criteria and scoring factors
+    // (cantidad, valor, tipo de criterio), so normative matching reflects algorithmic calculation.
+    const criteriaSignals = selectedAnalysis.rows
+      .map((row) => {
+        const cantidad = Number.isFinite(row.cantidad) ? row.cantidad.toFixed(1) : String(row.cantidad || '0');
+        const valor = Number.isFinite(row.valor) ? row.valor.toFixed(1) : String(row.valor || '0');
+        const puntaje = Number.isFinite(row.puntaje) ? row.puntaje.toFixed(1) : String(row.puntaje || '0');
+        return [
+          row.section,
+          row.criterio,
+          row.detalle,
+          row.supportNote,
+          `cantidad ${cantidad}`,
+          `valor ${valor}`,
+          `puntaje ${puntaje}`,
+          row.hasSupport ? 'con soporte' : 'sin soporte',
+        ]
+          .filter(Boolean)
+          .join(' ');
+      })
+      .join(' ');
+
+    const profileSignals = [
+      titles.map((item) => `${item.titleLevel} ${item.titleName}`).join(' '),
+      languages.map((item) => `${item.languageName} ${item.languageLevel}`).join(' '),
+      publications.map((item) => `${item.publicationType} ${item.quartile} ${item.sourceKind}`).join(' '),
+      experiences.map((item) => item.experienceType).join(' '),
+    ].join(' ');
+
+    const algorithmSignals = [
+      'algoritmo escalafon',
+      'asignacion de puntos por criterio',
+      'reglas de cantidad por valor',
+      'tope saturacion experiencia',
+      'reglas de investigacion y produccion',
+      'reglas de estudios e idiomas',
+      'categoria auxiliar asistente asociado titular',
+      'articulo acuerdo resolucion reglamento',
+    ].join(' ');
+
+    const retrievalQuery = [
+      selectedAnalysisRequest.nombre,
+      selectedAnalysisRequest.facultad,
+      selectedAnalysisRequest.finalCat.name,
+      question,
+      criteriaSignals,
+      profileSignals,
+      algorithmSignals,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     const queryTerms = Array.from(
       new Set(
-        normalizeForSearch(
-          [
-            selectedAnalysisRequest.nombre,
-            selectedAnalysisRequest.facultad,
-            selectedAnalysisRequest.finalCat.name,
-            question,
-            titles.map((item) => item.titleLevel).join(' '),
-            languages.map((item) => item.languageLevel).join(' '),
-            publications.map((item) => item.quartile).join(' '),
-            experiences.map((item) => item.experienceType).join(' '),
-          ].join(' '),
-        )
+        normalizeForSearch(retrievalQuery)
           .split(/[^a-z0-9]+/)
-          .filter((term) => term.length >= 4),
+          .filter((term) => term.length >= 2),
       ),
     );
 
+    const effectiveTopK = Math.max(10, ragTopK);
+
     const rankedChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
+    const fallbackNormativeChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
+    const forcedProtocolChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
+    let detectedNormatives = 0;
+    let activeNormatives = 0;
+    let docChunksCount = 0;
+    let normativeChunksCount = 0;
+    let forcedProtocolDetected = false;
+    const forcedProtocolAliases = [
+      'protocolo de integracion normativa por vacio legal',
+      'protocolo integracion normativa por vacio legal',
+      'protocolo de integracion normativa por vacios legal',
+      'protocolo integracion normativa por vacios legal',
+    ];
+    const isForcedProtocolSource = (value: string) => {
+      const normalized = normalizeForSearch(String(value || ''));
+      return forcedProtocolAliases.some((alias) => normalized.includes(alias));
+    };
     const activeRagDocuments = getActiveRagDocuments();
     for (const document of activeRagDocuments) {
       const decoded = decodeBase64Document(document.contentBase64);
       if (!decoded) continue;
       const chunks = chunkText(decoded, ragChunkSize, ragChunkOverlap);
+      docChunksCount += chunks.length;
       for (const chunk of chunks) {
         const score = scoreRagChunk(chunk, queryTerms);
         if (score > 0) rankedChunks.push({ fileName: document.fileName, chunk, score });
       }
     }
 
-    const selectedChunks = rankedChunks
+    // Read normatives from rag_normative DB table; fall back to system_setting
+    try {
+      const dbView = connectionRef.current?.db as any;
+      const normTable = dbView?.rag_normative || dbView?.ragNormative || dbView?.ragNormativeTable || dbView?.rag_normative_table;
+      let shouldUseLegacyNormatives = !normTable;
+      if (normTable) {
+        const normRows = Array.from(normTable.iter()) as any[];
+        detectedNormatives = normRows.length;
+        try {
+          console.groupCollapsed('[RAG][Perfiles] rag_normative debug');
+          console.log('dbView keys (sample):', dbView ? Object.keys(dbView).slice(0, 80) : []);
+          console.log('normTable present:', !!normTable);
+          console.log('normRows length:', normRows.length);
+          if (normRows.length > 0) console.log('normRows sample titles:', normRows.slice(0, 6).map((r) => r.title ?? r.tituloOficial ?? r.normativeKey ?? r.normative_key ?? r.documentId ?? r.document_id));
+          console.groupEnd();
+        } catch (err) {
+          // ignore logging errors
+        }
+        for (const row of normRows) {
+          const activeFlag = row?.active ?? row?.is_active ?? row?.isActive ?? true;
+          const isActive = !(activeFlag === false || Number(activeFlag) === 0 || String(activeFlag).toLowerCase() === 'false');
+          if (!row || !isActive) continue;
+          activeNormatives += 1;
+          let jsonStr = '';
+          const jsonRaw = row.jsonContent ?? row.json_content ?? row.content ?? row.json;
+          if (typeof jsonRaw === 'string') {
+            jsonStr = jsonRaw;
+          } else if (jsonRaw && typeof jsonRaw === 'object') {
+            jsonStr = JSON.stringify(jsonRaw);
+          }
+          // Some storages keep JSON double-encoded as a stringified string.
+          try {
+            const maybeString = JSON.parse(jsonStr);
+            if (typeof maybeString === 'string') jsonStr = maybeString;
+          } catch {
+            // keep original string
+          }
+          const sourceProbe = [
+            row.title,
+            row.normativeKey,
+            row.normative_key,
+            row.documentId,
+            row.document_id,
+            row.tituloOficial,
+            row.titulo_oficial,
+            row.documentName,
+            row.document_name,
+          ]
+            .filter(Boolean)
+            .join(' ');
+          const sourceName = String(
+            row.title ??
+            row.tituloOficial ??
+            row.titulo_oficial ??
+            row.normativeKey ??
+            row.normative_key ??
+            row.documentName ??
+            row.document_name ??
+            row.documentId ??
+            row.document_id ??
+            'normativa',
+          );
+          const isForcedProtocol = isForcedProtocolSource(`${sourceName} ${sourceProbe}`);
+          if (isForcedProtocol) forcedProtocolDetected = true;
+          const parsedNormChunks = normativeToRagChunks(jsonStr).filter(Boolean);
+          const chunks = parsedNormChunks.length > 0
+            ? parsedNormChunks
+            : chunkText(jsonStr, ragChunkSize, ragChunkOverlap);
+          normativeChunksCount += chunks.length;
+          for (const chunk of chunks) {
+            const score = scoreRagChunk(chunk, queryTerms);
+            if (score > 0) {
+              rankedChunks.push({ fileName: sourceName, chunk, score });
+              if (isForcedProtocol && forcedProtocolChunks.length < Math.max(2, effectiveTopK)) {
+                forcedProtocolChunks.push({ fileName: sourceName, chunk, score: score + 500 });
+              }
+            } else if (fallbackNormativeChunks.length < Math.max(6, effectiveTopK * 3)) {
+              fallbackNormativeChunks.push({ fileName: sourceName, chunk, score: 0.5 });
+              if (isForcedProtocol && forcedProtocolChunks.length < Math.max(2, effectiveTopK)) {
+                forcedProtocolChunks.push({ fileName: sourceName, chunk, score: 500 });
+              }
+            }
+          }
+        }
+        shouldUseLegacyNormatives = detectedNormatives === 0 || activeNormatives === 0 || normativeChunksCount === 0;
+      }
+
+      if (shouldUseLegacyNormatives) {
+        // fallback: system_setting legacy storage
+        const settingTable = dbView?.system_setting || dbView?.systemSetting || dbView?.systemSettings;
+        try {
+          console.groupCollapsed('[RAG][Perfiles] system_setting debug');
+          console.log('settingTable present:', !!settingTable);
+          if (settingTable) {
+            const tempRows = Array.from(settingTable.iter()) as any[];
+            console.log('settingTable rows length:', tempRows.length);
+            console.log('setting keys sample:', tempRows.slice(0, 6).map((r) => r.key));
+          }
+          console.groupEnd();
+        } catch (err) {
+          // ignore
+        }
+        const settingTableFinal = settingTable;
+        if (settingTableFinal) {
+          const settingRows = Array.from(settingTableFinal.iter()) as any[];
+          const settingMap = new Map(settingRows.map((r) => [r.key, r.value]));
+          const rawNorms = settingMap.get('cfg.rag.normatives');
+          if (rawNorms) {
+            const parsed = JSON.parse(String(rawNorms));
+            if (Array.isArray(parsed)) {
+              detectedNormatives = Math.max(detectedNormatives, parsed.length);
+              for (const norm of parsed) {
+                const activeFlag = norm?.active ?? norm?.is_active ?? norm?.isActive ?? true;
+                const isActive = !(activeFlag === false || Number(activeFlag) === 0 || String(activeFlag).toLowerCase() === 'false');
+                if (!norm || !isActive) continue;
+                activeNormatives += 1;
+                const text = typeof norm.content === 'string' ? norm.content : JSON.stringify(norm.content);
+                const parsedNormChunks = normativeToRagChunks(text).filter(Boolean);
+                const normChunks = parsedNormChunks.length > 0
+                  ? parsedNormChunks
+                  : chunkText(text, ragChunkSize, ragChunkOverlap);
+                const sourceName = String(
+                  norm.title || norm.tituloOficial || norm.titulo_oficial || norm.normativeKey || norm.normative_key || 'normativa',
+                );
+                const sourceProbe = [
+                  norm.title,
+                  norm.tituloOficial,
+                  norm.titulo_oficial,
+                  norm.normativeKey,
+                  norm.normative_key,
+                  norm.documentName,
+                  norm.document_name,
+                ]
+                  .filter(Boolean)
+                  .join(' ');
+                const isForcedProtocol = isForcedProtocolSource(`${sourceName} ${sourceProbe}`);
+                if (isForcedProtocol) forcedProtocolDetected = true;
+                normativeChunksCount += normChunks.length;
+                for (const chunk of normChunks) {
+                  const score = scoreRagChunk(chunk, queryTerms);
+                  if (score > 0) {
+                    rankedChunks.push({ fileName: sourceName, chunk, score });
+                    if (isForcedProtocol && forcedProtocolChunks.length < Math.max(2, effectiveTopK)) {
+                      forcedProtocolChunks.push({ fileName: sourceName, chunk, score: score + 500 });
+                    }
+                  } else if (fallbackNormativeChunks.length < Math.max(6, effectiveTopK * 3)) {
+                    fallbackNormativeChunks.push({ fileName: sourceName, chunk, score: 0.5 });
+                    if (isForcedProtocol && forcedProtocolChunks.length < Math.max(2, effectiveTopK)) {
+                      forcedProtocolChunks.push({ fileName: sourceName, chunk, score: 500 });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore errors reading normatives
+    }
+
+    const effectiveChunks = rankedChunks.length > 0 ? rankedChunks : fallbackNormativeChunks;
+
+    let selectedChunkItems = effectiveChunks
       .sort((left, right) => right.score - left.score)
-      .slice(0, Math.max(1, ragTopK))
+      .slice(0, Math.max(1, effectiveTopK));
+
+    if (forcedProtocolChunks.length > 0) {
+      const merged = [...forcedProtocolChunks.sort((a, b) => b.score - a.score), ...selectedChunkItems];
+      const deduped: Array<{ fileName: string; chunk: string; score: number }> = [];
+      const seen = new Set<string>();
+      for (const item of merged) {
+        const dedupeKey = `${item.fileName}::${item.chunk.slice(0, 220)}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        deduped.push(item);
+        if (deduped.length >= Math.max(1, effectiveTopK)) break;
+      }
+      selectedChunkItems = deduped;
+    }
+
+    const forcedProtocolIncluded = selectedChunkItems.some((item) =>
+      forcedProtocolChunks.some((forced) => forced.fileName === item.fileName && forced.chunk === item.chunk),
+    );
+
+    const selectedChunks = selectedChunkItems
       .map((item, index) => `[Fuente ${index + 1}: ${item.fileName}]\n${item.chunk.slice(0, 1600)}`);
+
+    const diagnostics = {
+      generatedAt: new Date().toISOString(),
+      queryTerms: queryTerms.length,
+      activeDocs: activeRagDocuments.length,
+      detectedNormatives,
+      activeNormatives,
+      docChunks: docChunksCount,
+      normativeChunks: normativeChunksCount,
+      rankedMatches: rankedChunks.length,
+      fallbackCandidates: fallbackNormativeChunks.length,
+      selectedChunks: selectedChunkItems.length,
+      usedFallback: rankedChunks.length === 0 && fallbackNormativeChunks.length > 0,
+      forcedProtocolDetected,
+      forcedProtocolIncluded,
+      sources: Array.from(new Set(selectedChunkItems.map((item) => item.fileName))).slice(0, 8),
+    };
+
+    setRagDiagnostics(diagnostics);
+
+    console.groupCollapsed('[RAG][Perfiles] Diagnostico de recuperacion');
+    console.log('Pregunta:', question);
+    console.log('Terminos de consulta:', queryTerms);
+    console.table(diagnostics);
+    console.groupEnd();
 
     return selectedChunks.length > 0
       ? selectedChunks.join('\n\n')
@@ -1066,14 +1890,19 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     if (!selectedAnalysis || !selectedAnalysisRequest) return;
     if (!metriXInput.trim()) return;
 
-    const provider = aiProvider || 'gemini';
-    const model = aiModel || 'gemini-2.5-flash';
-    const activeKey = provider === 'gemini'
-      ? (geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '')
-      : apifreellmApiKey;
+    const runtime = resolveAiRuntime({
+      provider: aiProvider,
+      model: aiModel,
+      geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      apifreellmKey: apifreellmApiKey,
+      openrouterKey: openrouterApiKey,
+    });
+    const provider = runtime.provider;
+    const model = runtime.model;
+    const activeKey = runtime.activeKey;
 
     if (!activeKey) {
-      window.alert(`No se encontró API Key para ${provider === 'gemini' ? 'Gemini' : 'APIFreeLLM'}.`);
+      window.alert('No se encontró API Key activa. Configura Gemini o APIFreeLLM en Configuración > API.');
       return;
     }
 
@@ -1115,12 +1944,15 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         .join('\n');
 
       const systemPrompt = [
-        'Eres MetriX, asistente experto de escalafón docente UDES para Talento Humano.',
-        'Debes analizar situaciones específicas del caso usando RAG, reglas de escalafón y evidencia del expediente.',
+        'Eres MetriX, consultor experto en escalafón docente de la Universidad de Santander (UDES), integrado al módulo de Perfiles de Talento Humano.',
+        'Tu rol es el de un abogado-analista especializado en régimen docente: combinas la exactitud normativa con una narrativa clara que orienta a coordinadores y funcionarios en la toma de decisiones.',
+        'Tienes acceso al expediente del docente y a la conversación acumulada. Usa esa información para dar respuestas contextualizadas, no genéricas.',
+        'Cuando el usuario pregunte por criterios, explica en detalle qué normativa aplica, cómo se computa el puntaje, qué documentos sustentan o impiden el reconocimiento y cuál sería el impacto en la categoría final.',
+        'Construye respuestas narrativas antes de presentar datos estructurados: primero el análisis cualitativo, luego las cifras.',
         'Responde SIEMPRE en JSON válido con esta estructura exacta:',
-        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"..."}],"narrativa":"concepto técnico con explicación normativa y trazabilidad de puntaje"}',
-        'En narrativa debes explicar por qué se asigna o no puntaje por criterio, y mencionar fuentes RAG cuando apliquen.',
-        'No inventes soportes ni normas. Si falta evidencia, indícalo explícitamente.',
+        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"justificación normativa del puntaje"}],"narrativa":"dictamen narrativo: contexto del caso, interpretación normativa aplicable, análisis de cada criterio discutido, conclusión técnica con categoría y puntaje proyectado"}',
+        'En narrativa integra las fuentes RAG cuando estén disponibles y señala explícitamente el artículo o acuerdo citado.',
+        'No inventes soportes ni normas. Si falta evidencia, indícalo con precisión jurídica.',
       ].join(' ');
 
       const userPrompt = [
@@ -1135,35 +1967,13 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         ragSystemContext ? `\nPOLÍTICA RAG ADICIONAL:\n${ragSystemContext}` : '',
       ].join('\n');
 
-      let aiText = '';
-      if (provider === 'gemini') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: userPrompt }] }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      } else {
-        const res = await fetch('/api/apifreellm/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${activeKey}`,
-          },
-          body: JSON.stringify({
-            message: `${systemPrompt}\n\n${userPrompt}`,
-            model: model || 'apifreellm',
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        aiText = data.response || data.message || data.content || data.text || '';
-      }
+      const aiText = await requestAiTextWithFallback({
+        runtime: { provider, model, activeKey },
+        userPrompt,
+        systemPrompt,
+        fallbackApifreellmKey: apifreellmApiKey,
+        fallbackGeminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      });
 
       const parsed = parseAiJson(aiText);
       if (!parsed) {
@@ -1213,6 +2023,146 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       ]);
     } finally {
       setMetriXLoading(false);
+    }
+  };
+
+  const generateMeritxNarrative = async () => {
+    if (!selectedAnalysis || !selectedAnalysisRequest) return;
+
+    const runtime = resolveAiRuntime({
+      provider: aiProvider,
+      model: aiModel,
+      geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      apifreellmKey: apifreellmApiKey,
+      openrouterKey: openrouterApiKey,
+    });
+
+    if (!runtime.activeKey) {
+      window.alert('No se encontró API Key activa para generar Narrativa de MeritX (IA).');
+      return;
+    }
+
+    const popup = openMeritxReportWindow(selectedAnalysisRequest.nombre);
+    setMeritxNarrativeLoading(true);
+    try {
+      const supportCount = selectedAnalysis.rows.filter((row) => row.hasSupport).length;
+      const noSupportCount = selectedAnalysis.rows.length - supportCount;
+      const matrixAnalysis = [
+        `La matriz consolidó ${selectedAnalysis.rows.length} criterios con ${supportCount} soportados y ${noSupportCount} sin soporte verificable.`,
+        `El subtotal por matriz fue ${selectedAnalysis.matrixTotal.toFixed(1)} puntos, construido con base en cantidad x valor por criterio y depuración de soportes.`,
+      ].join(' ');
+
+      const motorAnalysis = [
+        `El motor de escalafón proyectó ${selectedAnalysis.suggested.finalPts.toFixed(1)} puntos y categoría ${selectedAnalysis.suggested.finalCat.name}.`,
+        selectedAnalysis.suggested.outputMessage || '',
+      ].join(' ').trim();
+
+      const officialAnalysis = [
+        `El expediente oficial registra ${selectedAnalysisRequest.finalPts.toFixed(1)} puntos y categoría ${selectedAnalysisRequest.finalCat.name}.`,
+        selectedAnalysisRequest.outputMessage || '',
+      ].join(' ').trim();
+
+      const publicationEvidenceSummary = selectedAnalysis.publications.length > 0
+        ? selectedAnalysis.publications
+          .map((item, index) => {
+            const source = String(item.sourceKind || 'MANUAL').toUpperCase();
+            const quartile = String(item.quartile || 'SIN CUARTIL');
+            return `${index + 1}. ${item.publicationTitle} | fuente: ${source} | cuartil: ${quartile} | año: ${item.publicationYear}`;
+          })
+          .join('\n')
+        : 'No hay producción científica registrada para este caso.';
+
+      const structuredRagQuestion = [
+        'Interpretar normativamente el cálculo del algoritmo de escalafón y la asignación de puntos por criterio.',
+        'Debes relacionar criterios, cantidad, valor y tipo de criterio (experiencia, investigación/producción, estudios e idiomas).',
+        'Criterios del caso:',
+        ...selectedAnalysis.rows.map((row) => {
+          const cantidad = Number.isFinite(row.cantidad) ? row.cantidad.toFixed(1) : String(row.cantidad || '0');
+          const valor = Number.isFinite(row.valor) ? row.valor.toFixed(1) : String(row.valor || '0');
+          const puntaje = Number.isFinite(row.puntaje) ? row.puntaje.toFixed(1) : String(row.puntaje || '0');
+          return `- ${row.section} | ${row.criterio} | cantidad: ${cantidad} | valor: ${valor} | puntaje: ${puntaje}`;
+        }),
+      ].join('\n');
+
+      const ragContext = buildRagContextForChat(structuredRagQuestion);
+      const aiCurrentScore = aiRows.reduce((acc, row) => acc + row.puntajeSugerido, 0);
+
+      const prompt = [
+        'Eres MetriX, dictaminador experto en escalafón docente UDES. Tu tarea es producir un análisis narrativo consolidado, técnico-jurídico y profundamente argumentado de este caso docente.',
+        'Responde SOLO JSON válido con estas llaves exactas:',
+        '{"analisisMatriz":"análisis crítico de la matriz de criterios: qué soportes son sólidos, cuáles son débiles y qué impacto tiene cada uno en el puntaje","analisisMotor":"interpretación del cálculo del motor de escalafón: qué criterios pesaron más y por qué el motor proyecta esa categoría","analisisOficial":"comparación con el expediente oficial registrado: coincidencias, diferencias y posibles explicaciones normativas o documentales","analisisNormativo":"análisis normativo profundo basado en los JSON de normatividad recuperados en RAG; debe citar norma y artículo aplicable con justificación específica por criterio","conclusionIntermedia":"dictamen técnico integrador: sintetiza los cuatro análisis anteriores, identifica la hipótesis más sólida de categoría y puntaje, señala riesgos o documentos pendientes, y fundamenta la recomendación con precisión jurídica","puntajeIntermedio":0}',
+        'Reglas de cálculo: puntajeIntermedio debe quedar dentro del rango definido por el mínimo y máximo de los puntajes matriz, motor y oficial.',
+        'Regla de estilo general: NO uses markdown, NO uses ** ni viñetas numeradas en la salida final; redacta en prosa técnica clara.',
+        'Cada campo narrativo (analisisMatriz, analisisMotor, analisisOficial, analisisNormativo, conclusionIntermedia) debe escribirse en 2 o 3 párrafos bien construidos.',
+        'Reglas para analisisNormativo (obligatorias):',
+        '- Debe ser extenso, claro y profesional, evitando frases genéricas.',
+        '- Debe usar el contexto RAG para citar explícitamente la norma (documento/titulo_oficial) y el artículo (numero/titulo) cuando exista respaldo.',
+        '- Debe explicar la capacidad del motor de escalafón: topes, saturaciones y límite efectivo de puntos según categoría vigente.',
+        '- Para cada criterio relevante, explica: regla jurídica aplicable, evidencia del caso, interpretación y efecto en puntaje/categoría.',
+        '- Si falta artículo aplicable en RAG para un criterio, indícalo de forma expresa y señala el riesgo o limitación de la decisión.',
+        '- Debe explicar de forma expresa la validación de investigación por cuartiles y la fuente de cada publicación (MANUAL, ORCID, SCOPUS).',
+        '- Debe tratar cada publicación de producción intelectual por separado, con su cuartil y efecto en puntaje.',
+        '- Si una publicación es MANUAL, indícalo como soporte no indexado automáticamente y precisa su alcance probatorio.',
+        '- Si una publicación proviene de ORCID o SCOPUS, indícalo como evidencia indexada y relaciona su impacto en puntuación.',
+        '- No inventes normas ni artículos fuera del contexto suministrado.',
+        `Puntaje matriz: ${selectedAnalysis.matrixTotal.toFixed(1)} pts.`,
+        `Puntaje motor: ${selectedAnalysis.suggested.finalPts.toFixed(1)} pts.`,
+        `Puntaje oficial: ${selectedAnalysisRequest.finalPts.toFixed(1)} pts.`,
+        aiRows.length > 0 ? `Referencia tabla IA vigente: ${aiCurrentScore.toFixed(1)} pts.` : 'No hay tabla IA previa generada.',
+        `Análisis base de la matriz: ${matrixAnalysis}`,
+        `Análisis base del motor: ${motorAnalysis}`,
+        `Análisis base del expediente oficial: ${officialAnalysis}`,
+        'Producción científica registrada (usar obligatoriamente en el análisis):',
+        publicationEvidenceSummary,
+        'Contexto normativo RAG:',
+        ragContext,
+      ].join('\n');
+
+      const aiText = await requestAiTextWithFallback({
+        runtime,
+        userPrompt: prompt,
+        fallbackApifreellmKey: apifreellmApiKey,
+        fallbackGeminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
+      });
+
+      const parsed = parseAiJsonObjectLoose(aiText);
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('No se pudo interpretar la narrativa de MeritX (IA). La respuesta llegó con JSON inválido.');
+      }
+
+      const minScore = Math.min(selectedAnalysis.matrixTotal, selectedAnalysis.suggested.finalPts, selectedAnalysisRequest.finalPts);
+      const maxScore = Math.max(selectedAnalysis.matrixTotal, selectedAnalysis.suggested.finalPts, selectedAnalysisRequest.finalPts);
+      const defaultMid = (selectedAnalysis.matrixTotal + selectedAnalysis.suggested.finalPts + selectedAnalysisRequest.finalPts) / 3;
+      const rawMid = Number(parsed?.puntajeIntermedio);
+      const boundedMid = Number.isFinite(rawMid) ? Math.max(minScore, Math.min(maxScore, rawMid)) : defaultMid;
+
+      const nextNarrative = {
+        analisisMatriz: sanitizeNarrativeText(parsed?.analisisMatriz || matrixAnalysis),
+        analisisMotor: sanitizeNarrativeText(parsed?.analisisMotor || motorAnalysis),
+        analisisOficial: sanitizeNarrativeText(parsed?.analisisOficial || officialAnalysis),
+        analisisNormativo: sanitizeNarrativeText(
+          parsed?.analisisNormativo || parsed?.analisisRag || 'No se pudo consolidar análisis normativo específico.',
+        ),
+        conclusionIntermedia: sanitizeNarrativeText(parsed?.conclusionIntermedia || 'No se pudo generar conclusión integradora.'),
+        puntajeIntermedio: boundedMid,
+      };
+
+      setMeritxNarrative(nextNarrative);
+      renderMeritxReportWindow(popup, {
+        selectedAnalysisRequest,
+        selectedAnalysis,
+        aiRows,
+        meritxNarrative: nextNarrative,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      renderMeritxReportError(
+        popup,
+        error instanceof Error ? error.message : 'No fue posible generar la Narrativa de MeritX (IA).',
+      );
+      window.alert(error instanceof Error ? error.message : 'No fue posible generar la Narrativa de MeritX (IA).');
+    } finally {
+      setMeritxNarrativeLoading(false);
     }
   };
 
@@ -1558,6 +2508,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           onSetManualNarrative={setManualNarrative}
           onApproveVersion={handleApproveVersion}
           onViewVersion={setSelectedVersionDetail}
+          meritxNarrative={meritxNarrative}
+          meritxNarrativeLoading={meritxNarrativeLoading}
+          onGenerateMeritxNarrative={generateMeritxNarrative}
+          ragDebugInfo={ragDiagnostics}
+          onSaveProfileEvidence={handleSaveProfileEvidence}
         />
       )}
 

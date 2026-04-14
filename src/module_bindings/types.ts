@@ -260,6 +260,13 @@ export const Faculty = __t.object("Faculty", {
 });
 export type Faculty = __Infer<typeof Faculty>;
 
+export const OpenrouterConfig = __t.object("OpenrouterConfig", {
+  configKey: __t.string(),
+  apiKey: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type OpenrouterConfig = __Infer<typeof OpenrouterConfig>;
+
 export const PortalRole = __t.object("PortalRole", {
   roleKey: __t.string(),
   roleName: __t.string(),
@@ -323,6 +330,20 @@ export const RagDocument = __t.object("RagDocument", {
   updatedAt: __t.timestamp(),
 });
 export type RagDocument = __Infer<typeof RagDocument>;
+
+export const RagNormative = __t.object("RagNormative", {
+  normativeKey: __t.string(),
+  title: __t.string(),
+  documentId: __t.string(),
+  jsonContent: __t.string(),
+  bucketName: __t.string(),
+  storagePath: __t.string(),
+  active: __t.bool(),
+  uploadedBy: __t.option(__t.string()),
+  uploadedAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type RagNormative = __Infer<typeof RagNormative>;
 
 export const ReportSnapshot = __t.object("ReportSnapshot", {
   id: __t.u32(),

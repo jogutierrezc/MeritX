@@ -4,7 +4,7 @@ export type ImportedOrcidProduction = {
   fecha: string;
   tipo: string;
   autores: number;
-  fuente: 'MANUAL';
+  fuente: 'ORCID';
 };
 
 const ORCID_REGEX = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/i;
@@ -52,7 +52,7 @@ export const importOrcidProduccion = async (orcidInput: string, count = 20): Pro
         fecha: String(year),
         tipo: String(type).replace(/_/g, ' '),
         autores: 1,
-        fuente: 'MANUAL' as const,
+        fuente: 'ORCID' as const,
       };
     })
     .filter((item: ImportedOrcidProduction) => item.titulo.trim().length > 0)

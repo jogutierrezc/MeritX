@@ -17,6 +17,7 @@ export type RoleConfig = {
 export type ApiConfig = {
   geminiApiKey: string;
   apifreellmApiKey: string;
+  openrouterApiKey: string;
   scopusApiKey: string;
   orcidClientId: string;
   orcidClientSecret: string;
@@ -30,7 +31,7 @@ export type ResendConfig = {
 };
 
 export type AIConfig = {
-  provider: 'gemini' | 'apifreellm';
+  provider: 'gemini' | 'apifreellm' | 'openrouter';
   model: string;
   temperature: number;
   maxTokens: number;
@@ -66,9 +67,9 @@ export type RagConfig = {
   retrievalTopK: number;
   chunkSize: number;
   chunkOverlap: number;
-  selectedProvider: 'gemini' | 'apifreellm';
+  selectedProvider: 'gemini' | 'apifreellm' | 'openrouter';
   selectedModel: string;
-  fallbackProvider: 'gemini' | 'apifreellm';
+  fallbackProvider: 'gemini' | 'apifreellm' | 'openrouter';
   fallbackModel: string;
   systemContext: string;
 };
@@ -85,6 +86,17 @@ export type RagDocument = {
   uploadedAt?: string;
 };
 
+export type RagNormative = {
+  normativeKey: string;
+  title: string;
+  content: string; // raw JSON string
+  active: boolean;
+  documentId?: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
+  storagePath?: string;
+};
+
 export type ModelTestConditions = {
   taskType: 'legal' | 'scoring' | 'classification' | 'email';
   maxLatencyMs: number;
@@ -95,7 +107,7 @@ export type ModelTestConditions = {
 };
 
 export type ModelAlternative = {
-  provider: 'gemini' | 'apifreellm';
+  provider: 'gemini' | 'apifreellm' | 'openrouter';
   model: string;
   estimatedLatencyMs: number;
   costTier: 1 | 2 | 3;
