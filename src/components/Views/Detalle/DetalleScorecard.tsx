@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Fingerprint, Info } from 'lucide-react';
 import type { Request } from '../../../types';
 

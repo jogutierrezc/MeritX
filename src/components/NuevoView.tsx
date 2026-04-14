@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ArrowLeft, BookOpen, Briefcase, Database, Globe, Languages, Link as LinkIcon, Minus, Plus } from 'lucide-react';
 import type { FormState } from '../types/domain';
 
@@ -103,6 +103,17 @@ const NuevoView: React.FC<Props> = ({
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
               placeholder="N° DOCUMENTO"
             />
+            <select
+              value={formData.campus || ''}
+              onChange={(e) => setFormData({ ...formData, campus: e.target.value })}
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 focus:border-slate-950 outline-none font-bold text-[11px] uppercase"
+            >
+              <option value="">SELECCIONA CAMPUS</option>
+              <option value="Bucaramanga">Bucaramanga</option>
+              <option value="Valledupar">Valledupar</option>
+              <option value="Cúcuta">Cúcuta</option>
+              <option value="Bogotá">Bogotá</option>
+            </select>
             <select
               value={formData.facultad}
               onChange={(e) =>

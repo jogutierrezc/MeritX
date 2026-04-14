@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Calendar, Users, ChevronRight, ShieldCheck } from 'lucide-react';
 import type { ConvocatoriaType } from '../../db/convocatoria_table';
 import { fetchConvocatoriasOnce } from '../../db/subscriptions';

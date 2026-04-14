@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
 
 import type { Faculty, UserProfile } from '../../module_bindings/types';

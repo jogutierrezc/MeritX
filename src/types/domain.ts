@@ -16,6 +16,7 @@ export type FormState = {
   documento: string;
   programa: string;
   facultad: string;
+  campus: string;
   scopusProfile: string;
   esIngresoNuevo: boolean;
   isAccreditedSource: boolean;

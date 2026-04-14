@@ -8,8 +8,8 @@ import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { normativeToRagChunks } from '../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
-import { getSpacetimeConnectionConfig } from '../services/spacetime';
-import { getPortalSession, getPortalCredentialsForRole } from '../services/portalAuth';
+import { useSpacetime } from '../context/SpacetimeContext';
+import { getPortalSession } from '../services/portalAuth';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ListaView from '../components/ListaView';
 import NuevoView from '../components/NuevoView';
@@ -128,7 +128,7 @@ const requestOpenRouterText = async (model: string, apiKey: string, systemPrompt
     lastError = new Error(await res.text());
   }
 
-  throw lastError || new Error('OpenRouter no respondió con contenido válido.');
+  throw lastError || new Error('OpenRouter no respondiÃ³ con contenido vÃ¡lido.');
 };
 
 const normalizePublicationSource = (value?: string) => {
@@ -219,9 +219,8 @@ const scoreRagChunk = (chunk: string, queryTerms: string[]) => {
 };
 
 const ExpedientesPage = (_props: Props) => {
-  const connectionRef = useRef<DbConnection | null>(null);
+  const { connection, connected, globalDataReady } = useSpacetime();
   const getSubTablesForTrackingRef = useRef<((id: string) => { titles: AppTitle[]; languages: AppLanguage[]; publications: AppPublication[]; experiences: AppExperience[] }) | null>(null);
-  const reloadExpedientesRef = useRef<(() => Promise<void>) | null>(null);
   const [view, setView] = useState('lista');
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<RequestRecord[]>([]);
@@ -233,7 +232,6 @@ const ExpedientesPage = (_props: Props) => {
   const [formData, setFormData] = useState<FormState>(emptyForm);
   const [aiAnalysis, setAiAnalysis] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [apifreellmApiKey, setApifreellmApiKey] = useState('');
   const [openrouterApiKey, setOpenrouterApiKey] = useState('');
@@ -251,36 +249,8 @@ const ExpedientesPage = (_props: Props) => {
   const [openConvocatorias, setOpenConvocatorias] = useState<Array<{ id: string; codigo: string; nombre: string; periodo: string }>>([]);
   const [selectedConvocatoriaId, setSelectedConvocatoriaId] = useState('');
   const [aiVersionsByTracking, setAiVersionsByTracking] = useState<Record<string, AiVersionSummary>>({});
-
   useEffect(() => {
-    const { host, databaseName } = getSpacetimeConnectionConfig();
-
-    const ensurePortalSession = async (conn: DbConnection) => {
-      const session = getPortalSession();
-      if (!session) return;
-      const credentials = getPortalCredentialsForRole(session.role);
-      if (!credentials) return;
-      const reducers = conn.reducers as any;
-      const loginFn = reducers.portalLogin || reducers.portal_login;
-      if (typeof loginFn === 'function') {
-        await loginFn({ role: session.role, username: credentials.username, password: credentials.password });
-      }
-    };
-
-    const connection = DbConnection.builder()
-      .withUri(host)
-      .withDatabaseName(databaseName)
-      .onConnect((conn: DbConnection) => {
-        setConnected(true);
-        ensurePortalSession(conn).catch((e) => console.warn('Portal session en ExpedientesPage:', e));
-      })
-      .onConnectError((_ctx: unknown, err: unknown) => {
-        console.error('ExpedientesPage connect error:', err);
-        setConnected(false);
-      })
-      .build();
-
-    connectionRef.current = connection;
+    if (!connection) return;
 
     const refreshFromCache = () => {
       const dbView = connection.db as any;
@@ -356,7 +326,25 @@ const ExpedientesPage = (_props: Props) => {
         }
       }
 
-      const mapped: RequestRecord[] = appRows
+      // Load user profiles to get campus
+      const userProfileTable = dbView.userProfile || dbView.user_profile;
+      const currentUser = getPortalSession();
+      let currentUserCampus = 'BUCARAMANGA';
+      let currentUserRole = '';
+      if (userProfileTable && currentUser?.username) {
+        const users = Array.from(userProfileTable.iter()) as any[];
+        const match = users.find((u) => u.correo === currentUser.username || u.username === currentUser.username);
+        if (match?.campus) currentUserCampus = match.campus.toUpperCase();
+        if (match?.role) currentUserRole = match.role.toLowerCase();
+      }
+
+      let filteredAppRows = appRows;
+      const isTalentoHumano = currentUserRole.includes('talento_humano') || currentUserRole.includes('talento humano');
+      if (currentUserCampus !== 'BUCARAMANGA' && isTalentoHumano) {
+         filteredAppRows = appRows.filter(row => row.campus?.toUpperCase() === currentUserCampus);
+      }
+
+      const mapped: RequestRecord[] = filteredAppRows
         .map((row) => {
           const category = CATEGORIES.find((c) => c.name.toLowerCase() === String(row.finalCategory || '').toLowerCase());
           const audit = auditMap.get(row.trackingId);
@@ -480,58 +468,17 @@ const ExpedientesPage = (_props: Props) => {
 
     getSubTablesForTrackingRef.current = getSubTablesForTracking;
 
-    const loadExpedientesOnce = async () => {
-      await new Promise<void>((resolve, reject) => {
-        const subscription = connection
-          .subscriptionBuilder()
-          .onApplied(() => {
-            try {
-              refreshFromCache();
-              resolve();
-            } catch (error) {
-              reject(error);
-            } finally {
-              subscription.unsubscribe();
-            }
-          })
-          .onError((ctx: unknown) => {
-            subscription.unsubscribe();
-            reject(ctx);
-          })
-          .subscribe([
-            'SELECT * FROM application',
-            'SELECT * FROM application_title',
-            'SELECT * FROM application_language',
-            'SELECT * FROM application_publication',
-            'SELECT * FROM application_experience',
-            'SELECT * FROM application_audit',
-            'SELECT * FROM api_config',
-            'SELECT * FROM openrouter_config',
-            'SELECT * FROM rag_config',
-            'SELECT * FROM rag_document',
-            'SELECT * FROM rag_normative',
-            'SELECT * FROM system_setting',
-            'SELECT * FROM faculty',
-            'SELECT * FROM academic_program',
-            'SELECT * FROM convocatoria',
-            'SELECT * FROM application_analysis_version',
-          ]);
-      });
-    };
-
-    reloadExpedientesRef.current = loadExpedientesOnce;
-    void loadExpedientesOnce().catch((ctx) => console.error(ctx));
+    if (globalDataReady) {
+      refreshFromCache();
+    }
 
     return () => {
-      reloadExpedientesRef.current = null;
-      connection.disconnect();
-      connectionRef.current = null;
+      // cleanup if needed
     };
-  }, []);
+  }, [connection, globalDataReady]);
 
   const runReducer = async (reducerName: string, args: object) => {
-    const connection = connectionRef.current;
-    if (!connection) throw new Error('Sin conexión a SpacetimeDB.');
+    if (!connection) throw new Error('Sin conexiÃ³n a SpacetimeDB.');
 
     const reducerView = connection.reducers as any;
     const candidates = [
@@ -553,7 +500,7 @@ const ExpedientesPage = (_props: Props) => {
 
   const handleSave = async () => {
     if (!connected) {
-      window.alert('No hay conexión a SpacetimeDB.');
+      window.alert('No hay conexiÃ³n a SpacetimeDB.');
       return;
     }
 
@@ -568,12 +515,12 @@ const ExpedientesPage = (_props: Props) => {
     }
 
     if (formData.titulos.length === 0 || formData.titulos.some((t) => !t.titulo.trim())) {
-      window.alert('Agrega al menos un título válido.');
+      window.alert('Agrega al menos un tÃ­tulo vÃ¡lido.');
       return;
     }
 
     if (formData.idiomas.length === 0 || formData.idiomas.some((i) => !i.idioma.trim())) {
-      window.alert('Agrega al menos un idioma válido.');
+      window.alert('Agrega al menos un idioma vÃ¡lido.');
       return;
     }
 
@@ -586,7 +533,7 @@ const ExpedientesPage = (_props: Props) => {
         trackingId,
         professorName: formData.nombre.trim(),
         documentNumber: formData.documento.trim(),
-        campus: 'VALLEDUPAR',
+        campus: formData.campus?.toUpperCase() || 'BUCARAMANGA',
         programName: formData.programa.trim(),
         facultyName: formData.facultad.trim(),
         convocatoriaId: selectedConvocatoriaId,
@@ -621,7 +568,7 @@ const ExpedientesPage = (_props: Props) => {
           publicationTitle: p.titulo,
           quartile: p.cuartil,
           publicationYear: p.fecha,
-          publicationType: p.tipo || 'Artículo',
+          publicationType: p.tipo || 'ArtÃ­culo',
           authorsCount: Number(p.autores || 1),
           sourceKind: p.fuente || 'MANUAL',
         });
@@ -641,24 +588,20 @@ const ExpedientesPage = (_props: Props) => {
 
       window.alert('Expediente registrado correctamente.');
       setFormData(emptyForm);
-      if (reloadExpedientesRef.current) {
-        await reloadExpedientesRef.current();
-      }
       setView('lista');
     } catch (e) {
       console.error(e);
-      window.alert('No fue posible registrar el expediente. Revisa consola para más detalle.');
+      window.alert('No fue posible registrar el expediente. Revisa consola para mÃ¡s detalle.');
     } finally {
       setLoading(false);
     }
   };
 
   const deleteRecord = async (id: string) => {
-    window.alert(`La eliminación no está habilitada en Spacetime para ${id}.`);
+    window.alert(`La eliminaciÃ³n no estÃ¡ habilitada en Spacetime para ${id}.`);
   };
 
   const getActiveRagDocuments = (): StoredRagDocument[] => {
-    const connection = connectionRef.current;
     if (!connection) return [];
 
     const dbView = connection.db as any;
@@ -717,7 +660,7 @@ const ExpedientesPage = (_props: Props) => {
 
     // Read normatives from rag_normative DB table; fall back to system_setting
     try {
-      const dbView = connectionRef.current?.db as any;
+      const dbView = connection?.db as any;
       const normTable = dbView?.rag_normative || dbView?.ragNormative;
       if (normTable) {
         const normRows = Array.from(normTable.iter()) as any[];
@@ -809,7 +752,7 @@ const ExpedientesPage = (_props: Props) => {
     const model = runtime.model;
     const activeKey = runtime.activeKey;
     if (!activeKey) {
-      setAiAnalysis('No se encontró API Key activa. Configúrala en Configuración > API (Gemini o APIFreeLLM).');
+      setAiAnalysis('No se encontrÃ³ API Key activa. ConfigÃºrala en ConfiguraciÃ³n > API (Gemini o APIFreeLLM).');
       return;
     }
     setAiGenerating(true);
@@ -859,19 +802,20 @@ const ExpedientesPage = (_props: Props) => {
           fuente: normalizePublicationSource(p.sourceKind),
         })),
         experiencia: selectedExperiences.map((e) => ({
-          tipo: e.experienceType as 'Profesional' | 'Docencia Universitaria' | 'Investigación',
+          tipo: e.experienceType as 'Profesional' | 'Docencia Universitaria' | 'Investigación' | 'Colciencias Senior' | 'Colciencias Junior' as any,
           inicio: e.startedAt,
           fin: e.endedAt,
           certificacion: e.certified ? 'SI' as const : 'NO' as const,
         })),
+        campus: (req as any).campus || 'VALLEDUPAR',
       });
 
       const workflowSummary = [
-        `Académico: ${provisionalBreakdown.ptsAcad.toFixed(1)} pts posibles · ${req.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
+        `Académico: ${provisionalBreakdown.ptsAcad.toFixed(1)} pts posibles · ${req.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
         `Idiomas: ${provisionalBreakdown.ptsIdioma.toFixed(1)} pts posibles · ${req.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
         `Producción: ${provisionalBreakdown.ptsPI.toFixed(1)} pts posibles · ${req.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar'}`,
         `Experiencia: ${Math.min(provisionalBreakdown.ptsExpBruta, provisionalBreakdown.appliedTope).toFixed(1)} pts posibles · ${req.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar'}`,
-        `Resultado preliminar por soportes: ${provisionalBreakdown.finalPts.toFixed(1)} pts · categoría posible ${provisionalBreakdown.finalCat.name}`,
+        `Resultado preliminar por soportes: ${provisionalBreakdown.finalPts.toFixed(1)} pts Â· categoría posible ${provisionalBreakdown.finalCat.name}`,
       ].join('\n');
 
       const caseDetail = [
@@ -880,17 +824,17 @@ const ExpedientesPage = (_props: Props) => {
         `Facultad: ${req.facultad}`,
         `Estado del expediente: ${req.status}`,
         `Puntaje final oficial del expediente: ${req.finalPts.toFixed(1)}`,
-        `Categoría oficial asignada: ${req.finalCat.name}`,
+        `categoría oficial asignada: ${req.finalCat.name}`,
         `Mensaje oficial del motor: ${req.outputMessage}`,
-        `Validación de títulos: ${req.audit?.titleValidated ? 'Sí' : 'No'}`,
-        `Validación de idiomas: ${req.audit?.languageValidated ? 'Sí' : 'No'}`,
-        `Validación de publicaciones: ${req.audit?.publicationVerified ? 'Sí' : 'No'}`,
-        `Certificación de experiencia: ${req.audit?.experienceCertified ? 'Sí' : 'No'}`,
-        `Observaciones de auditoría: ${req.audit?.observations || 'Sin observaciones registradas'}`,
+        `validación de títulos: ${req.audit?.titleValidated ? 'SÃ­' : 'No'}`,
+        `validación de idiomas: ${req.audit?.languageValidated ? 'SÃ­' : 'No'}`,
+        `validación de publicaciones: ${req.audit?.publicationVerified ? 'SÃ­' : 'No'}`,
+        `certificación de experiencia: ${req.audit?.experienceCertified ? 'SÃ­' : 'No'}`,
+        `Observaciones de auditorÃ­a: ${req.audit?.observations || 'Sin observaciones registradas'}`,
         `\nLECTURA PRELIMINAR POR SOPORTES Y WORKFLOW:\n${workflowSummary}`,
-        `\nTÍTULOS ACADÉMICOS: ${titulosTxt}`,
+        `\nTÃTULOS ACADÃ‰MICOS: ${titulosTxt}`,
         `IDIOMAS: ${idiomasTxt}`,
-        `PRODUCCIÓN INTELECTUAL: ${pubsTxt}`,
+        `PRODUCCIÃ“N INTELECTUAL: ${pubsTxt}`,
         `EXPERIENCIA: ${expTxt}`,
       ].join('\n');
 
@@ -899,10 +843,10 @@ const ExpedientesPage = (_props: Props) => {
       const iaRowsPayload = [
         {
           section: 'Académico',
-          criterion: 'Puntaje académico preliminar',
+          criterion: 'Puntaje Académico preliminar',
           suggestedScore: provisionalBreakdown.ptsAcad,
           hasSupport: selectedTitles.length > 0,
-          comment: selectedTitles.length > 0 ? 'Derivado de títulos cargados.' : 'Sin títulos cargados.',
+          comment: selectedTitles.length > 0 ? 'Derivado de tÃ­tulos cargados.' : 'Sin tÃ­tulos cargados.',
         },
         {
           section: 'Idiomas',
@@ -913,7 +857,7 @@ const ExpedientesPage = (_props: Props) => {
         },
         {
           section: 'Producción',
-          criterion: 'Puntaje de producción preliminar',
+          criterion: 'Puntaje de Producción preliminar',
           suggestedScore: provisionalBreakdown.ptsPI,
           hasSupport: indexedSelectedPublications.length > 0,
           comment:
@@ -932,49 +876,49 @@ const ExpedientesPage = (_props: Props) => {
         },
       ];
 
-      const baseSystemPrompt = `Eres un auditor jurídico-académico senior del Comité de Asignación de Puntaje (CAP) de la Universidad de Santander (UDES). Debes emitir un informe extenso, formalista, explicativo y profesional, con redacción narrativa y criterio técnico.
+      const baseSystemPrompt = `Eres un auditor jurÃ­dico-Académico senior del ComitÃ© de AsignaciÃ³n de Puntaje (CAP) de la Universidad de Santander (UDES). Debes emitir un informe extenso, formalista, explicativo y profesional, con redAcción narrativa y criterio tÃ©cnico.
 
-Actúa simultáneamente desde cuatro planos:
-1. Como abogada de Talento Humano: analiza cumplimiento normativo, suficiencia documental, riesgos jurídicos y cargas probatorias.
-2. Como Coordinadora de Talento Humano: analiza viabilidad administrativa, brechas del expediente, acciones de subsanación y riesgo operativo.
-3. Como Comité de Aprobación: analiza mérito académico, consistencia del puntaje, pertinencia de la categoría y condiciones para aprobar, devolver o requerir ajustes.
-4. Como auditor IA independiente: identifica coincidencias entre las tres perspectivas y emite una recomendación propia, motivada y prudente.
+ActÃºa simultÃ¡neamente desde cuatro planos:
+1. Como abogada de Talento Humano: analiza cumplimiento normativo, suficiencia documental, riesgos jurÃ­dicos y cargas probatorias.
+2. Como Coordinadora de Talento Humano: analiza viabilidad administrativa, brechas del expediente, acciones de subsanaciÃ³n y riesgo operativo.
+3. Como ComitÃ© de AprobaciÃ³n: analiza mÃ©rito Académico, consistencia del puntaje, pertinencia de la categoría y condiciones para aprobar, devolver o requerir ajustes.
+4. Como auditor IA independiente: identifica coincidencias entre las tres perspectivas y emite una recomendaciÃ³n propia, motivada y prudente.
 
-Debes usar prioritariamente el contexto RAG suministrado. Cita expresamente las fuentes normativas recuperadas en el cuerpo del informe usando el formato "Fuente RAG X" o el nombre del documento. No inventes artículos ni normas. Si una regla no aparece en el contexto RAG, dilo de forma expresa.
+Debes usar prioritariamente el contexto RAG suministrado. Cita expresamente las fuentes normativas recuperadas en el cuerpo del informe usando el formato "Fuente RAG X" o el nombre del documento. No inventes artÃ­culos ni normas. Si una regla no aparece en el contexto RAG, dilo de forma expresa.
 
-El informe debe contener estas secciones, con desarrollo en párrafos completos y no solo listas:
+El informe debe contener estas secciones, con desarrollo en pÃ¡rrafos completos y no solo listas:
 
 ## 1. Resumen ejecutivo del expediente
 Presenta el perfil del docente, la categoría resultante, el puntaje observado y la tesis central del informe.
 
 ## 2. Perspectiva de la Abogada de Talento Humano
-Analiza requisitos, soportes, cumplimiento normativo, riesgos de contradicción, vacíos probatorios y consecuencias jurídicas.
+Analiza requisitos, soportes, cumplimiento normativo, riesgos de contradicciÃ³n, vacÃ­os probatorios y consecuencias jurÃ­dicas.
 
 ## 3. Perspectiva de la Coordinadora de Talento Humano
-Explica la lectura administrativa del caso, suficiencia del expediente para trámite, alertas de gestión y plan de subsanación o cierre.
+Explica la lectura administrativa del caso, suficiencia del expediente para trÃ¡mite, alertas de gestiÃ³n y plan de subsanaciÃ³n o cierre.
 
-## 4. Perspectiva del Comité de Aprobación
-Explica por qué el puntaje y la categoría lucen consistentes o inconsistentes con la evidencia aportada, y si procede aprobación, condicionamiento o devolución.
+## 4. Perspectiva del ComitÃ© de AprobaciÃ³n
+Explica por quÃ© el puntaje y la categoría lucen consistentes o inconsistentes con la evidencia aportada, y si procede aprobaciÃ³n, condicionamiento o devoluciÃ³n.
 
-## 5. Coincidencias críticas entre las tres perspectivas
+## 5. Coincidencias crÃ­ticas entre las tres perspectivas
 Sintetiza los puntos comunes y los desacuerdos relevantes.
 
-## 6. Recomendación propia del auditor IA
-Emite una recomendación final autónoma, argumentada y prudente. Debe indicar si recomiendas aprobar, aprobar con condicionamientos, requerir subsanación o no aprobar.
+## 6. RecomendaciÃ³n propia del auditor IA
+Emite una recomendaciÃ³n final autÃ³noma, argumentada y prudente. Debe indicar si recomiendas aprobar, aprobar con condicionamientos, requerir subsanaciÃ³n o no aprobar.
 
 ## 7. Trazabilidad razonada del puntaje
-Explica de manera narrativa por qué el expediente alcanza o no el puntaje final oficial informado. Debes diferenciar explícitamente entre el puntaje oficial del expediente y la posible calificación preliminar derivada de los soportes cargados y del estado del workflow. Relaciona títulos, idiomas, producción y experiencia con el resultado final, y aclara los límites, topes o faltantes cuando corresponda.
+Explica de manera narrativa por quÃ© el expediente alcanza o no el puntaje final oficial informado. Debes diferenciar explÃ­citamente entre el puntaje oficial del expediente y la posible calificaciÃ³n preliminar derivada de los soportes cargados y del estado del workflow. Relaciona tÃ­tulos, idiomas, Producción y experiencia con el resultado final, y aclara los lÃ­mites, topes o faltantes cuando corresponda.
 
 ## 8. Sustento normativo citado
-Lista las normas y fragmentos RAG realmente usados, con citas breves y su relevancia para la decisión.
+Lista las normas y fragmentos RAG realmente usados, con citas breves y su relevancia para la decisiÃ³n.
 
 Reglas de salida:
-- Responde en español jurídico-administrativo claro.
-- Sé detallado, explicativo y formalista.
+- Responde en espaÃ±ol jurÃ­dico-administrativo claro.
+- SÃ© detallado, explicativo y formalista.
 - Usa encabezados Markdown.
-- Evita respuestas cortas o genéricas.
-- Si la evidencia es insuficiente, dilo y explica qué soporte falta.
-- Diferencia siempre entre "puntaje oficial del expediente" y "posible calificación por soportes".
+- Evita respuestas cortas o genÃ©ricas.
+- Si la evidencia es insuficiente, dilo y explica quÃ© soporte falta.
+- Diferencia siempre entre "puntaje oficial del expediente" y "posible calificaciÃ³n por soportes".
 - No trates como definitivo un componente que siga pendiente de validación auxiliar.
 - Nunca digas que usaste un RAG si no vas a citar el contexto efectivamente entregado.`;
 
@@ -982,7 +926,7 @@ Reglas de salida:
         ? `${ragSystemContext}\n\n${baseSystemPrompt}`
         : baseSystemPrompt;
 
-      const userMessage = `Genera un informe auditor integral del siguiente expediente docente UDES. Debes explicar el porqué del puntaje, la categoría y los riesgos del caso con base en el expediente y en el contexto normativo recuperado.\n\n### Expediente\n${caseDetail}\n\n### Contexto normativo RAG recuperado\n${ragContext}\n\n### Instrucción adicional\nSi el contexto RAG no basta para afirmar un requisito, indícalo expresamente. No simplifiques el análisis. Produce un informe profesional, extenso y bien motivado.`;
+      const userMessage = `Genera un informe auditor integral del siguiente expediente docente UDES. Debes explicar el porquÃ© del puntaje, la categoría y los riesgos del caso con base en el expediente y en el contexto normativo recuperado.\n\n### Expediente\n${caseDetail}\n\n### Contexto normativo RAG recuperado\n${ragContext}\n\n### InstrucciÃ³n adicional\nSi el contexto RAG no basta para afirmar un requisito, indÃ­calo expresamente. No simplifiques el análisis. Produce un informe profesional, extenso y bien motivado.`;
 
       let aiText = '';
 
@@ -1000,7 +944,7 @@ Reglas de salida:
         );
         if (!res.ok) {
           const errorText = await res.text();
-          throw new Error(errorText || `Gemini respondió ${res.status}`);
+          throw new Error(errorText || `Gemini respondiÃ³ ${res.status}`);
         }
         const data = await res.json();
         aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1021,7 +965,7 @@ Reglas de salida:
         });
         if (!res.ok) {
           const errorText = await res.text();
-          throw new Error(errorText || `APIFreeLLM respondió ${res.status}`);
+          throw new Error(errorText || `APIFreeLLM respondiÃ³ ${res.status}`);
         }
         const data = await res.json();
         aiText = data.response || data.message || data.content || data.text || '';
@@ -1038,15 +982,11 @@ Reglas de salida:
             totalScore: provisionalBreakdown.finalPts,
             suggestedCategory: provisionalBreakdown.finalCat.name,
             narrative: aiText,
-            notes: 'Versión IA generada automáticamente desde Expedientes.',
+            notes: 'VersiÃ³n IA generada automáticamente desde Expedientes.',
           });
-
-          if (reloadExpedientesRef.current) {
-            await reloadExpedientesRef.current();
-          }
         } catch (saveError) {
           console.error(saveError);
-          window.alert('Se generó el dictamen IA, pero no se pudo registrar la versión en la tabla de análisis.');
+          window.alert('Se generó el dictamen IA, pero no se pudo registrar la versiÃ³n en la tabla de análisis.');
         }
       }
     } catch (error) {
@@ -1073,7 +1013,7 @@ Reglas de salida:
       ...p,
       produccion: [
         ...p.produccion,
-        { titulo: '', cuartil: 'Q4', fecha: new Date().getFullYear().toString(), tipo: 'Artículo', autores: 1, fuente: 'MANUAL' },
+        { titulo: '', cuartil: 'Q4', fecha: new Date().getFullYear().toString(), tipo: 'ArtÃ­culo', autores: 1, fuente: 'MANUAL' },
       ],
     }));
 
@@ -1094,7 +1034,7 @@ Reglas de salida:
 
   const handleWorkflowAction = async (req: RequestRecord, action: 'valorar' | 'calificar' | 'seguimiento' | 'validar') => {
     if (!connected) {
-      window.alert('Sin conexión a SpacetimeDB.');
+      window.alert('Sin conexiÃ³n a SpacetimeDB.');
       return;
     }
     const session = getPortalSession();
@@ -1120,9 +1060,6 @@ Reglas de salida:
         languageValidated: req.audit?.languageValidated || false,
         observations: `Acción: ${action} por ${session?.username || 'sistema'}`,
       });
-      if (reloadExpedientesRef.current) {
-        await reloadExpedientesRef.current();
-      }
     } catch (e) {
       console.error(e);
       window.alert('Error al actualizar el estado del expediente.');
@@ -1142,14 +1079,14 @@ Reglas de salida:
       const imported = await importScopusProduccionFromApi(formData.scopusProfile, scopusKey, 20);
 
       if (imported.length === 0) {
-        window.alert('SCOPUS no devolvió publicaciones para ese perfil.');
+        window.alert('SCOPUS no devolviÃ³ publicaciones para ese perfil.');
         return;
       }
 
       setFormData((p) => ({ ...p, produccion: [...p.produccion, ...imported] }));
     } catch (err) {
       console.error(err);
-      window.alert(err instanceof Error ? err.message : 'Error al importar producción desde SCOPUS.');
+      window.alert(err instanceof Error ? err.message : 'Error al importar Producción desde SCOPUS.');
     } finally {
       setLoading(false);
     }
@@ -1157,7 +1094,7 @@ Reglas de salida:
 
   const importOrcidProduccion = async () => {
     if (!formData.scopusProfile.trim()) {
-      window.alert('Ingresa un ORCID para consultar producción.');
+      window.alert('Ingresa un ORCID para consultar Producción.');
       return;
     }
 
@@ -1167,13 +1104,13 @@ Reglas de salida:
       void orcidClientSecret;
       const imported = await importOrcidProduccionFromApi(formData.scopusProfile, 20);
       if (imported.length === 0) {
-        window.alert('ORCID no devolvió publicaciones para ese perfil.');
+        window.alert('ORCID no devolviÃ³ publicaciones para ese perfil.');
         return;
       }
       setFormData((p) => ({ ...p, produccion: [...p.produccion, ...imported] }));
     } catch (err) {
       console.error(err);
-      window.alert(err instanceof Error ? err.message : 'Error al consultar producción en ORCID.');
+      window.alert(err instanceof Error ? err.message : 'Error al consultar Producción en ORCID.');
     } finally {
       setLoading(false);
     }

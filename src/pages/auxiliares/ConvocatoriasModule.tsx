@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+﻿import React, { useEffect, useState, useMemo } from 'react';
 import {
   Users,
   Inbox,
@@ -22,8 +22,8 @@ import {
 } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
-import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
+import { useSpacetime } from '../../context/SpacetimeContext';
 
 type ConvocatoriaData = {
   id: string;
@@ -56,8 +56,7 @@ interface ConvocatoriasModuleProps {
 const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) => {
   const [currentView, setCurrentView] = useState<'lista' | 'detalle'>('lista');
   const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [connection, setConnection] = useState<DbConnection | null>(null);
+  const { connection, connected } = useSpacetime();
   const [showModal, setShowModal] = useState(false);
   const [selectedConvocatoria, setSelectedConvocatoria] = useState<ConvocatoriaData | null>(null);
   const [convocatorias, setConvocatorias] = useState<ConvocatoriaData[]>([]);
@@ -133,33 +132,11 @@ const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) =>
     }
   }, [showModal]);
 
-  // Inicializar conexión con SpacetimeDB
   useEffect(() => {
-    const { host, databaseName } = getSpacetimeConnectionConfig();
-
-    const conn = DbConnection.builder()
-      .withUri(host)
-      .withDatabaseName(databaseName)
-      .onConnect((liveConn: DbConnection) => {
-        setConnected(true);
-        ensurePortalSession(liveConn).catch((error) => {
-          console.warn('ConvocatoriasModule portal session warning:', error);
-        });
-      })
-      .onConnectError((_ctx: unknown, error: unknown) => {
-        console.error('ConvocatoriasModule connect error:', error);
-        setConnected(false);
-      })
-      .build();
-
-    setConnection(conn);
-    void loadConvocatoriasOnce(conn).catch((error) => console.error(error));
-
-    return () => {
-      conn.disconnect();
-      setConnection(null);
-    };
-  }, []);
+    if (connection) {
+      void loadConvocatoriasOnce(connection).catch((error) => console.error(error));
+    }
+  }, [connection]);
 
   const getDaysLeft = (dateStr: string) => {
     const diff = new Date(dateStr).getTime() - new Date().getTime();
@@ -184,7 +161,6 @@ const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) =>
 
     setLoading(true);
     try {
-      await ensurePortalSession(connection);
 
       const reducers = connection.reducers as any;
       const candidates = [

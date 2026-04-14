@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
@@ -130,8 +130,9 @@ const InicioPage = ({ standalone = false }: Props) => {
         produccion: formData.produccion,
         experiencia: formData.experiencia
           .filter((e) => e.inicio)
-          .map((e) => ({ tipo: e.tipo, inicio: e.inicio, fin: e.fin, certificacion: e.certificacion })),
+          .map((e) => ({ tipo: e.tipo as any, inicio: e.inicio, fin: e.fin, certificacion: e.certificacion })),
         orcid: '',
+        campus: formData.campus,
       });
     } catch {
       return null;
@@ -146,7 +147,7 @@ const InicioPage = ({ standalone = false }: Props) => {
       .onConnect(() => setConnected(true))
       .onConnectError((_ctx: unknown, error: unknown) => {
         console.error(error);
-        setConnected(false);
+        
       })
       .build();
 
@@ -309,12 +310,13 @@ const InicioPage = ({ standalone = false }: Props) => {
     experiencia: formData.experiencia
       .filter((item) => item.inicio)
       .map((item) => ({
-        tipo: item.tipo,
+        tipo: item.tipo as any,
         inicio: item.inicio,
         fin: item.fin,
         certificacion: item.certificacion,
       })),
     orcid: '',
+    campus: formData.campus,
   });
 
   const handleSubmit = async () => {

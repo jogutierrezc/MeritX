@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { BrainCircuit } from 'lucide-react';
 
 interface DetalleDictamenProps {

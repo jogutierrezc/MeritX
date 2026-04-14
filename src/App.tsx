@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import './App.css';
 
 import AppHeader from './components/AppHeader';
@@ -112,7 +112,7 @@ const App = () => {
   if (isStandaloneAutoregistro) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950 md:px-8 md:py-10">
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-screen-2xl">
           <InicioPortal standalone />
         </div>
       </div>
@@ -131,7 +131,7 @@ const App = () => {
         dropdownRef={dropdownRef}
       />
 
-      <main className="max-w-7xl mx-auto px-8 py-12">
+      <main className="max-w-screen-2xl mx-auto px-4 py-8 md:px-8 md:py-12">
         {activeModule === 'inicio' && <InicioPortal />}
         {activeModule === 'auth' && <AuthPage onLogin={handlePortalLogin} />}
         {activeModule === 'decano' && hasAccess && <DecanoPage />}

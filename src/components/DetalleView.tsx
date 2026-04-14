@@ -82,6 +82,7 @@ const DetalleView: React.FC<Props> = ({
         yearsInCategory: 0,
         hasTrabajoAprobadoCEPI: false,
         orcid: '',
+        campus: (selectedRequest as any).campus || 'VALLEDUPAR',
         titulos: titles.map((t) => ({
           titulo: t.titleName,
           nivel: t.titleLevel as 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado',

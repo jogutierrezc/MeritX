@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ArrowLeft, Download, BrainCircuit } from 'lucide-react';
 import type { Request } from '../../../types';
 import { DetalleExpediente } from './DetalleExpediente';

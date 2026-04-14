@@ -21,8 +21,8 @@ import type {
   UserFacultyAssignment,
   UserProfile,
 } from '../../module_bindings/types';
-import { getSpacetimeConnectionConfig } from '../../services/spacetime';
-import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
+import { getPortalSession } from '../../services/portalAuth';
+import { useSpacetime } from '../../context/SpacetimeContext';
 import { APIConfigSection } from '../../components/APIConfigSection';
 import AppLogo from '../../components/Common/AppLogo';
 import { RagSettingsModule } from './modules/RagSettingsModule';
@@ -208,13 +208,10 @@ const MENU_ITEMS: { id: TabId; icon: React.FC<{ size?: number }>; label: string 
 // ─── AdminPortal ──────────────────────────────────────────────────────────────
 
 const AdminPortal = () => {
-  const connectionRef = useRef<DbConnection | null>(null);
-  const reloadConfigRef = useRef<(() => Promise<void>) | null>(null);
+  const { connection, connected, portalAuthReady, globalDataReady, session } = useSpacetime();
 
   const [activeTab, setActiveTab] = useState<TabId>('usuarios');
   const [statusMessage, setStatusMessage] = useState('');
-  const [connected, setConnected] = useState(false);
-  const [portalAuthReady, setPortalAuthReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -233,57 +230,13 @@ const AdminPortal = () => {
   const [ragDocuments, setRagDocuments] = useState<RagDocument[]>([]);
   const [ragNormatives, setRagNormatives] = useState<RagNormative[]>([]);
 
-  // ── Portal session ─────────────────────────────────────────────────────────
-
-  const ensurePortalSession = async (conn?: DbConnection | null) => {
-    const connection = conn ?? connectionRef.current;
-    if (!connection) throw new Error('Sin conexion Spacetime.');
-
-    const uiSession = getPortalSession();
-    if (!uiSession) throw new Error('No hay sesion del portal.');
-    if (uiSession.role !== 'admin') throw new Error('Solo admin puede configurar el sistema.');
-
-    const credentials = getPortalCredentialsForRole(uiSession.role);
-    if (!credentials) throw new Error('Sin credenciales para la sesion admin en Spacetime.');
-
-    const reducers = connection.reducers as any;
-    const loginReducer = reducers.portalLogin ?? reducers.portal_login;
-    if (typeof loginReducer !== 'function') throw new Error('Reducer portal_login no disponible.');
-
-    await loginReducer({
-      role: uiSession.role,
-      username: credentials.username,
-      password: credentials.password,
-    });
-
-    setPortalAuthReady(true);
-  };
-
   // ── Connection ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const { host, databaseName } = getSpacetimeConnectionConfig();
-
-    const connection = DbConnection.builder()
-      .withUri(host)
-      .withDatabaseName(databaseName)
-      .onConnect((conn: DbConnection) => {
-        setConnected(true);
-        ensurePortalSession(conn).catch((error: unknown) => {
-          console.error(error);
-          setPortalAuthReady(false);
-          setStatusMessage(
-            'No fue posible abrir sesion admin en Spacetime para ejecutar cambios protegidos.',
-          );
-        });
-      })
-      .onConnectError((_ctx: unknown, error: unknown) => {
-        console.error(error);
-        setStatusMessage('No fue posible conectar con SpacetimeDB.');
-      })
-      .build();
-
-    connectionRef.current = connection;
+    if (!connection) {
+      setLoading(true);
+      return;
+    }
 
     const refreshFromCache = () => {
       const db = connection.db as any;
@@ -505,80 +458,26 @@ const AdminPortal = () => {
       setActions(safeJSONParse(settingMap.get(SETTING_KEYS.actions), DEFAULT_ACTIONS));
     };
 
-    const loadConfigOnce = async () => {
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-
-        // Soft timeout: if onApplied never fires (schema mismatch / table missing),
-        // resolve with whatever is already in cache so the portal is not blocked.
-        const timeout = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          try { refreshFromCache(); } catch { /* ignore */ }
-          resolve();
-        }, 15000);
-
-        const subscription = connection
-          .subscriptionBuilder()
-          .onApplied(() => {
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timeout);
-            try {
-              refreshFromCache();
-              resolve();
-            } catch (error) {
-              reject(error);
-            } finally {
-              subscription.unsubscribe();
-            }
-          })
-          .onError((ctx: unknown) => {
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timeout);
-            subscription.unsubscribe();
-            reject(ctx);
-          })
-          .subscribe([
-            'SELECT * FROM portal_role',
-            'SELECT * FROM user_profile',
-            'SELECT * FROM faculty',
-            'SELECT * FROM user_faculty_assignment',
-            'SELECT * FROM api_config',
-            'SELECT * FROM openrouter_config',
-            'SELECT * FROM resend_config',
-            'SELECT * FROM email_template',
-            'SELECT * FROM system_setting',
-            'SELECT * FROM rag_config',
-            'SELECT * FROM rag_document',
-            'SELECT * FROM rag_normative',
-          ]);
-      });
-    };
-
-    reloadConfigRef.current = loadConfigOnce;
-    void loadConfigOnce()
-      .catch((error) => {
+    if (globalDataReady) {
+      try {
+        refreshFromCache();
+        setLoading(false);
+      } catch (error) {
         console.error(error);
         setStatusMessage('Error de carga inicial en Spacetime.');
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      }
+    }
 
     return () => {
-      reloadConfigRef.current = null;
-      connection.disconnect();
-      connectionRef.current = null;
+      // cleanup if needed
     };
-  }, []);
+  }, [connection, globalDataReady]);
 
   // ── Reducer runner ─────────────────────────────────────────────────────────
 
   const runReducer = async (reducerName: string, args: object) => {
-    const connection = connectionRef.current;
     if (!connection) throw new Error('Sin conexion Spacetime.');
-
-    await ensurePortalSession(connection);
 
     const reducerView = connection.reducers as any;
     const toCamel = (v: string) => v.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
@@ -635,7 +534,6 @@ const AdminPortal = () => {
     }
 
     await fn(args);
-    if (reloadConfigRef.current) await reloadConfigRef.current();
   };
 
   // ── Save functions ─────────────────────────────────────────────────────────
@@ -1005,8 +903,6 @@ const AdminPortal = () => {
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
-
-  const session = getPortalSession();
 
   return (
     <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-50">

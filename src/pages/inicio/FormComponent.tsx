@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Minus,
@@ -21,6 +21,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import LoadingOverlay from '../../components/LoadingOverlay';
+import { useSpacetime } from '../../context/SpacetimeContext';
 import {
   getPortalSession,
   runReducer,
@@ -36,7 +37,6 @@ import {
   CAMPUS,
   type Campus,
 } from '../../services/formService';
-import { fetchApiConfigOnce, fetchFacultyProgramsOnce } from '../../db/subscriptions';
 import type { ConvocatoriaType } from '../../db/convocatoria_table';
 import type { AcademicProgram, Faculty } from '../../module_bindings/types';
 
@@ -58,36 +58,29 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [programs, setPrograms] = useState<AcademicProgram[]>([]);
 
-  // Load api_config once on mount to avoid persistent DB subscription.
+  const { connection, globalDataReady } = useSpacetime();
+ 
+  // Load data from cache when ready
   useEffect(() => {
-    let mounted = true;
-    const loadApiConfig = async () => {
-      try {
-        const [configs, catalog] = await Promise.all([
-          fetchApiConfigOnce(),
-          fetchFacultyProgramsOnce(),
-        ]);
-        if (!mounted) return;
-        setConnected(true);
-        setFaculties(catalog.faculties.filter((item) => item.active));
-        setPrograms(catalog.programs.filter((item) => item.active));
-        if (configs.length > 0) {
-          const config = configs[0];
-          setScopusApiKey(config.scopusApiKey || '');
-          setOrcidClientId(config.orcidClientId || '');
-          setOrcidClientSecret(config.orcidClientSecret || '');
-        }
-      } catch (error) {
-        console.error('Error loading api_config:', error);
-        if (mounted) setConnected(false);
+    if (!connection || !globalDataReady) return;
+ 
+    const dbView = connection.db as any;
+    const facultyTable = dbView.faculty;
+    const programTable = dbView.academic_program || dbView.academicProgram;
+    const apiTable = dbView.api_config || dbView.apiConfig;
+ 
+    if (facultyTable) setFaculties(Array.from(facultyTable.iter()) as Faculty[]);
+    if (programTable) setPrograms(Array.from(programTable.iter()) as AcademicProgram[]);
+ 
+    if (apiTable) {
+      const configs = Array.from(apiTable.iter()) as any[];
+      if (configs.length > 0) {
+        setScopusApiKey(configs[0].scopusApiKey || '');
+        setOrcidClientId(configs[0].orcidClientId || '');
+        setOrcidClientSecret(configs[0].orcidClientSecret || '');
       }
-    };
-
-    void loadApiConfig();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    }
+  }, [connection, globalDataReady]);
 
   // Calculate live score
   useMemo(() => {
@@ -111,7 +104,7 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
       experiencia: formData.experiencia
         .filter((item) => item.inicio)
         .map((item) => ({
-          tipo: item.tipo,
+          tipo: item.tipo as any,
           inicio: item.inicio,
           fin: item.fin,
           certificacion: item.certificacion,
@@ -163,7 +156,7 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
   const addProduccionManual = () => {
     setFormData((prev) => ({
       ...prev,
-      produccion: [...prev.produccion, { titulo: '', cuartil: 'Q4', fecha: '', tipo: 'Artículo', autores: 1, fuente: 'scopus' }],
+      produccion: [...prev.produccion, { titulo: '', cuartil: 'Q4', fecha: '', tipo: 'Artículo', autores: 1, fuente: 'manual', soporte: null, soporteNombre: '' }],
     }));
   };
 
@@ -317,7 +310,9 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
           publicationYear: item.fecha,
           publicationType: item.tipo || 'Artículo',
           authorsCount: Number(item.autores || 1),
-          sourceKind: item.fuente,
+          sourceKind: item.fuente || 'MANUAL',
+          supportName: item.soporteNombre || undefined,
+          supportPath: item.soporteNombre ? `professor-supports/publications/${trackingId}/${item.soporteNombre}` : undefined,
         });
       }
 
@@ -389,34 +384,15 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
   return (
     <>
       <div className="space-y-8">
-        <section className="grid gap-8 lg:grid-cols-12">
-          <aside className="space-y-6 lg:col-span-4">
-            <div className="space-y-6 rounded-[2rem] border border-slate-100 bg-white p-8 shadow-xl shadow-slate-200/60">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Datos obligatorios</p>
-                <h3 className="mt-2 text-2xl font-black uppercase tracking-tight text-slate-800">Checklist de radicacion</h3>
-              </div>
-              <div className="space-y-4">
-                {checklistItems.map((item) => (
-                  <div key={item} className="group flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 transition-all hover:bg-white hover:shadow-sm">
-                    <div className="mt-0.5 rounded-lg bg-blue-100 p-1.5 text-blue-700 transition-colors group-hover:bg-blue-600 group-hover:text-white">
-                      <CheckCircle2 size={16} />
-                    </div>
-                    <p className="text-sm font-semibold leading-relaxed text-slate-600 group-hover:text-slate-900">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={onBack}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-600 transition-all hover:bg-slate-50 hover:shadow-sm"
-            >
-              ← Volver
-            </button>
-          </aside>
-
-          <section className="space-y-8 rounded-[2rem] border border-slate-100 bg-white p-8 shadow-xl shadow-slate-200/60 md:p-10 lg:col-span-8">
+        <div className="flex justify-start mb-4">
+          <button
+            onClick={onBack}
+            className="rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-600 transition-all hover:bg-slate-50 hover:shadow-sm"
+          >
+            ← Volver
+          </button>
+        </div>
+        <section className="space-y-8 rounded-[2rem] border border-slate-100 bg-white p-8 shadow-xl shadow-slate-200/60 md:p-10">
             {registroExitoso && (
               <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
                 <div className="flex items-start gap-4">
@@ -717,47 +693,88 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
 
               <div className="space-y-4">
                 {formData.produccion.map((item, index) => (
-                  <div key={`${item.titulo}-${index}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1.6fr_0.7fr_0.7fr_0.8fr_auto]">
-                    <input
-                      value={item.titulo}
-                      onChange={(e) => setFormData((prev) => ({
-                        ...prev,
-                        produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, titulo: e.target.value } : prod),
-                      }))}
-                      className={baseInputClass}
-                      placeholder="TITULO DE LA INVESTIGACION"
-                    />
-                    <select
-                      value={item.cuartil}
-                      onChange={(e) => setFormData((prev) => ({
-                        ...prev,
-                        produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, cuartil: e.target.value as ProductionItem['cuartil'] } : prod),
-                      }))}
-                      className={baseInputClass}
-                    >
-                      <option value="Q1">Q1</option>
-                      <option value="Q2">Q2</option>
-                      <option value="Q3">Q3</option>
-                      <option value="Q4">Q4</option>
-                    </select>
-                    <input
-                      value={item.fecha}
-                      onChange={(e) => setFormData((prev) => ({
-                        ...prev,
-                        produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, fecha: e.target.value } : prod),
-                      }))}
-                      className={baseInputClass}
-                      placeholder="2024"
-                    />
-                    <div className="flex items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.15em] text-blue-800">
-                      {item.fuente}
+                  <div key={`${item.titulo}-${index}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="grid gap-3 md:grid-cols-[1.6fr_0.7fr_0.7fr_0.8fr_auto]">
+                      <input
+                        value={item.titulo}
+                        onChange={(e) => setFormData((prev) => ({
+                          ...prev,
+                          produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, titulo: e.target.value } : prod),
+                        }))}
+                        className={baseInputClass}
+                        placeholder="TITULO DE LA INVESTIGACION"
+                      />
+                      <select
+                        value={item.cuartil}
+                        onChange={(e) => setFormData((prev) => ({
+                          ...prev,
+                          produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, cuartil: e.target.value as ProductionItem['cuartil'] } : prod),
+                        }))}
+                        className={baseInputClass}
+                      >
+                        <option value="Q1">Q1</option>
+                        <option value="Q2">Q2</option>
+                        <option value="Q3">Q3</option>
+                        <option value="Q4">Q4</option>
+                      </select>
+                      <input
+                        value={item.fecha}
+                        onChange={(e) => setFormData((prev) => ({
+                          ...prev,
+                          produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, fecha: e.target.value } : prod),
+                        }))}
+                        className={baseInputClass}
+                        placeholder="2024"
+                      />
+                      <div className="flex items-center justify-center rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.15em] text-blue-800">
+                        {item.fuente}
+                      </div>
+                      <button
+                        onClick={() => setFormData((prev) => ({ ...prev, produccion: prev.produccion.filter((_, prodIndex) => prodIndex !== index) }))}
+                        className="rounded-xl bg-rose-50 px-4 py-3 text-rose-700"
+                      >
+                        <Minus size={16} />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setFormData((prev) => ({ ...prev, produccion: prev.produccion.filter((_, prodIndex) => prodIndex !== index) }))}
-                      className="rounded-xl bg-rose-50 px-4 py-3 text-rose-700"
-                    >
-                      <Minus size={16} />
-                    </button>
+                    {(!item.fuente || item.fuente === 'manual' || item.fuente === 'MANUAL') && (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <select
+                          value={item.tipo || 'Artículo'}
+                          onChange={(e) => setFormData((prev) => ({
+                            ...prev,
+                            produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, tipo: e.target.value as ProductionItem['tipo'] } : prod),
+                          }))}
+                          className={baseInputClass}
+                        >
+                          <option value="Artículo">Artículo Científico</option>
+                          <option value="Patente de Investigación">Patente de Investigación</option>
+                          <option value="Modelo de Utilidad">Modelo de Utilidad</option>
+                          <option value="Libro de Investigación">Libro de Investigación</option>
+                          <option value="Software Especializado">Software Especializado</option>
+                          <option value="Diseño Industrial">Diseño Industrial</option>
+                          <option value="Libro de Texto">Libro de Texto</option>
+                          <option value="Proyecto Estado-Empresa">Proyecto Estado-Empresa</option>
+                          <option value="Capítulo de Libro de Investigación">Capítulo de Libro de Investigación</option>
+                          <option value="Traducción de Obra Extranjera">Traducción de Obra Extranjera</option>
+                        </select>
+                        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.15em] text-blue-800 transition-all hover:bg-blue-100">
+                          <FileUp size={14} />
+                          {item.soporteNombre || 'Anexar soporte'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                            onChange={(e) => {
+                              const selected = e.target.files?.[0] || null;
+                              setFormData((prev) => ({
+                                ...prev,
+                                produccion: prev.produccion.map((prod, prodIndex) => prodIndex === index ? { ...prod, soporte: selected, soporteNombre: selected?.name || '' } : prod),
+                              }));
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -788,6 +805,8 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
                       <option value="Profesional">Profesional</option>
                       <option value="Docencia Universitaria">Docencia Universitaria</option>
                       <option value="Investigación">Investigación</option>
+                      <option value="Colciencias Senior">Colciencias Senior</option>
+                      <option value="Colciencias Junior">Colciencias Junior</option>
                     </select>
                     <input
                       type="date"
@@ -894,17 +913,16 @@ export const FormComponent: React.FC<FormComponentProps> = ({ selectedConvocator
               </section>
             )}
 
-            {!registroExitoso && (
-              <button
-                onClick={handleSubmit}
-                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:shadow-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!selectedConvocatoria}
-              >
-                Guardar y continuar
-                <ArrowRight size={16} />
-              </button>
-            )}
-          </section>
+          {!registroExitoso && (
+            <button
+              onClick={handleSubmit}
+              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:shadow-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!selectedConvocatoria}
+            >
+              Guardar y continuar
+              <ArrowRight size={16} />
+            </button>
+          )}
         </section>
       </div>
 

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Plus, ShieldCheck } from 'lucide-react';
 
 import type { RoleConfig } from '../../types/config';

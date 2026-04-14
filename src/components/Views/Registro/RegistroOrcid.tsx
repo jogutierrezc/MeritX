@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Fingerprint, Globe } from 'lucide-react';
 import type { FormData, Produccion } from '../../../types';
 import { fetchOrcidDataMock } from '../../../services/orcid';

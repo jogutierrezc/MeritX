@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { CheckCircle2, AlertCircle, Loader, Copy, Eye, EyeOff, Zap } from 'lucide-react';
 import type { ApiConfig } from '../types/config';
 import {

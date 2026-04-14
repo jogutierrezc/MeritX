@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, FilePlus2, FolderKanban } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
@@ -632,7 +632,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect((conn: DbConnection) => {
-        setConnected(true);
+        
         ensurePortalSession(conn)
           .catch((e) => {
             console.warn('Portal session en PerfilesModule:', e);
@@ -643,7 +643,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('PerfilesModule connect error:', err);
-        setConnected(false);
+        
         onReadyReject?.(err);
       })
       .build();
@@ -1371,6 +1371,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       documento: selectedAnalysisRequest.documento,
       programa: selectedAnalysisRequest.programa || '',
       facultad: selectedAnalysisRequest.facultad,
+      campus: 'VALLEDUPAR',
       scopusProfile: '',
       esIngresoNuevo: true,
       isAccreditedSource: false,
@@ -1396,7 +1397,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         fuente: normalizePublicationSource(row.sourceKind),
       })),
       experiencia: experiences.map((row) => ({
-        tipo: normalizeExperienceType(row.experienceType),
+        tipo: normalizeExperienceType(row.experienceType) as any,
         inicio: row.startedAt,
         fin: row.endedAt,
         certificacion: row.certified ? 'SI' : 'NO',

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { BarChart3, ChevronDown, Home, LogOut, Settings, ShieldCheck, User as UserIcon, Users, Zap } from 'lucide-react';
 import AppLogo from './Common/AppLogo';
 import Files from './icons/Files';

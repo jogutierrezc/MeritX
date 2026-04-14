@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   CheckCircle,
@@ -28,7 +28,7 @@ import type {
 } from '../../module_bindings/types';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import { getPortalSession } from '../../services/portalAuth';
-import { getSpacetimeConnectionConfig } from '../../services/spacetime';
+import { useSpacetime } from '../../context/SpacetimeContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,9 +80,8 @@ const DecanoPage = () => {
   const [currentView, setCurrentView] = useState<'list' | 'verify'>('list');
 
   // SpacetimeDB
-  const [connection, setConnection] = useState<DbConnection | null>(null);
+  const { connection, connected } = useSpacetime();
   const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
 
   // Table data
   const [requests, setRequests] = useState<DecanoRequest[]>([]);
@@ -106,20 +105,10 @@ const DecanoPage = () => {
   // ── SpacetimeDB connection ──────────────────────────────────────────────────
 
   useEffect(() => {
-    const { host, databaseName } = getSpacetimeConnectionConfig();
-
-    const conn = DbConnection.builder()
-      .withUri(host)
-      .withDatabaseName(databaseName)
-      .onConnect(() => setConnected(true))
-      .onConnectError((_ctx: unknown, error: unknown) => {
-        console.error(error);
-        setConnected(false);
-      })
-      .build();
+    if (!connection) return;
 
     const refreshFromCache = () => {
-      const db = conn.db as any;
+      const db = connection.db as any;
       const session = getPortalSession();
 
       const assignmentRows = db.user_faculty_assignment
@@ -175,7 +164,7 @@ const DecanoPage = () => {
         );
     };
 
-    const subscription = conn
+    const subscription = connection
       .subscriptionBuilder()
       .onApplied(() => refreshFromCache())
       .onError((ctx: unknown) => console.error(ctx))
@@ -188,14 +177,10 @@ const DecanoPage = () => {
         'SELECT * FROM user_faculty_assignment',
       ]);
 
-    setConnection(conn);
-
     return () => {
       subscription.unsubscribe();
-      conn.disconnect();
-      setConnection(null);
     };
-  }, []);
+  }, [connection]);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 

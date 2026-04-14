@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ServerCog, Settings } from 'lucide-react';
 
 import type { AIConfig, WorkflowActions } from '../../types/config';

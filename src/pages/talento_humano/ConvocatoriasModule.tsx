@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { CalendarPlus2, ListChecks } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
@@ -58,12 +58,12 @@ const ConvocatoriasModule = () => {
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect((conn: DbConnection) => {
-        setConnected(true);
+        
         ensurePortalSession(conn).catch((e) => console.warn('Portal session en Convocatorias TH:', e));
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('Convocatorias TH connect error:', err);
-        setConnected(false);
+        
       })
       .build();
 

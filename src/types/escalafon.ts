@@ -13,6 +13,7 @@ export const emptyForm: FormState = {
   documento: '',
   programa: '',
   facultad: '',
+  campus: 'Bucaramanga',
   scopusProfile: '',
   esIngresoNuevo: true,
   isAccreditedSource: false,

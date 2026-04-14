@@ -193,6 +193,7 @@ const buildFallbackItems = (evidence: RequestEvidence, request: DirectorRequest)
     documento: request.documento,
     programa: request.programa,
     facultad: request.facultad,
+    campus: request.campus,
     scopusProfile: '',
     esIngresoNuevo: true,
     isAccreditedSource: false,

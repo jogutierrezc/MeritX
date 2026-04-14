@@ -28,10 +28,12 @@ export type ProductionItem = {
   tipo?: string;
   autores?: number;
   fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL' | 'scopus' | 'orcid' | 'manual';
+  soporte?: File | null;
+  soporteNombre?: string;
 };
 
 export type ExperienceItem = {
-  tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación';
+  tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación' | 'Colciencias Senior' | 'Colciencias Junior';
   inicio: string;
   fin: string;
   certificacion: 'SI' | 'NO';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { FileSearch, Plus, X } from 'lucide-react';
 
 import type { RagConfig, RagDocument } from '../../../types/config';

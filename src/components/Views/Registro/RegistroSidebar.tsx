@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Award, Languages, Plus, FileCheck } from 'lucide-react';
 import type { FormData, Titulo } from '../../../types';
 

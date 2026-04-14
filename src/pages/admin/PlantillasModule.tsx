@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { CheckCircle2 } from 'lucide-react';
 
 import type { MailTemplate } from '../../types/config';

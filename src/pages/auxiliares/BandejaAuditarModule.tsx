@@ -38,8 +38,8 @@ import type {
   ApplicationPublication,
   ApplicationTitle,
 } from '../../module_bindings/types';
-import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { clearPortalSession, getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
+import { useSpacetime } from '../../context/SpacetimeContext';
 import { calculateAdvancedEscalafon, ESCALAFON_CONFIG, getSuggestedCategoryByPoints } from '../../utils/calculateEscalafon';
 import LoadingOverlay from '../../components/LoadingOverlay';
 
@@ -124,8 +124,7 @@ interface BandejaAuditarModuleProps {
 
 const BandejaAuditarModule: React.FC<BandejaAuditarModuleProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [connection, setConnection] = useState<DbConnection | null>(null);
+  const { connection, connected } = useSpacetime();
   const [view, setView] = useState<'lista' | 'auditoria'>('lista');
   const [activeCampus, setActiveCampus] = useState<Campus>('VALLEDUPAR');
   const [requests, setRequests] = useState<AuxiliarRequest[]>([]);
@@ -234,6 +233,7 @@ const BandejaAuditarModule: React.FC<BandejaAuditarModuleProps> = ({ onClose }) 
       documento: request.documento || '',
       programa: request.programa || '',
       facultad: request.facultad || '',
+      campus: (request.campus as any) || 'VALLEDUPAR',
       scopusProfile: '',
       esIngresoNuevo: true,
       isAccreditedSource: false,
@@ -501,31 +501,10 @@ const BandejaAuditarModule: React.FC<BandejaAuditarModuleProps> = ({ onClose }) 
   };
 
   useEffect(() => {
-    const { host, databaseName } = getSpacetimeConnectionConfig();
-
-    const conn = DbConnection.builder()
-      .withUri(host)
-      .withDatabaseName(databaseName)
-      .onConnect((liveConn: DbConnection) => {
-        setConnected(true);
-        enforceSessionOrLogout(liveConn).catch((error) => {
-          console.warn('BandejaAuditarModule portal session warning:', error);
-        });
-      })
-      .onConnectError((_ctx: unknown, error: unknown) => {
-        console.error(error);
-        setConnected(false);
-      })
-      .build();
-
-    setConnection(conn);
-    void loadRequestsOnce(conn).catch((error) => console.error(error));
-
-    return () => {
-      conn.disconnect();
-      setConnection(null);
-    };
-  }, []);
+    if (connection) {
+      void loadRequestsOnce(connection).catch((error) => console.error(error));
+    }
+  }, [connection]);
 
   const runReducer = async (reducerName: string, args: object) => {
     if (!connection) throw new Error('Sin conexión a Spacetime.');

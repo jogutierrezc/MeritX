@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, MessageSquareText, Send } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
@@ -327,7 +327,7 @@ const sanitizeFormState = (candidate: any): FormState => {
 
   const experiences = Array.isArray(candidate?.experiencia)
     ? candidate.experiencia.map((row: any) => ({
-      tipo: mapExperienceType(row?.tipo || row?.type),
+      tipo: mapExperienceType(row?.tipo || row?.type) as any,
       inicio: String(row?.inicio || row?.start || '2020-01-01'),
       fin: String(row?.fin || row?.end || ''),
       certificacion: String(row?.certificacion || row?.certified || 'NO').toUpperCase() === 'SI' ? 'SI' as const : 'NO' as const,
@@ -339,6 +339,7 @@ const sanitizeFormState = (candidate: any): FormState => {
     documento: String(candidate?.documento || 'S/N'),
     programa: String(candidate?.programa || 'No especificado'),
     facultad: String(candidate?.facultad || 'No especificada'),
+    campus: 'VALLEDUPAR',
     scopusProfile: '',
     esIngresoNuevo: true,
     isAccreditedSource: false,
@@ -397,12 +398,12 @@ const ChatMetriXModule = () => {
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect((conn: DbConnection) => {
-        setConnected(true);
+        
         ensurePortalSession(conn).catch((e) => console.warn('Portal session en ChatMetriXModule:', e));
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('ChatMetriXModule connect error:', err);
-        setConnected(false);
+        
       })
       .build();
 
