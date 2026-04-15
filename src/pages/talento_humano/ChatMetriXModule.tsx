@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, MessageSquareText, Send } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
@@ -52,8 +52,8 @@ const OPENROUTER_PRESET_METRIX = {
   // Falls back to default free models if the preset is unavailable.
   modelPriority: ['@preset/merit-x2', ...OPENROUTER_DEFAULT_MODELS],
   systemDirective:
-    'Prioriza salida estrictamente estructurada en JSON válido, sin texto adicional fuera del objeto JSON. ' +
-    'Relaciona cada criterio del caso con la matriz del sistema MeritX y conserva coherencia con la reglamentación universitaria aplicable.',
+    'Relaciona cada criterio del caso con la matriz del sistema MeritX y conserva coherencia con la reglamentación universitaria aplicable. ' +
+    'IMPORTANTE: Trata "Magister" y "Maestría" como sinónimos exactos.',
 };
 
 const normalizeForSearch = (value: string) =>

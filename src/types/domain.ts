@@ -69,6 +69,19 @@ export type RequestRecord = {
   };
 };
 
+export type BarrierDiagnosis = {
+  blockedCategory: string;         // The category the doctor couldn't reach
+  missingTitle: boolean;
+  missingIdioma: boolean;
+  missingPts: boolean;
+  missingIdiomaSolo: boolean;       // true = ONLY idioma is blocking the higher cat
+  higherCatIfIdiomaMet: string;    // Name of the cat they would get if idioma were fixed
+  requiredIdioma: string;
+  requiredTitle: string;
+  requiredPts: number;
+  ptsActuales: number;
+};
+
 export type EscalafonResult = {
   ptsAcad: number;
   ptsIdioma: number;
@@ -78,6 +91,7 @@ export type EscalafonResult = {
   finalPts: number;
   finalCat: Category;
   outputMessage: string;
+  barrierDiagnosis?: BarrierDiagnosis;
 };
 
 export type AppTitle = {
@@ -93,6 +107,10 @@ export type AppLanguage = {
   languageName: string;
   languageLevel: string;
   convalidation: boolean;
+  // snake_case aliases (SpacetimeDB raw rows)
+  language_name?: string;
+  language_level?: string;
+  tracking_id?: string;
 };
 
 export type AppPublication = {

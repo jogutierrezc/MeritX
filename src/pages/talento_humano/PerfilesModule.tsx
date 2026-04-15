@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, FilePlus2, FolderKanban } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
@@ -119,6 +119,13 @@ const resolveAiRuntime = (params: {
     } else if (geminiKey) {
       provider = 'gemini';
       activeKey = geminiKey;
+    } else {
+      // Last-resort: always check the env key regardless of configured provider
+      const envKey = String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
+      if (envKey) {
+        provider = 'gemini';
+        activeKey = envKey;
+      }
     }
   }
 
@@ -194,28 +201,55 @@ const parseAiJsonObjectLoose = (raw: string) => {
     .trim();
 
   const extracted = extractFirstJsonObject(cleaned);
-  const candidates = [cleaned, extracted]
+  const candidates = [extracted, cleaned]
     .filter((item): item is string => Boolean(item && item.trim().length > 0));
 
   for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // try sanitized JSON variant
-    }
+    // Attempt 1: direct parse
+    try { return JSON.parse(candidate); } catch { /* continue */ }
 
+    // Attempt 2: fix curly quotes and trailing commas
     try {
       const sanitized = candidate
         .replace(/[\u201C\u201D]/g, '"')
         .replace(/[\u2018\u2019]/g, "'")
         .replace(/,\s*([}\]])/g, '$1');
       return JSON.parse(sanitized);
-    } catch {
-      // continue with next candidate
+    } catch { /* continue */ }
+
+    // Attempt 3: escape unescaped newlines inside string values
+    try {
+      const fixedNewlines = candidate
+        .replace(/([^\\])\n/g, '$1\\n')
+        .replace(/([^\\])\r/g, '$1\\r');
+      return JSON.parse(fixedNewlines);
+    } catch { /* continue */ }
+  }
+
+  // Attempt 4: manual field extraction fallback — covers cases where the AI
+  // wraps long text with unescaped newlines or double-quotes inside JSON strings
+  const fields = ['analisisMatriz', 'analisisMotor', 'analisisOficial', 'analisisNormativo', 'conclusionIntermedia', 'puntajeIntermedio', 'narrativa', 'rows'];
+  const result: Record<string, unknown> = {};
+  let anyExtracted = false;
+
+  for (const field of fields) {
+    // Match "field": "...value..." allowing for newlines inside the value
+    const regex = new RegExp(`"${field}"\\s*:\\s*"([\\s\\S]*?)"(?=\\s*[,}])`);
+    const match = cleaned.match(regex);
+    if (match) {
+      result[field] = match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"');
+      anyExtracted = true;
+    }
+    // Also try numeric fields
+    const numRegex = new RegExp(`"${field}"\\s*:\\s*([\\d.]+)`);
+    const numMatch = cleaned.match(numRegex);
+    if (numMatch && !match) {
+      result[field] = parseFloat(numMatch[1]);
+      anyExtracted = true;
     }
   }
 
-  return null;
+  return anyExtracted ? result : null;
 };
 
 const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -1046,6 +1080,54 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const addIdioma = () =>
     setFormData((p) => ({ ...p, idiomas: [...p.idiomas, { idioma: '', nivel: 'A2', convalidacion: 'NO' }] }));
 
+  const handleAddLanguageToTracking = async (trackingId: string, langData: { language_name: string; language_level: string; convalidation: boolean }) => {
+    try {
+      setLoading(true);
+      await runReducer('add_application_language', {
+        tracking_id: trackingId,
+        language_name: langData.language_name,
+        language_level: langData.language_level,
+        convalidation: langData.convalidation,
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al agregar el idioma.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateLanguage = async (id: number, langData: { language_name: string; language_level: string; convalidation: boolean }) => {
+    try {
+      setLoading(true);
+      await runReducer('update_application_language', {
+        id,
+        language_name: langData.language_name,
+        language_level: langData.language_level,
+        convalidation: langData.convalidation,
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al actualizar el idioma.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteLanguage = async (id: number) => {
+    if (!window.confirm('¿Eliminar este idioma del expediente?')) return;
+    try {
+      setLoading(true);
+      await runReducer('delete_application_language', { id });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al eliminar el idioma.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   const addExperiencia = () =>
     setFormData((p) => ({
       ...p,
@@ -1558,16 +1640,36 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         supportNote: row.supportNote,
       }));
 
+      const barrierDiag = selectedAnalysis.suggested.barrierDiagnosis;
       const systemPrompt = [
-        'Eres una especialista en escalafón docente de la Universidad de Santander (UDES), con formación en derecho laboral y administración de educación superior.',
-        'Tu función en este módulo es revisar la matriz de criterios de un expediente docente y emitir un dictamen fundamentado.',
-        'Para cada criterio, analiza si la documentación soporte es suficiente, pertinente y verificable; fundamenta tu posición en los acuerdos normativos de la institución recuperados del contexto RAG cuando estén disponibles.',
-        'Tu respuesta siempre debe incluir una "narrativa" que sea un dictamen técnico: explica el razonamiento completo, señala inconsistencias, cita normas y concluye con la categoría recomendada y su puntaje justificado.',
-        'Si no hay soporte documental en un criterio, asigna 0 o puntaje mínimo prudente (máx. 10% del base) y justifica normativamente por qué no puede reconocerse ese mérito.',
-        'No inventes soportes ni cites normas que no aparezcan en el RAG o en el acervo ampliamente conocido del escalafón colombiano.',
-        'Responde solo JSON con esta forma:',
-        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"razón normativa del puntaje asignado o negado"}],"narrativa":"dictamen técnico narrativo completo con interpretación normativa, análisis de soportes y conclusión sobre categoría y puntaje recomendados"}',
+        'Eres un especialista en escalafón docente de la Universidad de Santander (UDES), experto en derecho laboral académico y administración de educación superior.',
+        'Tu función es revisar criterios de un expediente docente e interpretar los datos con criterio profesional para emitir un dictamen técnico.',
+        'REGLAS OBLIGATORIAS:',
+        '1. Lee primero el DIAGNÓSTICO DE BARRERAS que se incluye en el prompt del usuario. Es el insumo principal.',
+        '2. Si el docente NO cumple múltiples requisitos para una categoría superior, explica cada barrera con precisión (qué falta, cuánto falta, qué norma lo exige) y NO recomiendas subir de categoría.',
+        '3. Si el ÚNICO requisito faltante para la categoría superior es el IDIOMA (nivel B1, B2 o C1 según corresponda), y el docente cumple título y puntaje, DEBES emitir una RECOMENDACIÓN CONDICIONAL de categoría superior. Indica que el perfil académico sería suficiente, pero que la recomendación está sujeta a validación por Jurídica, el CAP y el CEPI, y no es un acto administrativo.',
+        '4. Si falta PRODUCCIÓN INTELECTUAL, recomienda incrementar artículos en revistas indexadas (Q1-Q4), libros de investigación y proyectos de investigación. No recomiendas categoría superior.',
+        '5. Si falta FORMACIÓN (título académico), indica exactamente qué título se requiere (Especialización, Maestría, Doctorado) y que debe acreditarlo ante la institución.',
+        '6. Si falta EXPERIENCIA, recomienda completar años de docencia universitaria o investigación o acreditar nuevas certificaciones.',
+        '7. Si el puntaje es cercano a Titular (>900 pts) pero falta el Doctorado, explica categóricamente que la norma es restrictiva en ese requisito y no admite excepción.',
+        '8. Los términos "Magister" y "Maestría" son sinónimos exactos en el sistema UDES. Tratalos idénticamente.',
+        '9. Para cada criterio en la tabla: evalúa si la documentación es suficiente. Sin soporte = 0 pts o máximo 10% prudente.',
+        '10. Formato de respuesta: SOLO JSON con la forma exacta siguiente (sin texto adicional fuera del JSON):',
+        '{"rows":[{"criterio":"...","soporteValido":true,"puntajeSugerido":120,"comentario":"razón normativa"}],"narrativa":"dictamen técnico amplio: interpreta formación, experiencia, producción e idioma; nombra cada barrera; concluye con categoría recomendada; si aplica emite recomendación condicional por idioma con advertencia legal."}',
       ].join(' ');
+
+      const barrierLines = barrierDiag
+        ? [
+            `DIAGNÓSTICO DE BARRERAS (motor de escalafón):`,
+            `  Categoría bloqueada: ${barrierDiag.blockedCategory}`,
+            `  Falta título: ${barrierDiag.missingTitle ? `SÍ (requiere ${barrierDiag.requiredTitle})` : 'NO'}`,
+            `  Falta idioma: ${barrierDiag.missingIdioma ? `SÍ (requiere nivel ${barrierDiag.requiredIdioma})` : 'NO'}`,
+            `  Falta puntaje: ${barrierDiag.missingPts ? `SÍ (requiere ${barrierDiag.requiredPts} pts, tiene ${Math.round(barrierDiag.ptsActuales)})` : 'NO'}`,
+            barrierDiag.missingIdiomaSolo
+              ? `  *** SOLO FALTA IDIOMA nivel ${barrierDiag.requiredIdioma} — Aplica regla 3: emitir recomendación condicional de categoría ${barrierDiag.blockedCategory} ***`
+              : '',
+          ].filter(Boolean).join('\n')
+        : '';
 
       const userPrompt = [
         `Docente: ${selectedAnalysisRequest.nombre}`,
@@ -1575,9 +1677,10 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         `Facultad: ${selectedAnalysisRequest.facultad}`,
         `Categoría sugerida motor: ${selectedAnalysis.suggested.finalCat.name}`,
         `Puntaje sugerido motor: ${selectedAnalysis.suggested.finalPts.toFixed(1)}`,
+        barrierLines,
         'Criterios para analizar:',
         JSON.stringify(baseRows),
-      ].join('\n');
+      ].filter(Boolean).join('\n');
 
       const aiText = await requestAiTextWithFallback({
         runtime: { provider, model, activeKey },
@@ -2177,34 +2280,47 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       const ragContext = buildRagContextForChat(structuredRagQuestion);
       const aiCurrentScore = aiRows.reduce((acc, row) => acc + row.puntajeSugerido, 0);
 
+      const barrierDiag = selectedAnalysis.suggested.barrierDiagnosis;
+      const barrierLines = barrierDiag
+        ? [
+            `DIAGNÓSTICO DE BARRERAS (motor escalafón):`,
+            `  Categoría superior bloqueada: ${barrierDiag.blockedCategory}`,
+            `  Falta título: ${barrierDiag.missingTitle ? `SÍ (requiere ${barrierDiag.requiredTitle})` : 'NO'}`,
+            `  Falta idioma: ${barrierDiag.missingIdioma ? `SÍ (requiere nivel ${barrierDiag.requiredIdioma})` : 'NO'}`,
+            `  Falta puntaje: ${barrierDiag.missingPts ? `SÍ (requiere ${barrierDiag.requiredPts} pts, tiene ${Math.round(barrierDiag.ptsActuales)})` : 'NO'}`,
+            barrierDiag.missingIdiomaSolo
+              ? `  *** SOLO FALTA IDIOMA nivel ${barrierDiag.requiredIdioma} \u2014 incluir RECOMENDACIÓN CONDICIONAL de categoría ${barrierDiag.blockedCategory} en conclusionIntermedia ***`
+              : '',
+          ].filter(Boolean).join('\n')
+        : 'Sin barreras adicionales detectadas.';
+
       const prompt = [
-        'Eres MetriX, dictaminador experto en escalafón docente UDES. Tu tarea es producir un análisis narrativo consolidado, técnico-jurídico y profundamente argumentado de este caso docente.',
-        'Responde SOLO JSON válido con estas llaves exactas:',
-        '{"analisisMatriz":"análisis crítico de la matriz de criterios: qué soportes son sólidos, cuáles son débiles y qué impacto tiene cada uno en el puntaje","analisisMotor":"interpretación del cálculo del motor de escalafón: qué criterios pesaron más y por qué el motor proyecta esa categoría","analisisOficial":"comparación con el expediente oficial registrado: coincidencias, diferencias y posibles explicaciones normativas o documentales","analisisNormativo":"análisis normativo profundo basado en los JSON de normatividad recuperados en RAG; debe citar norma y artículo aplicable con justificación específica por criterio","conclusionIntermedia":"dictamen técnico integrador: sintetiza los cuatro análisis anteriores, identifica la hipótesis más sólida de categoría y puntaje, señala riesgos o documentos pendientes, y fundamenta la recomendación con precisión jurídica","puntajeIntermedio":0}',
-        'Reglas de cálculo: puntajeIntermedio debe quedar dentro del rango definido por el mínimo y máximo de los puntajes matriz, motor y oficial.',
-        'Regla de estilo general: NO uses markdown, NO uses ** ni viñetas numeradas en la salida final; redacta en prosa técnica clara.',
-        'Cada campo narrativo (analisisMatriz, analisisMotor, analisisOficial, analisisNormativo, conclusionIntermedia) debe escribirse en 2 o 3 párrafos bien construidos.',
-        'Reglas para analisisNormativo (obligatorias):',
-        '- Debe ser extenso, claro y profesional, evitando frases genéricas.',
-        '- Debe usar el contexto RAG para citar explícitamente la norma (documento/titulo_oficial) y el artículo (numero/titulo) cuando exista respaldo.',
-        '- Debe explicar la capacidad del motor de escalafón: topes, saturaciones y límite efectivo de puntos según categoría vigente.',
-        '- Para cada criterio relevante, explica: regla jurídica aplicable, evidencia del caso, interpretación y efecto en puntaje/categoría.',
-        '- Si falta artículo aplicable en RAG para un criterio, indícalo de forma expresa y señala el riesgo o limitación de la decisión.',
-        '- Debe explicar de forma expresa la validación de investigación por cuartiles y la fuente de cada publicación (MANUAL, ORCID, SCOPUS).',
-        '- Debe tratar cada publicación de producción intelectual por separado, con su cuartil y efecto en puntaje.',
-        '- Si una publicación es MANUAL, indícalo como soporte no indexado automáticamente y precisa su alcance probatorio.',
-        '- Si una publicación proviene de ORCID o SCOPUS, indícalo como evidencia indexada y relaciona su impacto en puntuación.',
-        '- No inventes normas ni artículos fuera del contexto suministrado.',
+        'Eres MetriX, dictaminador experto en escalafón docente UDES. Produce un informe narrativo consolidado, técnico-jurídico y profundamente argumentado del caso docente.',
+        '',
+        'REGLA CRÍTICA DE FORMATO: Responde ÚNICAMENTE con un objeto JSON válido. Sin texto antes ni después del JSON. Sin markdown. Los saltos de línea dentro de los valores de string deben estar codificados como \\n (barra-n escapada), nunca como salto de línea real.',
+        'REGLA DE LONGITUD: Cada campo narrativo DEBE contener mínimo 3 párrafos completos (separados por \\n\\n) de al menos 100 palabras cada uno. Redacta en prosa técnica, sin viñetas ni asteriscos.',
+        '',
+        'REQUERIMIENTO OBLIGATORIO PARA conclusionIntermedia (debe incluir los 4 puntos):',
+        '  1. BARRERAS NORMATIVAS: Explica de forma precisa por qué NO se asignó la categoría superior. Nombra cada requisito faltante con su valor exacto.',
+        '  2. CRITERIOS DE CATEGORIZACIÓN: Lista los requisitos de cada categoría (Auxiliar 340-480 pts/Pregrado/Sin idioma, Asistente 481-750/Especialización/A2, Asociado 751-980/Maestría/B1, Titular 981+/Doctorado/B2). Explica dónde está el docente en esa escala.',
+        '  3. RECOMENDACIÓN CONDICIONAL (solo si missingIdiomaSolo=true): El docente cumple título y puntaje para la categoría superior. Emitir recomendación condicional indicando que está sujeta a revisión de Jurídica, CAP y CEPI.',
+        '  4. PROYECCIÓN HIPOTÉTICA: Qué categoría y puntaje tendría el docente si superara las barreras identificadas.',
+        '',
+        'Estructura JSON EXACTA (sin cambiar nombres de llaves):',
+        '{"analisisMatriz":"...","analisisMotor":"...","analisisOficial":"...","analisisNormativo":"...","conclusionIntermedia":"...","puntajeIntermedio":0}',
+        '',
+        `DATOS DEL CASO:`,
         `Puntaje matriz: ${selectedAnalysis.matrixTotal.toFixed(1)} pts.`,
-        `Puntaje motor: ${selectedAnalysis.suggested.finalPts.toFixed(1)} pts.`,
-        `Puntaje oficial: ${selectedAnalysisRequest.finalPts.toFixed(1)} pts.`,
-        aiRows.length > 0 ? `Referencia tabla IA vigente: ${aiCurrentScore.toFixed(1)} pts.` : 'No hay tabla IA previa generada.',
+        `Puntaje motor: ${selectedAnalysis.suggested.finalPts.toFixed(1)} pts — Categoría: ${selectedAnalysis.suggested.finalCat.name}.`,
+        `Puntaje oficial expediente: ${selectedAnalysisRequest.finalPts.toFixed(1)} pts — Categoría: ${selectedAnalysisRequest.finalCat?.name || 'No definida'}.`,
+        aiRows.length > 0 ? `Referencia tabla IA vigente: ${aiCurrentScore.toFixed(1)} pts.` : 'Sin tabla IA previa.',
+        barrierLines,
         `Análisis base de la matriz: ${matrixAnalysis}`,
         `Análisis base del motor: ${motorAnalysis}`,
         `Análisis base del expediente oficial: ${officialAnalysis}`,
-        'Producción científica registrada (usar obligatoriamente en el análisis):',
+        'Producción científica registrada (analiza cada una individualmente con cuartil y fuente):',
         publicationEvidenceSummary,
-        'Contexto normativo RAG:',
+        'Contexto normativo RAG (cita explícitamente norma y artículo cuando esté disponible):',
         ragContext,
       ].join('\n');
 
@@ -2216,26 +2332,35 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       });
 
       const parsed = parseAiJsonObjectLoose(aiText);
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error('No se pudo interpretar la narrativa de MeritX (IA). La respuesta llegó con JSON inválido.');
-      }
+
+      // Graceful degradation: if JSON parsing fails completely, use raw AI text as conclusionIntermedia
+      const safeNarrative = (parsed && typeof parsed === 'object') ? parsed : {
+        analisisMatriz: matrixAnalysis,
+        analisisMotor: motorAnalysis,
+        analisisOficial: officialAnalysis,
+        analisisNormativo: ragContext ? ragContext.slice(0, 800) : 'Sin contexto normativo RAG disponible.',
+        conclusionIntermedia: aiText.length > 80 ? aiText : `Motor asignó categoría ${selectedAnalysis.suggested.finalCat.name} con ${selectedAnalysis.suggested.finalPts.toFixed(1)} pts. ${barrierLines}`,
+        puntajeIntermedio: (selectedAnalysis.matrixTotal + selectedAnalysis.suggested.finalPts + selectedAnalysisRequest.finalPts) / 3,
+      };
+      const parsed2 = safeNarrative;
 
       const minScore = Math.min(selectedAnalysis.matrixTotal, selectedAnalysis.suggested.finalPts, selectedAnalysisRequest.finalPts);
       const maxScore = Math.max(selectedAnalysis.matrixTotal, selectedAnalysis.suggested.finalPts, selectedAnalysisRequest.finalPts);
       const defaultMid = (selectedAnalysis.matrixTotal + selectedAnalysis.suggested.finalPts + selectedAnalysisRequest.finalPts) / 3;
-      const rawMid = Number(parsed?.puntajeIntermedio);
+      const rawMid = Number(parsed2?.puntajeIntermedio);
       const boundedMid = Number.isFinite(rawMid) ? Math.max(minScore, Math.min(maxScore, rawMid)) : defaultMid;
 
       const nextNarrative = {
-        analisisMatriz: sanitizeNarrativeText(parsed?.analisisMatriz || matrixAnalysis),
-        analisisMotor: sanitizeNarrativeText(parsed?.analisisMotor || motorAnalysis),
-        analisisOficial: sanitizeNarrativeText(parsed?.analisisOficial || officialAnalysis),
+        analisisMatriz: sanitizeNarrativeText(parsed2?.analisisMatriz || matrixAnalysis),
+        analisisMotor: sanitizeNarrativeText(parsed2?.analisisMotor || motorAnalysis),
+        analisisOficial: sanitizeNarrativeText(parsed2?.analisisOficial || officialAnalysis),
         analisisNormativo: sanitizeNarrativeText(
-          parsed?.analisisNormativo || parsed?.analisisRag || 'No se pudo consolidar análisis normativo específico.',
+          parsed2?.analisisNormativo || parsed2?.analisisRag || 'No se pudo consolidar análisis normativo específico.',
         ),
-        conclusionIntermedia: sanitizeNarrativeText(parsed?.conclusionIntermedia || 'No se pudo generar conclusión integradora.'),
+        conclusionIntermedia: sanitizeNarrativeText(parsed2?.conclusionIntermedia || 'No se pudo generar conclusión integradora.'),
         puntajeIntermedio: boundedMid,
       };
+
 
       setMeritxNarrative(nextNarrative);
       renderMeritxReportWindow(popup, {
@@ -2608,6 +2733,10 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           onGenerateMeritxNarrative={generateMeritxNarrative}
           ragDebugInfo={ragDiagnostics}
           onSaveProfileEvidence={handleSaveProfileEvidence}
+          onAddLanguage={handleAddLanguageToTracking}
+          onUpdateLanguage={handleUpdateLanguage}
+          onDeleteLanguage={handleDeleteLanguage}
+          currentLanguages={allLanguages.filter((l) => l.trackingId === selectedAnalysisRequest.id)}
         />
       )}
 

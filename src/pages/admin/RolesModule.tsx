@@ -1,5 +1,5 @@
-﻿import React from 'react';
-import { Plus, ShieldCheck } from 'lucide-react';
+import React from 'react';
+import { Plus, ShieldCheck, Trash2 } from 'lucide-react';
 
 import type { RoleConfig } from '../../types/config';
 
@@ -9,11 +9,12 @@ type Props = {
   roles: RoleConfig[];
   onChange: (roles: RoleConfig[]) => void;
   onAddRole: () => void;
+  onDeleteRole: (roleKey: string) => void;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export const RolesModule = ({ roles, onChange, onAddRole }: Props) => (
+export const RolesModule = ({ roles, onChange, onAddRole, onDeleteRole }: Props) => (
   <div className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -90,16 +91,26 @@ export const RolesModule = ({ roles, onChange, onAddRole }: Props) => (
               </div>
             </div>
 
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-xs font-bold text-green-600">
-              <input
-                type="checkbox"
-                checked={role.active}
-                onChange={(e) =>
-                  onChange(roles.map((r, i) => (i === index ? { ...r, active: e.target.checked } : r)))
-                }
-              />
-              Activo
-            </label>
+            <div className="flex shrink-0 flex-col items-end gap-3">
+              <label className="flex cursor-pointer items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-xs font-bold text-green-600 transition-colors hover:bg-green-100">
+                <input
+                  type="checkbox"
+                  checked={role.active}
+                  onChange={(e) =>
+                    onChange(roles.map((r, i) => (i === index ? { ...r, active: e.target.checked } : r)))
+                  }
+                  className="accent-green-600"
+                />
+                Activo
+              </label>
+              <button
+                onClick={() => onDeleteRole(role.role)}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 transition-all hover:bg-red-50 hover:text-red-600"
+                title="Eliminar rol"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
         </div>
       ))}

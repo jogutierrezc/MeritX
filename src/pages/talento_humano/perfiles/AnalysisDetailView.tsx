@@ -1,21 +1,26 @@
-﻿import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertCircle,
   Award,
   BookOpen,
   Calendar,
+  Check,
   CheckCircle2,
   Download,
+  Edit2,
   Eye,
   FileText,
   Hash,
   History,
+  Languages,
   Pencil,
+  Plus,
   Printer,
+  Trash2,
   User,
   X,
 } from 'lucide-react';
-import type { RequestRecord } from '../../../types/domain';
+import type { AppLanguage, BarrierDiagnosis, RequestRecord } from '../../../types/domain';
 import { normalizeText, toSafeNumber } from './helpers';
 import type { AiCriterionRow, AnalysisVersionRecord, ChatMessage, ManualRow, SelectedAnalysis } from './types';
 
@@ -82,7 +87,63 @@ interface Props {
     experiences: Array<{ id: number; supportName: string; supportPath: string }>;
     publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
   }) => Promise<void>;
+  onAddLanguage?: (trackingId: string, lang: { language_name: string; language_level: string; convalidation: boolean }) => Promise<void>;
+  onUpdateLanguage?: (id: number, lang: { language_name: string; language_level: string; convalidation: boolean }) => Promise<void>;
+  onDeleteLanguage?: (id: number) => Promise<void>;
+  currentLanguages?: AppLanguage[];
 }
+
+const BarrierAlertPanel = ({ bd }: { bd: BarrierDiagnosis }) => {
+  const blockers = [
+    bd.missingTitle && { label: `Título mínimo requerido: ${bd.requiredTitle}`, icon: '🎓' },
+    bd.missingIdioma && { label: `Acreditación de idioma nivel ${bd.requiredIdioma}`, icon: '🌐' },
+    bd.missingPts && {
+      label: `Puntaje total: requiere ${bd.requiredPts} pts, tiene aprox. ${Math.round(bd.ptsActuales)} (faltan ${Math.round(Math.max(0, bd.requiredPts - bd.ptsActuales))} pts)`,
+      icon: '📊',
+    },
+  ].filter(Boolean) as { label: string; icon: string }[];
+
+  return (
+    <div className="rounded-xl border-2 border-orange-400 bg-orange-50 overflow-hidden">
+      <div className="bg-orange-500 px-5 py-3 flex items-center gap-3">
+        <AlertCircle className="text-white shrink-0" size={18} />
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-orange-100">Análisis de Barreras Normativas</p>
+          <p className="text-sm font-black text-white">
+            ¿Por qué no se asignó la categoría <span className="underline">{bd.blockedCategory}</span>?
+          </p>
+        </div>
+      </div>
+      <div className="p-5 space-y-3">
+        {blockers.length === 0 && (
+          <p className="text-sm text-slate-500 font-semibold">No se detectaron barreras para la categoría actual.</p>
+        )}
+        {blockers.map((b, i) => (
+          <div key={i} className="flex items-start gap-3 bg-white border-2 border-orange-300 rounded-xl px-4 py-3">
+            <span className="text-xl shrink-0">{b.icon}</span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-0.5">Requisito no cumplido</p>
+              <p className="text-sm font-bold text-slate-800">{b.label}</p>
+            </div>
+          </div>
+        ))}
+        {bd.missingIdiomaSolo && (
+          <div className="mt-1 px-4 py-3 bg-amber-100 border-2 border-amber-400 rounded-xl">
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-1">
+              ⚠ Caso Especial — Recomendación Condicional de Categoría Superior
+            </p>
+            <p className="text-sm font-semibold text-amber-900">
+              El docente cumple <strong>formación académica y puntaje</strong> para la categoría <strong>{bd.blockedCategory}</strong>. 
+              La única barrera es acreditar idioma nivel <strong>{bd.requiredIdioma}</strong>. 
+              Esta situación puede ser elevada como recomendación condicional ante el <strong>CAP y el CEPI</strong>, 
+              previo concepto de la <strong>Oficina Jurídica</strong>. No constituye un acto administrativo.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const DetailItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
   <div className="flex items-start gap-3">
@@ -110,9 +171,8 @@ const ActionButton = ({
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm ${
-      outline ? 'border-2' : ''
-    } ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:-translate-y-0.5 hover:shadow-md'} ${color}`}
+    className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm ${outline ? 'border-2' : ''
+      } ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:-translate-y-0.5 hover:shadow-md'} ${color}`}
   >
     {label}
   </button>
@@ -155,11 +215,27 @@ export const AnalysisDetailView: React.FC<Props> = ({
   onGenerateMeritxNarrative,
   ragDebugInfo = null,
   onSaveProfileEvidence,
+  onAddLanguage,
+  onUpdateLanguage,
+  onDeleteLanguage,
+  currentLanguages = [],
 }) => {
-  const [experienceModalOpen, setExperienceModalOpen] = React.useState(false);
-  const [publicationModalOpen, setPublicationModalOpen] = React.useState(false);
-  const [profileEditOpen, setProfileEditOpen] = React.useState(false);
-  const [savingProfileEvidence, setSavingProfileEvidence] = React.useState(false);
+  const [experienceModalOpen, setExperienceModalOpen] = useState(false);
+  const [publicationModalOpen, setPublicationModalOpen] = useState(false);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [savingProfileEvidence, setSavingProfileEvidence] = useState(false);
+  const [editingLangId, setEditingLangId] = useState<number | 'new' | null>(null);
+  const [langForm, setLangForm] = useState({ language_name: '', language_level: 'B1', convalidation: false });
+
+  const startAddLang = () => { setEditingLangId('new'); setLangForm({ language_name: '', language_level: 'B1', convalidation: false }); };
+  const startEditLang = (l: AppLanguage) => { setEditingLangId(l.id); setLangForm({ language_name: l.languageName || l.language_name || '', language_level: l.languageLevel || l.language_level || 'B1', convalidation: !!l.convalidation }); };
+  const cancelLang = () => setEditingLangId(null);
+  const saveLang = async () => {
+    if (!langForm.language_name.trim()) return;
+    if (editingLangId === 'new') { await onAddLanguage?.(selectedAnalysisRequest.id, langForm); }
+    else if (editingLangId !== null) { await onUpdateLanguage?.(editingLangId, langForm); }
+    setEditingLangId(null);
+  };
 
   const [titleDraft, setTitleDraft] = React.useState(selectedAnalysis.titles);
   const [experienceDraft, setExperienceDraft] = React.useState(selectedAnalysis.experiences);
@@ -349,11 +425,10 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-md text-[10px] font-bold border uppercase ${
-                          item.hasSupport
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-bold border uppercase ${item.hasSupport
                             ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                             : 'bg-orange-50 text-orange-600 border-orange-100'
-                        }`}>
+                          }`}>
                           {item.hasSupport ? 'CON SOPORTE' : 'SIN SOPORTE'}
                         </span>
                       </td>
@@ -478,77 +553,77 @@ export const AnalysisDetailView: React.FC<Props> = ({
         )}
 
         {showMetriXChat && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Asistente Conversacional</p>
-              <h3 className="text-lg font-black tracking-tight">Chat con MetriX</h3>
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="bg-slate-900 px-6 py-4 text-white flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Asistente Conversacional</p>
+                <h3 className="text-lg font-black tracking-tight">Chat con MetriX</h3>
+              </div>
+              <button
+                onClick={onClearChat}
+                disabled={chatMessages.length === 0 || chatLoading}
+                className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+              >
+                Limpiar conversación
+              </button>
             </div>
-            <button
-              onClick={onClearChat}
-              disabled={chatMessages.length === 0 || chatLoading}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
-            >
-              Limpiar conversación
-            </button>
-          </div>
 
-          <div className="grid gap-0 lg:grid-cols-[1.2fr_1fr]">
-            <div className="border-r border-slate-200">
-              <div className="h-[340px] overflow-y-auto p-4 bg-slate-50 space-y-3">
-                {chatMessages.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5">
-                    <p className="text-xs font-semibold text-slate-500">
-                      Expón aquí casos específicos del escalafón. MetriX responderá con concepto técnico y ajustará la tabla IA con base en RAG, soportes y algoritmo.
-                    </p>
-                  </div>
-                )}
-                {chatMessages.map((message) => (
-                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[90%] rounded-xl px-4 py-3 ${message.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
-                      <p className={`mt-2 text-[10px] ${message.role === 'user' ? 'text-indigo-100' : 'text-slate-400'}`}>
-                        {message.createdAt.replace('T', ' ').slice(0, 19)}
+            <div className="grid gap-0 lg:grid-cols-[1.2fr_1fr]">
+              <div className="border-r border-slate-200">
+                <div className="h-[340px] overflow-y-auto p-4 bg-slate-50 space-y-3">
+                  {chatMessages.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5">
+                      <p className="text-xs font-semibold text-slate-500">
+                        Expón aquí casos específicos del escalafón. MetriX responderá con concepto técnico y ajustará la tabla IA con base en RAG, soportes y algoritmo.
                       </p>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  )}
+                  {chatMessages.map((message) => (
+                    <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[90%] rounded-xl px-4 py-3 ${message.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                        <p className={`mt-2 text-[10px] ${message.role === 'user' ? 'text-indigo-100' : 'text-slate-400'}`}>
+                          {message.createdAt.replace('T', ' ').slice(0, 19)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-              <div className="border-t border-slate-200 bg-white p-4">
-                <textarea
-                  value={chatInput}
-                  onChange={(event) => onChatInputChange?.(event.target.value)}
-                  rows={3}
-                  placeholder="Ejemplo: docente con maestría sin soporte y 2 años de docencia certificada, ¿cómo quedaría la categoría y por qué?"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                />
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={onSendChatMessage}
-                    disabled={chatLoading || !chatInput.trim()}
-                    className="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-cyan-700 disabled:opacity-50"
-                  >
-                    {chatLoading ? 'Analizando...' : 'Enviar a MetriX'}
-                  </button>
+                <div className="border-t border-slate-200 bg-white p-4">
+                  <textarea
+                    value={chatInput}
+                    onChange={(event) => onChatInputChange?.(event.target.value)}
+                    rows={3}
+                    placeholder="Ejemplo: docente con maestría sin soporte y 2 años de docencia certificada, ¿cómo quedaría la categoría y por qué?"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={onSendChatMessage}
+                      disabled={chatLoading || !chatInput.trim()}
+                      className="rounded-xl bg-cyan-600 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-cyan-700 disabled:opacity-50"
+                    >
+                      {chatLoading ? 'Analizando...' : 'Enviar a MetriX'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="bg-cyan-50 p-4 border-t lg:border-t-0 border-slate-200">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700">Salida esperada de MetriX</p>
-              <ul className="mt-3 space-y-2 text-xs text-cyan-900 font-medium">
-                <li>Concepto argumentado del caso según reglamento y evidencia.</li>
-                <li>Explicación de por qué aplica (o no) cada puntaje.</li>
-                <li>Ajuste de la tabla IA en Categorización Sugerida.</li>
-                <li>Categoría sugerida y total calculado según conversación.</li>
-              </ul>
-              <p className="mt-4 text-[11px] text-cyan-800">
-                Consejo: especifica soportes, tiempos de experiencia, nivel de idioma, tipo de publicación y cualquier excepción normativa.
-              </p>
+              <div className="bg-cyan-50 p-4 border-t lg:border-t-0 border-slate-200">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700">Salida esperada de MetriX</p>
+                <ul className="mt-3 space-y-2 text-xs text-cyan-900 font-medium">
+                  <li>Concepto argumentado del caso según reglamento y evidencia.</li>
+                  <li>Explicación de por qué aplica (o no) cada puntaje.</li>
+                  <li>Ajuste de la tabla IA en Categorización Sugerida.</li>
+                  <li>Categoría sugerida y total calculado según conversación.</li>
+                </ul>
+                <p className="mt-4 text-[11px] text-cyan-800">
+                  Consejo: especifica soportes, tiempos de experiencia, nivel de idioma, tipo de publicación y cualquier excepción normativa.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
         )}
 
         {manualMode && (
@@ -748,6 +823,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Categoría Sugerida */}
           <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl flex flex-col justify-between">
             <div>
               <p className="text-amber-800 font-bold text-xs uppercase tracking-widest mb-1">Categoría Sugerida</p>
@@ -770,6 +846,125 @@ export const AnalysisDetailView: React.FC<Props> = ({
             <h3 className="text-3xl font-black text-slate-800">{selectedAnalysisRequest.finalPts.toFixed(1)}</h3>
           </div>
         </div>
+
+        {/* Barrier Alert Panel */}
+        {selectedAnalysis.suggested.barrierDiagnosis && (
+          <BarrierAlertPanel bd={selectedAnalysis.suggested.barrierDiagnosis} />
+        )}
+
+
+        {/* Criterios de Categorización Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-slate-900 text-white px-6 py-4 flex items-center gap-3">
+            <Award size={20} className="text-indigo-400" />
+            <h2 className="font-semibold text-lg">Criterios de Categorización — Escalafón UDES</h2>
+            <span className="ml-auto text-[10px] text-slate-400 font-bold uppercase tracking-widest">Acuerdo 003/2013 · 008/2019</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[860px]">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b">
+                  <th className="px-5 py-4">Categoría</th>
+                  <th className="px-5 py-4 text-center">Puntaje Mín.</th>
+                  <th className="px-5 py-4 text-center">Puntaje Máx.</th>
+                  <th className="px-5 py-4">Título Mínimo</th>
+                  <th className="px-5 py-4 text-center">Idioma Mín.</th>
+                  <th className="px-5 py-4 text-center">Tope Exp.</th>
+                  <th className="px-5 py-4">Tiempo Vinculación</th>
+                  <th className="px-5 py-4 text-center">Estado Docente</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {[
+                  {
+                    id: 'auxiliar',
+                    name: 'Auxiliar',
+                    min: 340, max: 480, capExp: 160,
+                    titulo: 'Pregrado', idioma: 'Ninguno',
+                    tiempo: 'Ingreso inicial (nuevo o reingreso)',
+                    bg: 'bg-slate-50',
+                    badge: 'bg-slate-100 text-slate-700',
+                    dot: 'bg-slate-400',
+                  },
+                  {
+                    id: 'asistente',
+                    name: 'Asistente',
+                    min: 481, max: 750, capExp: 250,
+                    titulo: 'Especialización', idioma: 'A2',
+                    tiempo: 'Mín. 2 años en categoría anterior o condiciones equivalentes',
+                    bg: 'bg-blue-50',
+                    badge: 'bg-blue-100 text-blue-800',
+                    dot: 'bg-blue-500',
+                  },
+                  {
+                    id: 'asociado',
+                    name: 'Asociado',
+                    min: 751, max: 980, capExp: 350,
+                    titulo: 'Maestría / Magister', idioma: 'B1',
+                    tiempo: 'Mín. 3 años en Asistente + requisitos académicos',
+                    bg: 'bg-indigo-50',
+                    badge: 'bg-indigo-100 text-indigo-800',
+                    dot: 'bg-indigo-600',
+                  },
+                  {
+                    id: 'titular',
+                    name: 'Titular',
+                    min: 981, max: null, capExp: 500,
+                    titulo: 'Doctorado (obligatorio)', idioma: 'B2',
+                    tiempo: 'Mín. 4 años en Asociado + Doctorado acreditado',
+                    bg: 'bg-amber-50',
+                    badge: 'bg-amber-100 text-amber-800',
+                    dot: 'bg-amber-500',
+                  },
+                ].map((cat) => {
+                  const isCurrentCat = selectedAnalysis.suggested.finalCat.id === cat.id;
+                  const isBlockedCat = selectedAnalysis.suggested.barrierDiagnosis?.blockedCategory === cat.name;
+                  return (
+                    <tr key={cat.id} className={`${cat.bg} ${isCurrentCat ? 'ring-2 ring-inset ring-indigo-400' : ''} transition-colors`}>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${cat.dot} shrink-0`} />
+                          <span className="font-black text-slate-800 uppercase tracking-wide">{cat.name}</span>
+                          {isCurrentCat && <span className="ml-2 px-2 py-0.5 bg-indigo-600 text-white text-[9px] font-black rounded-full uppercase">Actual</span>}
+                          {isBlockedCat && !isCurrentCat && (
+                            <span className="ml-2 px-2 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded-full uppercase flex items-center gap-1">
+                              <AlertCircle size={9} /> Bloqueada
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-center font-bold text-slate-700">{cat.min}</td>
+                      <td className="px-5 py-4 text-center font-bold text-slate-700">{cat.max ?? '∞'}</td>
+                      <td className="px-5 py-4">
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-black border ${isBlockedCat && selectedAnalysis.suggested.barrierDiagnosis?.missingTitle ? 'bg-orange-100 text-orange-800 border-orange-300' : 'bg-white text-slate-600 border-slate-200'}`}>
+                          {cat.titulo}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-black border ${isBlockedCat && selectedAnalysis.suggested.barrierDiagnosis?.missingIdioma ? 'bg-orange-100 text-orange-800 border-orange-300' : 'bg-white text-slate-600 border-slate-200'}`}>
+                          {cat.idioma === 'Ninguno' ? '—' : cat.idioma}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center font-bold text-slate-600">{cat.capExp} pts</td>
+                      <td className="px-5 py-4 text-[11px] text-slate-600 font-medium">{cat.tiempo}</td>
+                      <td className="px-5 py-4 text-center">
+                        <span className={`px-2 py-1 rounded-full text-[9px] font-black ${cat.badge}`}>
+                          {isCurrentCat ? 'CATEGORÍA ACTUAL' : isBlockedCat ? 'BLOQUEADA' : '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-6 py-3 bg-slate-50 border-t border-slate-200">
+            <p className="text-[10px] text-slate-500 font-semibold">
+              * El tope de experiencia es el máximo de puntos que puede aportar la experiencia para cada categoría. La experiencia excedente no se pierde pero solo se activa al ascender de categoría (Saturación Activa). · Puntaje docente actual en motor: <strong className="text-slate-800">{selectedAnalysis.suggested.finalPts.toFixed(1)} pts</strong>.
+            </p>
+          </div>
+        </div>
+
 
         {experienceModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">

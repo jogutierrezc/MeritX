@@ -810,12 +810,26 @@ const ExpedientesPage = (_props: Props) => {
         campus: (req as any).campus || 'VALLEDUPAR',
       });
 
+      const bd = provisionalBreakdown.barrierDiagnosis;
+      const barrierBlock = bd
+        ? [
+            `\nDIAGNÓSTICO DE BARRERAS (motor de escalafón):`,
+            `  Categoría bloqueada: ${bd.blockedCategory}`,
+            `  Falta título: ${bd.missingTitle ? `SÍ (requiere ${bd.requiredTitle})` : 'NO'}`,
+            `  Falta idioma: ${bd.missingIdioma ? `SÍ (requiere nivel ${bd.requiredIdioma})` : 'NO'}`,
+            `  Falta puntaje: ${bd.missingPts ? `SÍ (requiere ${bd.requiredPts} pts, tiene ${Math.round(bd.ptsActuales)})` : 'NO'}`,
+            bd.missingIdiomaSolo
+              ? `  CASO ESPECIAL — ÚNICO REQUISITO FALTANTE ES IDIOMA: El docente CUMPLE TÍTULOS Y PUNTAJE para ${bd.higherCatIfIdiomaMet} pero le falta acreditar nivel ${bd.requiredIdioma}. Requiere recomendación condicional por Jurídica, CAP y CEPI.`
+              : '',
+          ].filter(Boolean).join('\n')
+        : '';
+
       const workflowSummary = [
-        `Académico: ${provisionalBreakdown.ptsAcad.toFixed(1)} pts posibles · ${req.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
-        `Idiomas: ${provisionalBreakdown.ptsIdioma.toFixed(1)} pts posibles · ${req.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar'}`,
-        `Producción: ${provisionalBreakdown.ptsPI.toFixed(1)} pts posibles · ${req.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar'}`,
-        `Experiencia: ${Math.min(provisionalBreakdown.ptsExpBruta, provisionalBreakdown.appliedTope).toFixed(1)} pts posibles · ${req.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar'}`,
-        `Resultado preliminar por soportes: ${provisionalBreakdown.finalPts.toFixed(1)} pts Â· categoría posible ${provisionalBreakdown.finalCat.name}`,
+        `Académico: ${provisionalBreakdown.ptsAcad.toFixed(1)} pts posibles`,
+        `Idiomas: ${provisionalBreakdown.ptsIdioma.toFixed(1)} pts posibles`,
+        `Producción: ${provisionalBreakdown.ptsPI.toFixed(1)} pts posibles`,
+        `Experiencia: ${Math.min(provisionalBreakdown.ptsExpBruta, provisionalBreakdown.appliedTope).toFixed(1)} pts posibles`,
+        `Resultado preliminar: ${provisionalBreakdown.finalPts.toFixed(1)} pts · categoría posible ${provisionalBreakdown.finalCat.name}`,
       ].join('\n');
 
       const caseDetail = [
@@ -826,17 +840,18 @@ const ExpedientesPage = (_props: Props) => {
         `Puntaje final oficial del expediente: ${req.finalPts.toFixed(1)}`,
         `categoría oficial asignada: ${req.finalCat.name}`,
         `Mensaje oficial del motor: ${req.outputMessage}`,
-        `validación de títulos: ${req.audit?.titleValidated ? 'SÃ­' : 'No'}`,
-        `validación de idiomas: ${req.audit?.languageValidated ? 'SÃ­' : 'No'}`,
-        `validación de publicaciones: ${req.audit?.publicationVerified ? 'SÃ­' : 'No'}`,
-        `certificación de experiencia: ${req.audit?.experienceCertified ? 'SÃ­' : 'No'}`,
-        `Observaciones de auditorÃ­a: ${req.audit?.observations || 'Sin observaciones registradas'}`,
+        `validación de títulos: ${req.audit?.titleValidated ? 'Sí' : 'No'}`,
+        `validación de idiomas: ${req.audit?.languageValidated ? 'Sí' : 'No'}`,
+        `validación de publicaciones: ${req.audit?.publicationVerified ? 'Sí' : 'No'}`,
+        `certificación de experiencia: ${req.audit?.experienceCertified ? 'Sí' : 'No'}`,
+        `Observaciones de auditoría: ${req.audit?.observations || 'Sin observaciones registradas'}`,
         `\nLECTURA PRELIMINAR POR SOPORTES Y WORKFLOW:\n${workflowSummary}`,
-        `\nTÃTULOS ACADÃ‰MICOS: ${titulosTxt}`,
+        barrierBlock,
+        `\nTÍTULOS ACADÉMICOS: ${titulosTxt}`,
         `IDIOMAS: ${idiomasTxt}`,
-        `PRODUCCIÃ“N INTELECTUAL: ${pubsTxt}`,
+        `PRODUCCIÓN INTELECTUAL: ${pubsTxt}`,
         `EXPERIENCIA: ${expTxt}`,
-      ].join('\n');
+      ].filter(Boolean).join('\n');
 
       const ragContext = buildRagContext(req, caseDetail);
 
@@ -913,14 +928,19 @@ Explica de manera narrativa por quÃ© el expediente alcanza o no el puntaje fin
 Lista las normas y fragmentos RAG realmente usados, con citas breves y su relevancia para la decisiÃ³n.
 
 Reglas de salida:
-- Responde en espaÃ±ol jurÃ­dico-administrativo claro.
-- SÃ© detallado, explicativo y formalista.
+- Responde en español jurídico-administrativo claro.
+- Sé detallado, explicativo y formalista.
 - Usa encabezados Markdown.
-- Evita respuestas cortas o genÃ©ricas.
-- Si la evidencia es insuficiente, dilo y explica quÃ© soporte falta.
-- Diferencia siempre entre "puntaje oficial del expediente" y "posible calificaciÃ³n por soportes".
+- Evita respuestas cortas o genéricas.
+- Si la evidencia es insuficiente, dilo y explica qué soporte falta.
+- Diferencia siempre entre "puntaje oficial del expediente" y "posible calificación por soportes".
 - No trates como definitivo un componente que siga pendiente de validación auxiliar.
-- Nunca digas que usaste un RAG si no vas a citar el contexto efectivamente entregado.`;
+- Nunca digas que usaste un RAG si no vas a citar el contexto efectivamente entregado.
+- CONSIDERACIÓN IMPORTANTE: Trata los términos "Magister" y "Maestría" como sinónimos exactos para efectos de cumplimiento de requisitos académicos.
+- REGLA DE BARRERAS: Si el expediente incluye un "DIAGNÓSTICO DE BARRERAS", DEBES dedicar una sección específica (## Barreras Normativas y Requisitos No Cumplidos) a explicar por qué el motor no asignó una categoría superior, indicando EXACTAMENTE qué requisito no se cumplió (título, idioma o puntaje) y cuál es el valor requerido vs. el valor acreditado.
+- REGLA DE ALERTA DE IDIOMA: Si el diagnóstico de barreras indica "CASO ESPECIAL — ÚNICO REQUISITO FALTANTE ES IDIOMA", DEBES incluir obligatoriamente una sección de alerta:
+  ## ⚠ Alerta: Recomendación Condicional de Categoría Superior
+  En esta sección, explica que el docente cumple todos los demás requisitos (títulos y puntaje) para la categoría superior, que la única barrera es la acreditación del idioma requerido, y que emites una RECOMENDACIÓN CONDICIONAL de categoría superior sujeta a evaluación por la Oficina Jurídica, el CAP y el CEPI, la cual no es vinculante pero sí constituye una opinión técnica fundamentada del auditor IA. Indica también qué pasos concretos debería seguir el docente para regularizar la situación.`;
 
       const systemPrompt = ragSystemContext
         ? `${ragSystemContext}\n\n${baseSystemPrompt}`
@@ -1116,6 +1136,53 @@ Reglas de salida:
     }
   };
 
+  const onAddLanguage = async (trackingId: string, lang: any) => {
+    try {
+      setLoading(true);
+      await runReducer('add_application_language', {
+        tracking_id: trackingId,
+        language_name: lang.language_name,
+        language_level: lang.language_level,
+        convalidation: lang.convalidation,
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al agregar el idioma.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onUpdateLanguage = async (id: number, lang: any) => {
+    try {
+      setLoading(true);
+      await runReducer('update_application_language', {
+        id,
+        language_name: lang.language_name,
+        language_level: lang.language_level,
+        convalidation: lang.convalidation,
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al actualizar el idioma.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onDeleteLanguage = async (id: number) => {
+    if (!window.confirm('¿Eliminar este idioma?')) return;
+    try {
+      setLoading(true);
+      await runReducer('delete_application_language', { id });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al eliminar el idioma.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="space-y-12">
@@ -1160,6 +1227,9 @@ Reglas de salida:
             aiAnalysis={aiAnalysis}
             aiGenerating={aiGenerating}
             latestAiVersion={aiVersionsByTracking[selectedRequest.id]}
+            onAddLanguage={onAddLanguage}
+            onUpdateLanguage={onUpdateLanguage}
+            onDeleteLanguage={onDeleteLanguage}
           />
         )}
       </div>

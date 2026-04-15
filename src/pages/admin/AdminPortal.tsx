@@ -892,14 +892,32 @@ const AdminPortal = () => {
 
   const addRole = () => {
     const suffix = roles.length + 1;
-    const nextRole: RoleConfig = {
-      role: `nuevo_rol_${suffix}`,
-      label: `Nuevo Rol ${suffix}`,
-      portal: 'portal',
-      description: 'Rol personalizado creado desde configuración.',
-      active: true,
-    };
-    setRoles((prev) => [...prev, nextRole]);
+    setRoles((prev) => [
+      ...prev,
+      {
+        role: `nuevo_rol_${suffix}`,
+        label: `Nuevo Rol ${suffix}`,
+        portal: 'portal',
+        description: 'Rol personalizado creado desde configuración.',
+        active: true,
+      },
+    ]);
+  };
+
+  const deleteRole = async (roleKey: string) => {
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar el rol '${roleKey}'?`)) return;
+
+    try {
+      setSaving(true);
+      await runReducer('delete_portal_role', { roleKey });
+      setRoles((prev) => prev.filter((r) => r.role !== roleKey));
+      setStatusMessage('Rol eliminado correctamente.');
+    } catch (error) {
+      console.error(error);
+      setStatusMessage(error instanceof Error ? error.message : 'Error al eliminar el rol.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1025,7 +1043,7 @@ const AdminPortal = () => {
           )}
 
           {activeTab === 'roles' && (
-            <RolesModule roles={roles} onChange={setRoles} onAddRole={addRole} />
+            <RolesModule roles={roles} onChange={setRoles} onAddRole={addRole} onDeleteRole={deleteRole} />
           )}
 
           {activeTab === 'api' && (

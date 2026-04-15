@@ -1246,6 +1246,24 @@ export const upsert_portal_role = spacetimedb.reducer(
   },
 );
 
+export const delete_portal_role = spacetimedb.reducer(
+  { role_key: t.string() },
+  (ctx, { role_key }) => {
+    requireSession(ctx, 'admin');
+    const role = ctx.db.portal_role.role_key.find(role_key);
+    if (!role) throw new SenderError('El rol no existe.');
+
+    const usersWithRole = Array.from(ctx.db.portal_user.iter()).filter((u) => u.role === role_key);
+    if (usersWithRole.length > 0) {
+      throw new SenderError(
+        `No se puede eliminar el rol '${role_key}' porque hay ${usersWithRole.length} usuarios asignados a él.`,
+      );
+    }
+
+    ctx.db.portal_role.role_key.delete(role_key);
+  },
+);
+
 export const create_portal_user = spacetimedb.reducer(
   {
     username: t.string(),
@@ -1549,6 +1567,36 @@ export const add_application_language = spacetimedb.reducer(
       language_level: args.language_level,
       convalidation: args.convalidation,
     });
+  },
+);
+
+export const update_application_language = spacetimedb.reducer(
+  {
+    id: t.u32(),
+    language_name: t.string(),
+    language_level: t.string(),
+    convalidation: t.bool(),
+  },
+  (ctx, args) => {
+    const lang = ctx.db.application_language.id.find(args.id);
+    if (!lang) throw new SenderError('El idioma no existe.');
+    ctx.db.application_language.id.update({
+      ...lang,
+      language_name: args.language_name,
+      language_level: args.language_level,
+      convalidation: args.convalidation,
+    });
+  },
+);
+
+export const delete_application_language = spacetimedb.reducer(
+  {
+    id: t.u32(),
+  },
+  (ctx, args) => {
+    const lang = ctx.db.application_language.id.find(args.id);
+    if (!lang) throw new SenderError('El idioma no existe.');
+    ctx.db.application_language.id.delete(args.id);
   },
 );
 

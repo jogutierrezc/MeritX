@@ -80,15 +80,18 @@ export const getSuggestedCategoryByPoints = (points: number) => {
   return 'SIN CATEGORIA';
 };
 
+const normalizeTextSimple = (val: string) =>
+  val
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 const canonicalTitleLevel = (nivel: string): string => {
-  if (nivel === 'Doctorado') return 'Doctorado';
-  if (nivel.startsWith('Maestría')) return 'Maestría';
-  if (nivel.startsWith('Especialización')) return 'Especialización';
-  if (nivel === 'Pregrado') return 'Pregrado';
-  const n = nivel.toLowerCase();
-  if (n.includes('doctor')) return 'Doctorado';
-  if (n.includes('maestr') || n.includes('magister')) return 'Maestría';
-  if (n.includes('especial')) return 'Especialización';
+  const n = normalizeTextSimple(nivel);
+  if (n === 'doctorado' || n.includes('doctor')) return 'Doctorado';
+  if (n.startsWith('maestria') || n.includes('maestr') || n.includes('magister')) return 'Maestría';
+  if (n.startsWith('especializacion') || n.includes('especial')) return 'Especialización';
   return 'Pregrado';
 };
 
@@ -109,8 +112,11 @@ const PRODUCTION_TIPO_WEIGHTS: Record<string, number> = {
 
 export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => {
   // --- FASE 1: ASIGNACIÓN MATEMÁTICA DE TÍTULOS E IDIOMAS ---
-  const ptsAcad = data.titulos.reduce((acc, t) => acc + (ESCALAFON_CONFIG.PUNTOS_TITULOS[t.nivel as keyof typeof ESCALAFON_CONFIG.PUNTOS_TITULOS] || 0), 0);
-  
+  const ptsAcad = data.titulos.reduce((acc, t) => {
+    const level = canonicalTitleLevel(t.nivel);
+    return acc + (ESCALAFON_CONFIG.PUNTOS_TITULOS[level as keyof typeof ESCALAFON_CONFIG.PUNTOS_TITULOS] || 0);
+  }, 0);
+
   const highestLevel = data.titulos.reduce((max, t) => {
     const levels = ['Ninguno', 'Pregrado', 'Especialización', 'Maestría', 'Doctorado'];
     const canonical = canonicalTitleLevel(t.nivel);
@@ -121,7 +127,7 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     (max, i) => Math.max(max, ESCALAFON_CONFIG.PUNTOS_IDIOMA[i.nivel as keyof typeof ESCALAFON_CONFIG.PUNTOS_IDIOMA] || 0),
     0
   );
-  
+
   const userLangLevel = data.idiomas.reduce(
     (max, i) => Math.max(max, ESCALAFON_CONFIG.PUNTOS_IDIOMA[i.nivel as keyof typeof ESCALAFON_CONFIG.PUNTOS_IDIOMA] ? ESCALAFON_CONFIG.VALOR_IDIOMA[i.nivel as keyof typeof ESCALAFON_CONFIG.VALOR_IDIOMA] : 0),
     0
@@ -133,19 +139,19 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     let base = tipoWeight !== undefined
       ? tipoWeight
       : ({ Q1: 70, Q2: 50, Q3: 30, Q4: 20 }[art.cuartil as string] || 0);
-    
+
     // Regla de Coautoría
     const autores = art.autores || 1;
     let factor = 1;
     if (autores >= 3 && autores <= 4) factor = 0.5;
     else if (autores >= 5) factor = 1 / autores;
-    
+
     return acc + (base * factor);
   }, 0);
 
   // --- FASE 3: CÁLCULO DE EXPERIENCIA CALIFICADA (ALGORITMO DE NO DUPLICIDAD) ---
   let ptsExpBruta = 0;
-  
+
   // 3.1 Extraer y ordenar todos los hitos de tiempo (fechas de inicio y fin)
   const datesSet = new Set<number>();
   data.experiencia.forEach((exp) => {
@@ -154,17 +160,17 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
       datesSet.add(exp.fin ? new Date(exp.fin).getTime() : new Date().getTime());
     }
   });
-  
+
   const sortedDates = Array.from(datesSet).sort((a, b) => a - b);
 
   // 3.2 Barrido cronológico para evitar doble conteo (Priorizando el peso máximo por segmento)
   for (let i = 0; i < sortedDates.length - 1; i++) {
     const segmentStart = sortedDates[i];
     const segmentEnd = sortedDates[i + 1];
-    
+
     // Cálculo proporcional a 360 días por año académico
     const segmentDurationYears = (segmentEnd - segmentStart) / (1000 * 60 * 60 * 24 * 360);
-    
+
     let maxWeightInSegment = 0;
 
     data.experiencia.forEach((exp) => {
@@ -181,7 +187,7 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
           'Colciencias Senior': CRITERIO_REFERENCIA.experienciaAnual.ColcienciasSenior,
           'Colciencias Junior': CRITERIO_REFERENCIA.experienciaAnual.ColcienciasJunior,
         } as Record<string, number>)[exp.tipo] || 0;
-        
+
         if (weight > maxWeightInSegment) {
           maxWeightInSegment = weight;
         }
@@ -218,9 +224,9 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
 
     // 4.2 Verificación de Barreras Doctrinarias (Títulos e Idioma)
     const cumpleTitulo = (cat.reqTitulo === 'Doctorado' && highestLevel === 'Doctorado') ||
-                         (cat.reqTitulo === 'Maestría' && ['Maestría', 'Doctorado'].includes(highestLevel)) ||
-                         (cat.reqTitulo === 'Especialización' && ['Especialización', 'Maestría', 'Doctorado'].includes(highestLevel)) ||
-                         (cat.reqTitulo === 'Pregrado');
+      (cat.reqTitulo === 'Maestría' && ['Maestría', 'Doctorado'].includes(highestLevel)) ||
+      (cat.reqTitulo === 'Especialización' && ['Especialización', 'Maestría', 'Doctorado'].includes(highestLevel)) ||
+      (cat.reqTitulo === 'Pregrado');
 
     const cumpleIdioma = userLangLevel >= (ESCALAFON_CONFIG.VALOR_IDIOMA as Record<string, number>)[cat.reqIdioma];
 
@@ -232,16 +238,63 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
       finalCat = CATEGORIES.find((c) => c.id === cat.id) || finalCat;
       appliedTope = cat.capExp;
       finalPts = totalSimulado;
-      break; 
+      break;
     }
   }
 
-  // --- FASE 5: RETORNO Y EXPLICABILIDAD PARA LA IA ---
+  // --- FASE 5: DIAGNÓSTICO DE BARRERAS (Explicabilidad para IA) ---
+  let barrierDiagnosis = undefined as import('../types/domain').BarrierDiagnosis | undefined;
+
+  // Find the NEXT category that the docente DIDN'T reach
+  const indexActual = categoriasOrdenadas.findIndex(c => c.id === finalCat.id);
+  const nextCat = indexActual > 0 ? categoriasOrdenadas[indexActual - 1] : null;
+
+  if (nextCat) {
+    const expTopada = Math.min(ptsExpBruta, nextCat.capExp);
+    const totalConNextCap = ptsBaseSinExp + expTopada;
+
+    const cumpleTituloNext = (nextCat.reqTitulo === 'Doctorado' && highestLevel === 'Doctorado') ||
+      (nextCat.reqTitulo === 'Maestría' && ['Maestría', 'Doctorado'].includes(highestLevel)) ||
+      (nextCat.reqTitulo === 'Especialización' && ['Especialización', 'Maestría', 'Doctorado'].includes(highestLevel)) ||
+      (nextCat.reqTitulo === 'Pregrado');
+
+    const reqIdiomaVal = (ESCALAFON_CONFIG.VALOR_IDIOMA as Record<string, number>)[nextCat.reqIdioma] ?? 0;
+    const cumpleIdiomaNext = userLangLevel >= reqIdiomaVal;
+    const cumplePuntosNext = totalConNextCap >= nextCat.min;
+
+    const missingTitle = !cumpleTituloNext;
+    const missingIdioma = !cumpleIdiomaNext;
+    const missingPts = !cumplePuntosNext;
+
+    // KEY INSIGHT: Is ONLY the idioma blocking (title OK, pts OK, idioma NOT)?
+    const missingIdiomaSolo = cumpleTituloNext && cumplePuntosNext && !cumpleIdiomaNext;
+
+    // Determine what cat they'd get if idioma were fixed (for the alert)
+    let higherCatIfIdiomaMet = '';
+    if (missingIdiomaSolo) {
+      higherCatIfIdiomaMet = nextCat.name;
+    }
+
+    barrierDiagnosis = {
+      blockedCategory: nextCat.name,
+      missingTitle,
+      missingIdioma,
+      missingPts,
+      missingIdiomaSolo,
+      higherCatIfIdiomaMet,
+      requiredIdioma: nextCat.reqIdioma,
+      requiredTitle: nextCat.reqTitulo,
+      requiredPts: nextCat.min,
+      ptsActuales: totalConNextCap,
+    };
+  }
+
+  // --- FASE 6: MENSAJE NARRATIVO DEL MOTOR ---
   if (finalCat.id === 'none') {
     observations = "No cumple con los requisitos base de puntaje o titulación mínima para ingresar como Auxiliar.";
   } else {
     observations = `Categorizado como ${finalCat.name}. `;
-    
+
     if (ptsExpBruta > appliedTope) {
       observations += `Saturación Activa: El docente certificó ${Math.round(ptsExpBruta)} pts de experiencia, pero se aplicó el límite estricto de ${appliedTope} pts de la categoría ${finalCat.name}. `;
       observations += `La experiencia restante no se pierde, pero requiere aumentar la producción intelectual y/o formación académica para desbloquear un tope mayor. `;
@@ -249,11 +302,18 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
       observations += `No se requirió aplicar techo de experiencia (${Math.round(ptsExpBruta)} pts < Tope ${appliedTope} pts). `;
     }
 
-    // Sugerencia para plan de carrera
-    const indexActual = categoriasOrdenadas.findIndex(c => c.id === finalCat.id);
-    if (indexActual > 0) {
-      const proxima = categoriasOrdenadas[indexActual - 1];
-      observations += `Ruta de ascenso: Para aspirar a ${proxima.name}, necesita un título mínimo de ${proxima.reqTitulo}, idioma nivel ${proxima.reqIdioma} y alcanzar ${proxima.min} pts totales.`;
+    if (barrierDiagnosis) {
+      const bd = barrierDiagnosis;
+      const blockers: string[] = [];
+      if (bd.missingTitle) blockers.push(`título mínimo ${bd.requiredTitle}`);
+      if (bd.missingIdioma) blockers.push(`acreditación de idioma nivel ${bd.requiredIdioma}`);
+      if (bd.missingPts) blockers.push(`${bd.requiredPts} pts totales (tiene ${Math.round(bd.ptsActuales)})`);
+      if (blockers.length > 0) {
+        observations += `Barrera para ${bd.blockedCategory}: Le falta ${blockers.join(' y ')}. `;
+      }
+      if (bd.missingIdiomaSolo) {
+        observations += `⚠ ALERTA: El único requisito pendiente para ${bd.blockedCategory} es la acreditación de idioma nivel ${bd.requiredIdioma}. Cumple títulos y puntaje. Esta situación puede ser evaluada por el CAP y el CEPI para una recomendación de categoría superior.`;
+      }
     }
   }
 
@@ -265,6 +325,7 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     appliedTope,
     finalPts,
     finalCat,
-    outputMessage: observations
+    outputMessage: observations,
+    barrierDiagnosis,
   };
 };

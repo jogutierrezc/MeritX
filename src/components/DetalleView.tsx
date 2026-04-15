@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Award, BookOpen, BrainCircuit, Briefcase, GraduationCap, Languages, User } from 'lucide-react';
+import { ArrowLeft, Award, BookOpen, BrainCircuit, Briefcase, Check, Edit2, GraduationCap, Languages, Plus, Trash2, User, X } from 'lucide-react';
 import type { AppExperience, AppLanguage, AppPublication, AppTitle, RequestRecord } from '../types/domain';
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import AIDictamenModal from './AIDictamenModal';
@@ -22,6 +22,9 @@ type Props = {
   aiAnalysis: string;
   aiGenerating: boolean;
   latestAiVersion?: AiVersionSummary;
+  onAddLanguage: (trackingId: string, lang: any) => Promise<void>;
+  onUpdateLanguage: (id: number, lang: any) => Promise<void>;
+  onDeleteLanguage: (id: number) => Promise<void>;
 };
 
 const levelBadge = (level: string) => (
@@ -66,8 +69,37 @@ const DetalleView: React.FC<Props> = ({
   aiAnalysis,
   aiGenerating,
   latestAiVersion,
+  onAddLanguage,
+  onUpdateLanguage,
+  onDeleteLanguage,
 }) => {
   const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [editingLangId, setEditingLangId] = useState<number | 'new' | null>(null);
+  const [langForm, setLangForm] = useState({ language_name: '', language_level: 'A2', convalidation: false });
+
+  const startEditLang = (l: AppLanguage) => {
+    setEditingLangId(l.id || null);
+    setLangForm({ language_name: l.language_name, language_level: l.languageLevel, convalidation: !!l.convalidation });
+  };
+
+  const startAddLang = () => {
+    setEditingLangId('new');
+    setLangForm({ language_name: '', language_level: 'A2', convalidation: false });
+  };
+
+  const cancelLangEdit = () => {
+    setEditingLangId(null);
+  };
+
+  const saveLang = async () => {
+    if (!langForm.language_name.trim()) return;
+    if (editingLangId === 'new') {
+      await onAddLanguage(selectedRequest.id, langForm);
+    } else if (editingLangId !== null) {
+      await onUpdateLanguage(editingLangId, langForm);
+    }
+    setEditingLangId(null);
+  };
 
   const scoreBreakdown = useMemo(() => {
     try {
@@ -114,35 +146,35 @@ const DetalleView: React.FC<Props> = ({
 
   const workflowBreakdown = scoreBreakdown
     ? [
-        {
-          label: 'Académico',
-          value: scoreBreakdown.ptsAcad,
-          color: 'border-blue-600 bg-blue-50',
-          state: selectedRequest.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
-          hint: titles.length > 0 ? `${titles.length} soporte(s) académicos cargados` : 'Sin soportes académicos cargados',
-        },
-        {
-          label: 'Idiomas',
-          value: scoreBreakdown.ptsIdioma,
-          color: 'border-purple-600 bg-purple-50',
-          state: selectedRequest.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
-          hint: languages.length > 0 ? `${languages.length} soporte(s) de idioma cargados` : 'Sin soportes de idioma cargados',
-        },
-        {
-          label: 'Producción',
-          value: scoreBreakdown.ptsPI,
-          color: 'border-teal-600 bg-teal-50',
-          state: selectedRequest.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar',
-          hint: publications.length > 0 ? `${publications.length} evidencia(s) de producción cargadas` : 'Sin evidencia de producción cargada',
-        },
-        {
-          label: 'Experiencia',
-          value: Math.min(scoreBreakdown.ptsExpBruta, scoreBreakdown.appliedTope),
-          color: 'border-orange-500 bg-orange-50',
-          state: selectedRequest.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar',
-          hint: experiences.length > 0 ? `${experiences.length} soporte(s) de experiencia cargados` : 'Sin soportes de experiencia cargados',
-        },
-      ]
+      {
+        label: 'Académico',
+        value: scoreBreakdown.ptsAcad,
+        color: 'border-blue-600 bg-blue-50',
+        state: selectedRequest.audit?.titleValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
+        hint: titles.length > 0 ? `${titles.length} soporte(s) académicos cargados` : 'Sin soportes académicos cargados',
+      },
+      {
+        label: 'Idiomas',
+        value: scoreBreakdown.ptsIdioma,
+        color: 'border-purple-600 bg-purple-50',
+        state: selectedRequest.audit?.languageValidated ? 'Conforme por auxiliar' : 'Pendiente validación del auxiliar',
+        hint: languages.length > 0 ? `${languages.length} soporte(s) de idioma cargados` : 'Sin soportes de idioma cargados',
+      },
+      {
+        label: 'Producción',
+        value: scoreBreakdown.ptsPI,
+        color: 'border-teal-600 bg-teal-50',
+        state: selectedRequest.audit?.publicationVerified ? 'Verificada por auxiliar' : 'Pendiente verificación del auxiliar',
+        hint: publications.length > 0 ? `${publications.length} evidencia(s) de producción cargadas` : 'Sin evidencia de producción cargada',
+      },
+      {
+        label: 'Experiencia',
+        value: Math.min(scoreBreakdown.ptsExpBruta, scoreBreakdown.appliedTope),
+        color: 'border-orange-500 bg-orange-50',
+        state: selectedRequest.audit?.experienceCertified ? 'Certificada por auxiliar' : 'Pendiente certificación del auxiliar',
+        hint: experiences.length > 0 ? `${experiences.length} soporte(s) de experiencia cargados` : 'Sin soportes de experiencia cargados',
+      },
+    ]
     : [];
 
   const openAIDictamen = async () => {
@@ -153,220 +185,312 @@ const DetalleView: React.FC<Props> = ({
   return (
     <>
       <div className="max-w-7xl mx-auto space-y-10 animate-in zoom-in-95 duration-500 pb-20 print:hidden">
-      {/* Top bar: back + AI button */}
-      <div className="bg-white border-2 border-slate-950 p-8 flex justify-between items-center shadow-2xl">
-        <button
-          onClick={() => setView('lista')}
-          className="flex items-center gap-4 text-slate-950 hover:bg-slate-100 px-8 py-4 font-black text-[11px] tracking-widest border-4 border-slate-950 transition-all"
-        >
-          <ArrowLeft size={20} /> RETORNAR
-        </button>
-        <button
-          onClick={openAIDictamen}
-          className="bg-slate-950 text-white px-10 py-5 font-black text-[12px] tracking-[0.3em] flex items-center gap-4 hover:bg-blue-600 transition-all"
-        >
-          <BrainCircuit size={24} className="text-blue-400" /> DICTAMEN IA
-        </button>
-      </div>
-
-      {/* Professor identity */}
-      <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="bg-slate-950 p-3"><User className="text-white w-6 h-6" /></div>
-          <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Datos del Docente</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Nombre Completo</p>
-            <p className="font-bold text-slate-900 text-lg">{selectedRequest.nombre}</p>
-          </div>
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Documento</p>
-            <p className="font-bold text-slate-900 text-lg">{selectedRequest.documento}</p>
-          </div>
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Facultad</p>
-            <p className="font-bold text-slate-900 text-lg">{selectedRequest.facultad}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Titles */}
-      <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="bg-blue-600 p-3"><GraduationCap className="text-white w-6 h-6" /></div>
-          <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Títulos Académicos</h3>
-          <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{titles.length} registrado(s)</span>
-        </div>
-        {titles.length === 0 ? (
-          <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin títulos registrados</p>
-        ) : (
-          <div className="space-y-3">
-            {titles.map((t) => (
-              <div key={t.id} className="flex items-center justify-between border border-slate-100 bg-slate-50 px-6 py-4">
-                <p className="font-bold text-slate-800">{t.titleName}</p>
-                {levelBadge(t.titleLevel)}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Languages */}
-      <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="bg-purple-600 p-3"><Languages className="text-white w-6 h-6" /></div>
-          <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Idiomas</h3>
-          <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{languages.length} registrado(s)</span>
-        </div>
-        {languages.length === 0 ? (
-          <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin idiomas registrados</p>
-        ) : (
-          <div className="space-y-3">
-            {languages.map((l) => (
-              <div key={l.id} className="flex items-center justify-between border border-slate-100 bg-slate-50 px-6 py-4">
-                <p className="font-bold text-slate-800">{l.languageName}</p>
-                <div className="flex items-center gap-2">
-                  {levelBadge(l.languageLevel)}
-                  {l.convalidation && (
-                    <span className="inline-block bg-green-100 text-green-800 text-[9px] font-black uppercase tracking-widest px-3 py-1 border border-green-300">Convalidado</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Publications */}
-      <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="bg-teal-600 p-3"><BookOpen className="text-white w-6 h-6" /></div>
-          <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Producción Intelectual</h3>
-          <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{publications.length} registrada(s)</span>
-        </div>
-        {publications.length === 0 ? (
-          <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin publicaciones registradas</p>
-        ) : (
-          <div className="space-y-3">
-            {publications.map((p) => (
-              <div key={p.id} className="border border-slate-100 bg-slate-50 px-6 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <p className="font-bold text-slate-800 flex-1">{p.publicationTitle}</p>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {quartileBadge(p.quartile)}
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{p.publicationYear}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{p.publicationType}</span>
-                  <span className="text-[9px] text-slate-400">·</span>
-                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{p.authorsCount} autor(es)</span>
-                  <span className="text-[9px] text-slate-400">·</span>
-                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{p.sourceKind}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Experience */}
-      <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
-        <div className="flex items-center gap-4 mb-8">
-          <div className="bg-orange-500 p-3"><Briefcase className="text-white w-6 h-6" /></div>
-          <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Experiencia</h3>
-          <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{experiences.length} registrada(s)</span>
-        </div>
-        {experiences.length === 0 ? (
-          <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin experiencias registradas</p>
-        ) : (
-          <div className="space-y-3">
-            {experiences.map((e) => {
-              const yrs = calcYears(e.startedAt, e.endedAt);
-              return (
-                <div key={e.id} className="border border-slate-100 bg-slate-50 px-6 py-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-bold text-slate-800">{e.experienceType}</p>
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{yrs.toFixed(1)} años</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[9px] text-slate-500 font-bold">{e.startedAt || '—'} → {e.endedAt || 'Presente'}</span>
-                    {e.certified && (
-                      <span className="inline-block bg-green-100 text-green-800 text-[9px] font-black uppercase tracking-widest px-3 py-1 border border-green-300">Certificado</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Score breakdown */}
-      <section className="bg-white border-8 border-slate-950 p-12 shadow-2xl">
-        <div className="flex items-center gap-4 mb-10">
-          <div className="bg-slate-950 p-3"><Award className="text-white w-6 h-6" /></div>
-          <h3 className="font-black text-2xl uppercase tracking-[0.2em] text-slate-900">Calificación Escalafón</h3>
+        {/* Top bar: back + AI button */}
+        <div className="bg-white border-2 border-slate-950 p-8 flex justify-between items-center shadow-2xl">
+          <button
+            onClick={() => setView('lista')}
+            className="flex items-center gap-4 text-slate-950 hover:bg-slate-100 px-8 py-4 font-black text-[11px] tracking-widest border-4 border-slate-950 transition-all"
+          >
+            <ArrowLeft size={20} /> RETORNAR
+          </button>
+          <button
+            onClick={openAIDictamen}
+            className="bg-slate-950 text-white px-10 py-5 font-black text-[12px] tracking-[0.3em] flex items-center gap-4 hover:bg-blue-600 transition-all"
+          >
+            <BrainCircuit size={24} className="text-blue-400" /> DICTAMEN IA
+          </button>
         </div>
 
-        {scoreBreakdown && (
-          <>
-            <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 px-6 py-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-700">Posible calificación según soportes y workflow</p>
-              <p className="mt-2 text-sm font-semibold text-slate-700">
-                Esta lectura toma en cuenta el tipo de documentos cargados. Es preliminar hasta que el auxiliar valide la conformidad documental de cada frente.
-              </p>
+        {/* Professor identity */}
+        <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-slate-950 p-3"><User className="text-white w-6 h-6" /></div>
+            <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Datos del Docente</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Nombre Completo</p>
+              <p className="font-bold text-slate-900 text-lg">{selectedRequest.nombre}</p>
             </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Documento</p>
+              <p className="font-bold text-slate-900 text-lg">{selectedRequest.documento}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Facultad</p>
+              <p className="font-bold text-slate-900 text-lg">{selectedRequest.facultad}</p>
+            </div>
+          </div>
+        </section>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-              {workflowBreakdown.map(({ label, value, color, state, hint }) => (
-                <div key={label} className={`border-4 p-6 ${color}`}>
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 mb-2 text-center">{label}</p>
-                  <p className="text-4xl font-black text-slate-950 text-center">{value.toFixed(1)}</p>
-                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-700 text-center">{state}</p>
-                  <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-600 text-center">{hint}</p>
+        {/* Titles */}
+        <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-blue-600 p-3"><GraduationCap className="text-white w-6 h-6" /></div>
+            <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Títulos Académicos</h3>
+            <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{titles.length} registrado(s)</span>
+          </div>
+          {titles.length === 0 ? (
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin títulos registrados</p>
+          ) : (
+            <div className="space-y-3">
+              {titles.map((t) => (
+                <div key={t.id} className="flex items-center justify-between border border-slate-100 bg-slate-50 px-6 py-4">
+                  <p className="font-bold text-slate-800">{t.titleName}</p>
+                  {levelBadge(t.titleLevel)}
                 </div>
               ))}
             </div>
+          )}
+        </section>
 
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-6 border-l-4 border-slate-300 pl-4">
-              Posible resultado por soportes: {scoreBreakdown.finalPts.toFixed(1)} pts · categoría posible {scoreBreakdown.finalCat.name}
-            </p>
+        {/* Languages */}
+        <section className="bg-white border-2 border-slate-200 p-10 shadow-sm relative">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-purple-600 p-3"><Languages className="text-white w-6 h-6" /></div>
+            <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Idiomas</h3>
+            <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{languages.length} registrado(s)</span>
+            <button
+              onClick={startAddLang}
+              className="ml-4 p-2 bg-slate-900 text-white rounded-full hover:bg-purple-600 transition-colors"
+              title="Agregar Idioma"
+            >
+              <Plus size={20} />
+            </button>
+          </div>
 
-            <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-800">Última versión IA registrada</p>
-              {latestAiVersion ? (
-                <>
-                  <p className="mt-2 text-sm font-semibold text-slate-700">
-                    Puntaje IA: {latestAiVersion.totalScore.toFixed(1)} pts · categoría sugerida {latestAiVersion.suggestedCategory}
-                  </p>
-                  <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-amber-700">
-                    Estado: {latestAiVersion.versionStatus}
-                  </p>
-                </>
-              ) : (
+          {editingLangId === 'new' && (
+            <div className="mb-6 p-6 border-4 border-slate-900 bg-purple-50 space-y-4 animate-in fade-in slide-in-from-top-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-purple-700 mb-2">Nuevo Idioma</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  value={langForm.language_name}
+                  onChange={e => setLangForm({ ...langForm, language_name: e.target.value })}
+                  placeholder="Nombre del idioma (ej. Inglés)"
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <select
+                  value={langForm.language_level}
+                  onChange={e => setLangForm({ ...langForm, language_level: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                >
+                  {['A2', 'B1', 'B2', 'C1'].map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={langForm.convalidation}
+                    onChange={e => setLangForm({ ...langForm, convalidation: e.target.checked })}
+                    className="w-5 h-5 accent-purple-600 border-2 border-slate-900"
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">Convalidación</span>
+                </label>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button
+                  onClick={saveLang}
+                  className="bg-slate-900 text-white px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-green-600 transition-colors flex items-center gap-2"
+                >
+                  <Check size={16} /> Guardar
+                </button>
+                <button
+                  onClick={cancelLangEdit}
+                  className="border-2 border-slate-900 px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-colors flex items-center gap-2"
+                >
+                  <X size={16} /> Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {languages.length === 0 && editingLangId !== 'new' ? (
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin idiomas registrados</p>
+          ) : (
+            <div className="space-y-3">
+              {languages.map((l) => (
+                <div key={l.id} className="group relative">
+                  {editingLangId === l.id ? (
+                    <div className="p-6 border-4 border-slate-900 bg-white space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <input
+                          value={langForm.language_name}
+                          onChange={e => setLangForm({ ...langForm, language_name: e.target.value })}
+                          className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                        />
+                        <select
+                          value={langForm.language_level}
+                          onChange={e => setLangForm({ ...langForm, language_level: e.target.value })}
+                          className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                        >
+                          {['A2', 'B1', 'B2', 'C1'].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={langForm.convalidation}
+                            onChange={e => setLangForm({ ...langForm, convalidation: e.target.checked })}
+                            className="w-5 h-5 accent-purple-600"
+                          />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">Convalidación</span>
+                        </label>
+                      </div>
+                      <div className="flex gap-4">
+                        <button onClick={saveLang} className="bg-slate-900 text-white px-4 py-2 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-green-600"><Check size={14} /> Aplicar</button>
+                        <button onClick={cancelLangEdit} className="border-2 border-slate-900 px-4 py-2 text-[9px] font-black uppercase tracking-widest flex items-center gap-2"><X size={14} /> Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between border border-slate-100 bg-slate-50 px-6 py-4 hover:border-purple-300 transition-colors group">
+                      <p className="font-bold text-slate-800">{l.language_name || l.languageName}</p>
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-2">
+                          {levelBadge(l.language_level || l.languageLevel)}
+                          {(l.convalidation) && (
+                            <span className="inline-block bg-green-100 text-green-800 text-[9px] font-black uppercase tracking-widest px-3 py-1 border border-green-300">Convalidado</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEditLang(l)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Editar"><Edit2 size={16} /></button>
+                          <button onClick={() => onDeleteLanguage(l.id!)} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Eliminar"><Trash2 size={16} /></button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Publications */}
+        <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-teal-600 p-3"><BookOpen className="text-white w-6 h-6" /></div>
+            <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Producción Intelectual</h3>
+            <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{publications.length} registrada(s)</span>
+          </div>
+          {publications.length === 0 ? (
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin publicaciones registradas</p>
+          ) : (
+            <div className="space-y-3">
+              {publications.map((p) => (
+                <div key={p.id} className="border border-slate-100 bg-slate-50 px-6 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <p className="font-bold text-slate-800 flex-1">{p.publicationTitle}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {quartileBadge(p.quartile)}
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{p.publicationYear}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{p.publicationType}</span>
+                    <span className="text-[9px] text-slate-400">·</span>
+                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{p.authorsCount} autor(es)</span>
+                    <span className="text-[9px] text-slate-400">·</span>
+                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{p.sourceKind}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Experience */}
+        <section className="bg-white border-2 border-slate-200 p-10 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-orange-500 p-3"><Briefcase className="text-white w-6 h-6" /></div>
+            <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Experiencia</h3>
+            <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{experiences.length} registrada(s)</span>
+          </div>
+          {experiences.length === 0 ? (
+            <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin experiencias registradas</p>
+          ) : (
+            <div className="space-y-3">
+              {experiences.map((e) => {
+                const yrs = calcYears(e.startedAt, e.endedAt);
+                return (
+                  <div key={e.id} className="border border-slate-100 bg-slate-50 px-6 py-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-bold text-slate-800">{e.experienceType}</p>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{yrs.toFixed(1)} años</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[9px] text-slate-500 font-bold">{e.startedAt || '—'} → {e.endedAt || 'Presente'}</span>
+                      {e.certified && (
+                        <span className="inline-block bg-green-100 text-green-800 text-[9px] font-black uppercase tracking-widest px-3 py-1 border border-green-300">Certificado</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Score breakdown */}
+        <section className="bg-white border-8 border-slate-950 p-12 shadow-2xl">
+          <div className="flex items-center gap-4 mb-10">
+            <div className="bg-slate-950 p-3"><Award className="text-white w-6 h-6" /></div>
+            <h3 className="font-black text-2xl uppercase tracking-[0.2em] text-slate-900">Calificación Escalafón</h3>
+          </div>
+
+          {scoreBreakdown && (
+            <>
+              <div className="mb-8 rounded-2xl border border-blue-100 bg-blue-50 px-6 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-700">Posible calificación según soportes y workflow</p>
                 <p className="mt-2 text-sm font-semibold text-slate-700">
-                  Aún no hay una versión IA registrada para este expediente. Genera Dictamen IA para dejarlo pendiente.
+                  Esta lectura toma en cuenta el tipo de documentos cargados. Es preliminar hasta que el auxiliar valide la conformidad documental de cada frente.
                 </p>
-              )}
-            </div>
-          </>
-        )}
+              </div>
 
-        <div className="flex items-center gap-8 border-t-4 border-slate-200 pt-10">
-          <div className="text-center">
-            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Puntaje Final Oficial</p>
-            <p className="text-8xl font-black text-slate-950 tracking-tighter leading-none">{(selectedRequest.finalPts || 0).toFixed(1)}</p>
-          </div>
-          <div className="flex-1">
-            <div className={`py-5 px-8 text-center font-black text-[13px] uppercase tracking-[0.4em] ${selectedRequest.finalCat?.bgColor || 'bg-slate-500'} text-white mb-4`}>
-              DOCENTE {selectedRequest.finalCat?.name || 'SIN CATEGORÍA'}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                {workflowBreakdown.map(({ label, value, color, state, hint }) => (
+                  <div key={label} className={`border-4 p-6 ${color}`}>
+                    <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 mb-2 text-center">{label}</p>
+                    <p className="text-4xl font-black text-slate-950 text-center">{value.toFixed(1)}</p>
+                    <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-700 text-center">{state}</p>
+                    <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-600 text-center">{hint}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-6 border-l-4 border-slate-300 pl-4">
+                Posible resultado por soportes: {scoreBreakdown.finalPts.toFixed(1)} pts · categoría posible {scoreBreakdown.finalCat.name}
+              </p>
+
+              <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-800">Última versión IA registrada</p>
+                {latestAiVersion ? (
+                  <>
+                    <p className="mt-2 text-sm font-semibold text-slate-700">
+                      Puntaje IA: {latestAiVersion.totalScore.toFixed(1)} pts · categoría sugerida {latestAiVersion.suggestedCategory}
+                    </p>
+                    <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-amber-700">
+                      Estado: {latestAiVersion.versionStatus}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm font-semibold text-slate-700">
+                    Aún no hay una versión IA registrada para este expediente. Genera Dictamen IA para dejarlo pendiente.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center gap-8 border-t-4 border-slate-200 pt-10">
+            <div className="text-center">
+              <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Puntaje Final Oficial</p>
+              <p className="text-8xl font-black text-slate-950 tracking-tighter leading-none">{(selectedRequest.finalPts || 0).toFixed(1)}</p>
             </div>
-            <p className="text-slate-600 font-bold text-sm italic leading-relaxed">"{selectedRequest.outputMessage}"</p>
+            <div className="flex-1">
+              <div className={`py-5 px-8 text-center font-black text-[13px] uppercase tracking-[0.4em] ${selectedRequest.finalCat?.bgColor || 'bg-slate-500'} text-white mb-4`}>
+                DOCENTE {selectedRequest.finalCat?.name || 'SIN CATEGORÍA'}
+              </div>
+              <p className="text-slate-600 font-bold text-sm italic leading-relaxed">"{selectedRequest.outputMessage}"</p>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
       </div>
 
