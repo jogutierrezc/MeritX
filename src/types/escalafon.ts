@@ -19,9 +19,9 @@ export const emptyForm: FormState = {
   isAccreditedSource: false,
   yearsInCategory: 0,
   hasTrabajoAprobadoCEPI: false,
-  titulos: [{ titulo: '', nivel: 'Pregrado' }],
+  titulos: [{ titulo: '', nivel: 'Pregrado', fechaGrado: '', universidadOrigen: '', tipoUniversidad: 'NACIONAL', tituloConvalidado: 'NO' }],
   idiomas: [{ idioma: 'Inglés', nivel: 'A2', convalidacion: 'NO', supportName: '', supportPath: '' }],
   produccion: [],
-  experiencia: [{ tipo: 'Docencia Universitaria', inicio: '', fin: '', certificacion: 'NO' }],
+  experiencia: [{ tipo: 'Docencia Universitaria', empresa: '', inicio: '', fin: '', certificacion: 'NO' }],
   orcid: '',
 };

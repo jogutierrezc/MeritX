@@ -1083,10 +1083,29 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           supportPath = uploaded.publicUrl || uploaded.objectKey;
         }
 
+        let convalidationSupportPath = t.convalidacionSupportPath
+          || (t.convalidacionSupportName ? `professor-supports/titles-convalidation/${trackingId}/${t.convalidacionSupportName}` : undefined);
+        if (t.convalidacionSupportFile instanceof File) {
+          const convObjectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'titles',
+            rowRef: `convalidation-${titleIndex}`,
+            fileName: t.convalidacionSupportFile.name,
+          });
+          const convUploaded = await uploadFileToR2({ file: t.convalidacionSupportFile, objectKey: convObjectKey });
+          convalidationSupportPath = convUploaded.publicUrl || convUploaded.objectKey;
+        }
+
         await runReducer('add_application_title', {
           trackingId,
           titleName: t.titulo,
           titleLevel: t.nivel,
+          graduationDate: t.fechaGrado || undefined,
+          originUniversity: t.universidadOrigen || undefined,
+          universityType: t.tipoUniversidad || 'NACIONAL',
+          titleConvalidated: (t.tituloConvalidado || 'NO') === 'SI',
+          convalidationSupportName: t.convalidacionSupportName || undefined,
+          convalidationSupportPath,
           supportName,
           supportPath,
           supportUrl: supportPath,
@@ -1133,6 +1152,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         await runReducer('add_application_experience', {
           trackingId,
           experienceType: e.tipo,
+          companyName: e.empresa || undefined,
           startedAt: e.inicio,
           endedAt: e.fin,
           certified: e.certificacion === 'SI',

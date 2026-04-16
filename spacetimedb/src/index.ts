@@ -84,6 +84,12 @@ const application_title = table(
     support_name: t.string().optional(),
     support_url: t.string().optional(),
     support_path: t.string().optional(),
+    graduation_date: t.string().default(''),
+    origin_university: t.string().default(''),
+    university_type: t.string().default('NACIONAL'),
+    title_convalidated: t.bool().default(false),
+    convalidation_support_name: t.string().default(''),
+    convalidation_support_path: t.string().default(''),
   },
 );
 
@@ -124,6 +130,7 @@ const application_experience = table(
     support_name: t.string().optional(),
     support_url: t.string().optional(),
     support_path: t.string().optional(),
+    company_name: t.string().optional(),
   },
 );
 
@@ -451,6 +458,50 @@ const application_analysis_version = table(
   },
 );
 
+const external_ies_category = table(
+  { name: 'external_ies_category', public: true },
+  {
+    tracking_id: t.string().primaryKey(),
+    category: t.string().index('btree'),
+    ies_name: t.string().index('btree'),
+    certification_name: t.string().optional(),
+    certification_path: t.string().optional(),
+    certification_url: t.string().optional(),
+    created_by: t.string().optional(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const th_bucaramanga_validation = table(
+  { name: 'th_bucaramanga_validation', public: true },
+  {
+    id: t.u32().primaryKey().autoInc(),
+    tracking_id: t.string().index('btree'),
+    campus_scope: t.string().index('btree'),
+    proposed_category: t.string().index('btree'),
+    reasons: t.string(),
+    validated_by_name: t.string(),
+    approved_for_signature: t.bool().index('btree'),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+const meritx_report_cache = table(
+  { name: 'meritx_report_cache', public: true },
+  {
+    tracking_id: t.string().primaryKey(),
+    html_content: t.string(),
+    narrative_json: t.string(),
+    ai_provider: t.string().index('btree'),
+    ai_model: t.string().index('btree'),
+    generated_by: t.string().optional(),
+    generated_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
 const spacetimedb = schema({
   portal_user,
   user_profile,
@@ -483,6 +534,9 @@ const spacetimedb = schema({
   application_decano_document,
   application_decano_review,
   application_analysis_version,
+  external_ies_category,
+  th_bucaramanga_validation,
+  meritx_report_cache,
 });
 
 export default spacetimedb;
@@ -1536,6 +1590,12 @@ export const add_application_title = spacetimedb.reducer(
     tracking_id: t.string(),
     title_name: t.string(),
     title_level: t.string(),
+    graduation_date: t.string().optional(),
+    origin_university: t.string().optional(),
+    university_type: t.string().optional(),
+    title_convalidated: t.bool().optional(),
+    convalidation_support_name: t.string().optional(),
+    convalidation_support_path: t.string().optional(),
     support_name: t.string().optional(),
     support_url: t.string().optional(),
     support_path: t.string().optional(),
@@ -1545,7 +1605,18 @@ export const add_application_title = spacetimedb.reducer(
     if (!app) throw new SenderError('La postulación no existe.');
     ctx.db.application_title.insert({
       id: nextId(),
-      ...args,
+      tracking_id: args.tracking_id,
+      title_name: args.title_name,
+      title_level: args.title_level,
+      support_name: args.support_name,
+      support_url: args.support_url,
+      support_path: args.support_path,
+      graduation_date: args.graduation_date || '',
+      origin_university: args.origin_university || '',
+      university_type: args.university_type || 'NACIONAL',
+      title_convalidated: args.title_convalidated || false,
+      convalidation_support_name: args.convalidation_support_name || '',
+      convalidation_support_path: args.convalidation_support_path || '',
     });
   },
 );
@@ -1624,6 +1695,7 @@ export const add_application_experience = spacetimedb.reducer(
   {
     tracking_id: t.string(),
     experience_type: t.string(),
+    company_name: t.string().optional(),
     started_at: t.string(),
     ended_at: t.string(),
     certified: t.bool(),
@@ -1636,7 +1708,15 @@ export const add_application_experience = spacetimedb.reducer(
     if (!app) throw new SenderError('La postulación no existe.');
     ctx.db.application_experience.insert({
       id: nextId(),
-      ...args,
+      tracking_id: args.tracking_id,
+      experience_type: args.experience_type,
+      started_at: args.started_at,
+      ended_at: args.ended_at,
+      certified: args.certified,
+      support_name: args.support_name,
+      support_url: args.support_url,
+      support_path: args.support_path,
+      company_name: args.company_name,
     });
   },
 );
@@ -1697,6 +1777,108 @@ export const update_application_publication_source_kind = spacetimedb.reducer(
     ctx.db.application_publication.id.update({
       ...current,
       source_kind: normalized,
+    });
+  },
+);
+
+export const upsert_external_ies_category = spacetimedb.reducer(
+  {
+    tracking_id: t.string(),
+    category: t.string(),
+    ies_name: t.string(),
+    certification_name: t.string().optional(),
+    certification_path: t.string().optional(),
+    certification_url: t.string().optional(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, ['talento_humano', 'admin']);
+    const existing = ctx.db.external_ies_category.tracking_id.find(args.tracking_id);
+    if (existing) {
+      ctx.db.external_ies_category.tracking_id.update({
+        ...existing,
+        category: args.category,
+        ies_name: args.ies_name,
+        certification_name: args.certification_name,
+        certification_path: args.certification_path,
+        certification_url: args.certification_url,
+        updated_at: ctx.timestamp,
+      });
+      return;
+    }
+
+    ctx.db.external_ies_category.insert({
+      tracking_id: args.tracking_id,
+      category: args.category,
+      ies_name: args.ies_name,
+      certification_name: args.certification_name,
+      certification_path: args.certification_path,
+      certification_url: args.certification_url,
+      created_by: session.username,
+      created_at: ctx.timestamp,
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const save_th_bucaramanga_validation = spacetimedb.reducer(
+  {
+    tracking_id: t.string(),
+    campus_scope: t.string(),
+    proposed_category: t.string(),
+    reasons: t.string(),
+    validated_by_name: t.string(),
+    approved_for_signature: t.bool(),
+  },
+  (ctx, args) => {
+    requireSession(ctx, ['talento_humano', 'admin']);
+    ctx.db.th_bucaramanga_validation.insert({
+      id: nextId(),
+      tracking_id: args.tracking_id,
+      campus_scope: args.campus_scope,
+      proposed_category: args.proposed_category,
+      reasons: args.reasons,
+      validated_by_name: args.validated_by_name,
+      approved_for_signature: args.approved_for_signature,
+      created_at: ctx.timestamp,
+      updated_at: ctx.timestamp,
+    });
+  },
+);
+
+export const upsert_meritx_report_cache = spacetimedb.reducer(
+  {
+    tracking_id: t.string(),
+    html_content: t.string(),
+    narrative_json: t.string(),
+    ai_provider: t.string(),
+    ai_model: t.string(),
+  },
+  (ctx, args) => {
+    const session = requireSession(ctx, ['talento_humano', 'admin']);
+    const existing = ctx.db.meritx_report_cache.tracking_id.find(args.tracking_id);
+    if (existing) {
+      ctx.db.meritx_report_cache.tracking_id.update({
+        ...existing,
+        html_content: args.html_content,
+        narrative_json: args.narrative_json,
+        ai_provider: args.ai_provider,
+        ai_model: args.ai_model,
+        generated_by: session.username,
+        generated_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+      });
+      return;
+    }
+
+    ctx.db.meritx_report_cache.insert({
+      tracking_id: args.tracking_id,
+      html_content: args.html_content,
+      narrative_json: args.narrative_json,
+      ai_provider: args.ai_provider,
+      ai_model: args.ai_model,
+      generated_by: session.username,
+      generated_at: ctx.timestamp,
+      updated_at: ctx.timestamp,
     });
   },
 );

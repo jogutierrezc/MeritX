@@ -25,6 +25,13 @@ export type FormState = {
   titulos: Array<{
     titulo: string;
     nivel: 'Pregrado' | 'Especialización' | 'Especialización Médico Quirúrgica' | 'Maestría' | 'Maestría de Profundización' | 'Maestría de Investigación' | 'Doctorado';
+    fechaGrado?: string;
+    universidadOrigen?: string;
+    tipoUniversidad?: 'NACIONAL' | 'EXTRANJERA';
+    tituloConvalidado?: 'SI' | 'NO';
+    convalidacionSupportName?: string;
+    convalidacionSupportPath?: string;
+    convalidacionSupportFile?: File | null;
     supportName?: string;
     supportPath?: string;
     supportFile?: File | null;
@@ -39,6 +46,7 @@ export type FormState = {
   produccion: Array<{ titulo: string; cuartil: 'Q1' | 'Q2' | 'Q3' | 'Q4'; fecha: string; tipo?: string; autores?: number; fuente?: 'SCOPUS' | 'ORCID' | 'MANUAL'; supportName?: string; supportPath?: string }>;
   experiencia: Array<{
     tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación' | 'Colciencias Senior' | 'Colciencias Junior';
+    empresa?: string;
     inicio: string;
     fin: string;
     certificacion: 'SI' | 'NO';

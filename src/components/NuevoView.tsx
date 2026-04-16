@@ -211,7 +211,7 @@ const NuevoView: React.FC<Props> = ({
                     setFormData({ ...formData, titulos: arr });
                   }}
                   placeholder="TÍTULO"
-                  className="md:col-span-5 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
+                  className="md:col-span-4 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
                 />
                 <select
                   value={t.nivel}
@@ -220,7 +220,7 @@ const NuevoView: React.FC<Props> = ({
                     arr[i] = { ...arr[i], nivel: e.target.value as FormState['titulos'][number]['nivel'] };
                     setFormData({ ...formData, titulos: arr });
                   }}
-                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                  className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
                 >
                   <option>Pregrado</option>
                   <option>Especialización</option>
@@ -229,6 +229,56 @@ const NuevoView: React.FC<Props> = ({
                   <option>Maestría de Profundización</option>
                   <option>Maestría de Investigación</option>
                   <option>Doctorado</option>
+                </select>
+                <input
+                  type="date"
+                  value={t.fechaGrado || ''}
+                  onChange={(e) => {
+                    const arr = [...formData.titulos];
+                    arr[i] = { ...arr[i], fechaGrado: e.target.value };
+                    setFormData({ ...formData, titulos: arr });
+                  }}
+                  className="md:col-span-2 p-3 border bg-white border-slate-200 text-[11px] font-bold"
+                />
+                <input
+                  value={t.universidadOrigen || ''}
+                  onChange={(e) => {
+                    const arr = [...formData.titulos];
+                    arr[i] = { ...arr[i], universidadOrigen: e.target.value };
+                    setFormData({ ...formData, titulos: arr });
+                  }}
+                  placeholder="UNIVERSIDAD DE ORIGEN"
+                  className="md:col-span-4 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
+                />
+                <select
+                  value={t.tipoUniversidad || 'NACIONAL'}
+                  onChange={(e) => {
+                    const arr = [...formData.titulos];
+                    const nextType = e.target.value as 'NACIONAL' | 'EXTRANJERA';
+                    arr[i] = {
+                      ...arr[i],
+                      tipoUniversidad: nextType,
+                      tituloConvalidado: nextType === 'EXTRANJERA' ? arr[i].tituloConvalidado || 'NO' : 'NO',
+                    };
+                    setFormData({ ...formData, titulos: arr });
+                  }}
+                  className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                >
+                  <option value="NACIONAL">Universidad nacional</option>
+                  <option value="EXTRANJERA">Universidad extranjera</option>
+                </select>
+                <select
+                  value={t.tituloConvalidado || 'NO'}
+                  onChange={(e) => {
+                    const arr = [...formData.titulos];
+                    arr[i] = { ...arr[i], tituloConvalidado: e.target.value as 'SI' | 'NO' };
+                    setFormData({ ...formData, titulos: arr });
+                  }}
+                  disabled={(t.tipoUniversidad || 'NACIONAL') !== 'EXTRANJERA'}
+                  className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase disabled:opacity-60"
+                >
+                  <option value="NO">Convalidado: NO</option>
+                  <option value="SI">Convalidado: SI</option>
                 </select>
                 <label className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
                   {t.supportName || 'Adjuntar soporte'}
@@ -248,6 +298,26 @@ const NuevoView: React.FC<Props> = ({
                     }}
                   />
                 </label>
+                {(t.tipoUniversidad || 'NACIONAL') === 'EXTRANJERA' && (t.tituloConvalidado || 'NO') === 'SI' && (
+                  <label className="md:col-span-3 p-3 border bg-amber-50 border-amber-200 text-[10px] font-black uppercase text-amber-700 cursor-pointer flex items-center justify-center">
+                    {t.convalidacionSupportName || 'Adjuntar resolución de convalidación'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        const selected = e.target.files?.[0];
+                        const arr = [...formData.titulos];
+                        arr[i] = {
+                          ...arr[i],
+                          convalidacionSupportName: selected?.name || '',
+                          convalidacionSupportPath: selected ? `professor-supports/titles-convalidation/${Date.now()}-${selected.name}` : '',
+                          convalidacionSupportFile: selected || null,
+                        };
+                        setFormData({ ...formData, titulos: arr });
+                      }}
+                    />
+                  </label>
+                )}
                 <button
                   onClick={() => removeArrayItem('titulos', i)}
                   className="md:col-span-1 p-3 bg-rose-50 text-rose-700 hover:bg-rose-100"
@@ -504,6 +574,17 @@ const NuevoView: React.FC<Props> = ({
                   <option>Colciencias Junior</option>
                 </select>
                 <input
+                  type="text"
+                  value={exp.empresa || ''}
+                  onChange={(e) => {
+                    const arr = [...formData.experiencia];
+                    arr[i] = { ...arr[i], empresa: e.target.value };
+                    setFormData({ ...formData, experiencia: arr });
+                  }}
+                  placeholder="NOMBRE DE LA EMPRESA"
+                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[11px] font-bold uppercase"
+                />
+                <input
                   type="date"
                   value={exp.inicio}
                   onChange={(e) => {
@@ -530,12 +611,12 @@ const NuevoView: React.FC<Props> = ({
                     arr[i] = { ...arr[i], certificacion: e.target.value as 'SI' | 'NO' };
                     setFormData({ ...formData, experiencia: arr });
                   }}
-                  className="md:col-span-3 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
+                  className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase"
                 >
                   <option value="SI">PRESENTA CERTIFICACIÓN: SI</option>
                   <option value="NO">PRESENTA CERTIFICACIÓN: NO</option>
                 </select>
-                <label className="md:col-span-4 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
+                <label className="md:col-span-2 p-3 border bg-white border-slate-200 text-[10px] font-black uppercase text-slate-600 cursor-pointer flex items-center justify-center">
                   {exp.supportName || 'Adjuntar certificado'}
                   <input
                     type="file"

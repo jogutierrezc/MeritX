@@ -40,6 +40,12 @@ type Campus = (typeof CAMPUS)[number];
 type TitleItem = {
   titulo: string;
   nivel: 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado';
+  fechaGrado?: string;
+  universidadOrigen?: string;
+  tipoUniversidad?: 'NACIONAL' | 'EXTRANJERA';
+  tituloConvalidado?: 'SI' | 'NO';
+  convalidacionSoporte?: File | null;
+  convalidacionSoporteNombre?: string;
   soporte: File | null;
   soporteNombre: string;
 };
@@ -61,6 +67,7 @@ type ProductionItem = {
 
 type ExperienceItem = {
   tipo: 'Profesional' | 'Docencia Universitaria' | 'Investigación';
+  empresa?: string;
   inicio: string;
   fin: string;
   certificacion: 'SI' | 'NO';
@@ -94,10 +101,10 @@ const emptyForm: RegistroForm = {
   permanencia: 0,
   yearsInCategory: 0,
   esIngresoNuevo: true,
-  titulos: [{ titulo: '', nivel: 'Pregrado', soporte: null, soporteNombre: '' }],
+  titulos: [{ titulo: '', nivel: 'Pregrado', fechaGrado: '', universidadOrigen: '', tipoUniversidad: 'NACIONAL', tituloConvalidado: 'NO', convalidacionSoporte: null, convalidacionSoporteNombre: '', soporte: null, soporteNombre: '' }],
   idiomas: [{ idioma: 'INGLES', nivel: 'A2', convalidacion: 'NO' }],
   produccion: [],
-  experiencia: [{ tipo: 'Docencia Universitaria', inicio: '', fin: '', certificacion: 'NO', soporte: null, soporteNombre: '' }],
+  experiencia: [{ tipo: 'Docencia Universitaria', empresa: '', inicio: '', fin: '', certificacion: 'NO', soporte: null, soporteNombre: '' }],
 };
 
 interface Props {
@@ -211,7 +218,7 @@ const InicioPage = ({ standalone = false }: Props) => {
   const addTitulo = () => {
     setFormData((prev) => ({
       ...prev,
-      titulos: [...prev.titulos, { titulo: '', nivel: 'Pregrado', soporte: null, soporteNombre: '' }],
+      titulos: [...prev.titulos, { titulo: '', nivel: 'Pregrado', fechaGrado: '', universidadOrigen: '', tipoUniversidad: 'NACIONAL', tituloConvalidado: 'NO', convalidacionSoporte: null, convalidacionSoporteNombre: '', soporte: null, soporteNombre: '' }],
     }));
   };
 
@@ -237,7 +244,7 @@ const InicioPage = ({ standalone = false }: Props) => {
       ...prev,
       experiencia: [
         ...prev.experiencia,
-        { tipo: 'Docencia Universitaria', inicio: '', fin: '', certificacion: 'NO', soporte: null, soporteNombre: '' },
+        { tipo: 'Docencia Universitaria', empresa: '', inicio: '', fin: '', certificacion: 'NO', soporte: null, soporteNombre: '' },
       ],
     }));
   };
@@ -305,16 +312,30 @@ const InicioPage = ({ standalone = false }: Props) => {
     hasTrabajoAprobadoCEPI: false,
     titulos: formData.titulos
       .filter((item) => item.titulo && item.nivel)
-      .map((item) => ({ titulo: item.titulo, nivel: item.nivel })),
+      .map((item) => ({
+        titulo: item.titulo,
+        nivel: item.nivel,
+        fechaGrado: item.fechaGrado,
+        universidadOrigen: item.universidadOrigen,
+        tipoUniversidad: item.tipoUniversidad,
+        tituloConvalidado: item.tituloConvalidado,
+        supportName: item.soporteNombre,
+        supportPath: item.soporteNombre,
+        convalidacionSupportName: item.convalidacionSoporteNombre,
+        convalidacionSupportPath: item.convalidacionSoporteNombre,
+      })),
     idiomas: formData.idiomas,
     produccion: formData.produccion,
     experiencia: formData.experiencia
       .filter((item) => item.inicio)
       .map((item) => ({
         tipo: item.tipo as any,
+        empresa: item.empresa,
         inicio: item.inicio,
         fin: item.fin,
         certificacion: item.certificacion,
+        supportName: item.soporteNombre,
+        supportPath: item.soporteNombre,
       })),
     orcid: '',
     campus: formData.campus,
@@ -331,6 +352,17 @@ const InicioPage = ({ standalone = false }: Props) => {
     }
     if (formData.titulos.some((item) => !item.titulo)) {
       window.alert('Cada título debe tener nombre.');
+      return;
+    }
+    if (
+      formData.titulos.some(
+        (item) =>
+          (item.tipoUniversidad || 'NACIONAL') === 'EXTRANJERA' &&
+          (item.tituloConvalidado || 'NO') === 'SI' &&
+          !(item.convalidacionSoporte instanceof File),
+      )
+    ) {
+      window.alert('Para títulos extranjeros convalidados debes adjuntar la Resolución de convalidación.');
       return;
     }
     if (formData.experiencia.some((item) => !item.tipo || !item.inicio || !item.certificacion)) {
@@ -427,10 +459,30 @@ const InicioPage = ({ standalone = false }: Props) => {
         const supportName = uploadedUrl ? item.soporte instanceof File ? (item.soporte as File).name : item.soporteNombre : item.soporteNombre || undefined;
         const supportPath = uploadedUrl || (item.soporteNombre ? `professor-supports/titles/${trackingId}/${item.soporteNombre}` : undefined);
 
+        let convalidationSupportPath = item.convalidacionSoporteNombre
+          ? `professor-supports/titles-convalidation/${trackingId}/${item.convalidacionSoporteNombre}`
+          : undefined;
+        if (item.convalidacionSoporte instanceof File) {
+          const convObjectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'titles',
+            rowRef: `convalidation-${titleIndex}`,
+            fileName: item.convalidacionSoporte.name,
+          });
+          const convUploaded = await uploadFileToR2({ file: item.convalidacionSoporte, objectKey: convObjectKey });
+          convalidationSupportPath = convUploaded.publicUrl || convUploaded.objectKey;
+        }
+
         await runReducer('add_application_title', {
           trackingId,
           titleName: item.titulo,
           titleLevel: item.nivel,
+          graduationDate: item.fechaGrado || undefined,
+          originUniversity: item.universidadOrigen || undefined,
+          universityType: item.tipoUniversidad || 'NACIONAL',
+          titleConvalidated: (item.tituloConvalidado || 'NO') === 'SI',
+          convalidationSupportName: item.convalidacionSoporteNombre || undefined,
+          convalidationSupportPath,
           supportName,
           supportPath,
           supportUrl: supportPath,
@@ -467,6 +519,7 @@ const InicioPage = ({ standalone = false }: Props) => {
         await runReducer('add_application_experience', {
           trackingId,
           experienceType: item.tipo,
+          companyName: item.empresa || undefined,
           startedAt: item.inicio,
           endedAt: item.fin,
           certified: item.certificacion === 'SI',
@@ -730,7 +783,7 @@ const InicioPage = ({ standalone = false }: Props) => {
 
               <div className="space-y-4">
                 {formData.titulos.map((titulo, index) => (
-                  <div key={`${titulo.titulo}-${index}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1.5fr_0.8fr_1fr_auto]">
+                  <div key={`${titulo.titulo}-${index}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1.2fr_0.8fr_0.8fr_1.2fr_0.9fr_0.9fr_1fr_auto]">
                     <input
                       value={titulo.titulo}
                       onChange={(e) => setFormData((prev) => ({
@@ -753,6 +806,47 @@ const InicioPage = ({ standalone = false }: Props) => {
                       <option value="Maestría">Maestría</option>
                       <option value="Doctorado">Doctorado</option>
                     </select>
+                    <input
+                      type="date"
+                      value={titulo.fechaGrado || ''}
+                      onChange={(e) => setFormData((prev) => ({
+                        ...prev,
+                        titulos: prev.titulos.map((item, itemIndex) => itemIndex === index ? { ...item, fechaGrado: e.target.value } : item),
+                      }))}
+                      className={baseInputClass}
+                    />
+                    <input
+                      value={titulo.universidadOrigen || ''}
+                      onChange={(e) => setFormData((prev) => ({
+                        ...prev,
+                        titulos: prev.titulos.map((item, itemIndex) => itemIndex === index ? { ...item, universidadOrigen: e.target.value.toUpperCase() } : item),
+                      }))}
+                      className={baseInputClass}
+                      placeholder="UNIVERSIDAD DE ORIGEN"
+                    />
+                    <select
+                      value={titulo.tipoUniversidad || 'NACIONAL'}
+                      onChange={(e) => setFormData((prev) => ({
+                        ...prev,
+                        titulos: prev.titulos.map((item, itemIndex) => itemIndex === index ? { ...item, tipoUniversidad: e.target.value as 'NACIONAL' | 'EXTRANJERA' } : item),
+                      }))}
+                      className={baseInputClass}
+                    >
+                      <option value="NACIONAL">Universidad nacional</option>
+                      <option value="EXTRANJERA">Universidad extranjera</option>
+                    </select>
+                    <select
+                      value={titulo.tituloConvalidado || 'NO'}
+                      disabled={(titulo.tipoUniversidad || 'NACIONAL') !== 'EXTRANJERA'}
+                      onChange={(e) => setFormData((prev) => ({
+                        ...prev,
+                        titulos: prev.titulos.map((item, itemIndex) => itemIndex === index ? { ...item, tituloConvalidado: e.target.value as 'SI' | 'NO' } : item),
+                      }))}
+                      className={baseInputClass}
+                    >
+                      <option value="NO">Convalidado NO</option>
+                      <option value="SI">Convalidado SI</option>
+                    </select>
                     <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.15em] text-blue-800 transition-all hover:bg-blue-100">
                       <FileUp size={14} />
                       {titulo.soporteNombre || 'Anexar certificado'}
@@ -769,6 +863,24 @@ const InicioPage = ({ standalone = false }: Props) => {
                         }}
                       />
                     </label>
+                    {(titulo.tipoUniversidad || 'NACIONAL') === 'EXTRANJERA' && (titulo.tituloConvalidado || 'NO') === 'SI' && (
+                      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-amber-800 transition-all hover:bg-amber-100 md:col-span-2">
+                        <FileUp size={14} />
+                        {titulo.convalidacionSoporteNombre || 'Resolución convalidación'}
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          onChange={(e) => {
+                            const selected = e.target.files?.[0] || null;
+                            setFormData((prev) => ({
+                              ...prev,
+                              titulos: prev.titulos.map((item, itemIndex) => itemIndex === index ? { ...item, convalidacionSoporte: selected, convalidacionSoporteNombre: selected?.name || '' } : item),
+                            }));
+                          }}
+                        />
+                      </label>
+                    )}
                     <button
                       onClick={() => setFormData((prev) => ({ ...prev, titulos: prev.titulos.filter((_, itemIndex) => itemIndex !== index) }))}
                       className="rounded-xl bg-rose-50 px-4 py-3 text-rose-700"
@@ -924,7 +1036,7 @@ const InicioPage = ({ standalone = false }: Props) => {
 
               <div className="space-y-4">
                 {formData.experiencia.map((item, index) => (
-                  <div key={`${item.tipo}-${index}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_0.8fr_0.8fr_0.9fr_1fr_auto]">
+                  <div key={`${item.tipo}-${index}`} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[0.9fr_1.2fr_0.8fr_0.8fr_0.9fr_1fr_auto]">
                     <select
                       value={item.tipo}
                       onChange={(e) => setFormData((prev) => ({
@@ -937,6 +1049,15 @@ const InicioPage = ({ standalone = false }: Props) => {
                       <option value="Docencia Universitaria">Docencia Universitaria</option>
                       <option value="Investigación">Investigación</option>
                     </select>
+                    <input
+                      value={item.empresa || ''}
+                      onChange={(e) => setFormData((prev) => ({
+                        ...prev,
+                        experiencia: prev.experiencia.map((exp, expIndex) => expIndex === index ? { ...exp, empresa: e.target.value.toUpperCase() } : exp),
+                      }))}
+                      className={baseInputClass}
+                      placeholder="EMPRESA"
+                    />
                     <input
                       type="date"
                       value={item.inicio}

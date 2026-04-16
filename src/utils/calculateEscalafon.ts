@@ -95,6 +95,8 @@ const canonicalTitleLevel = (nivel: string): string => {
   return 'Pregrado';
 };
 
+const hasAnySupport = (name?: string, path?: string) => Boolean(String(name || '').trim() || String(path || '').trim());
+
 const PRODUCTION_TIPO_WEIGHTS: Record<string, number> = {
   'Patente de Investigación': 300,
   'Modelo de Utilidad': 120,
@@ -113,6 +115,16 @@ const PRODUCTION_TIPO_WEIGHTS: Record<string, number> = {
 export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => {
   // --- FASE 1: ASIGNACIÓN MATEMÁTICA DE TÍTULOS E IDIOMAS ---
   const ptsAcad = data.titulos.reduce((acc, t) => {
+    const hasTitleSupport = hasAnySupport(t.supportName, t.supportPath);
+    if (!hasTitleSupport) return acc;
+
+    const isForeign = String(t.tipoUniversidad || 'NACIONAL').toUpperCase() === 'EXTRANJERA';
+    const isConvalidated = String(t.tituloConvalidado || 'NO').toUpperCase() === 'SI';
+    const hasConvalidationSupport = hasAnySupport(t.convalidacionSupportName, t.convalidacionSupportPath);
+
+    // Foreign title only contributes when convalidated and accompanied by the convalidation resolution.
+    if (isForeign && (!isConvalidated || !hasConvalidationSupport)) return acc;
+
     const level = canonicalTitleLevel(t.nivel);
     return acc + (ESCALAFON_CONFIG.PUNTOS_TITULOS[level as keyof typeof ESCALAFON_CONFIG.PUNTOS_TITULOS] || 0);
   }, 0);
@@ -177,6 +189,10 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
       if (!exp.inicio) return;
       const expStart = new Date(exp.inicio).getTime();
       const expEnd = exp.fin ? new Date(exp.fin).getTime() : new Date().getTime();
+
+      // Experience points only apply when the record is certified and has support evidence.
+      const hasExperienceSupport = hasAnySupport(exp.supportName, exp.supportPath);
+      if (String(exp.certificacion || 'NO').toUpperCase() !== 'SI' || !hasExperienceSupport) return;
 
       // Tolerancia mínima para asegurar que la experiencia cubre el segmento
       if (expStart <= segmentStart + 1000 && expEnd >= segmentEnd - 1000) {

@@ -614,10 +614,29 @@ const ExpedientesPage = (_props: Props) => {
         const supportName = uploadedUrl ? (t.supportFile instanceof File ? (t.supportFile as File).name : t.supportName) : t.supportName || undefined;
         const supportPath = uploadedUrl || t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined);
 
+        let convalidationSupportPath = t.convalidacionSupportPath
+          || (t.convalidacionSupportName ? `professor-supports/titles-convalidation/${trackingId}/${t.convalidacionSupportName}` : undefined);
+        if (t.convalidacionSupportFile instanceof File) {
+          const convObjectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'titles',
+            rowRef: `convalidation-${titleIndex}`,
+            fileName: t.convalidacionSupportFile.name,
+          });
+          const convUploaded = await uploadFileToR2({ file: t.convalidacionSupportFile, objectKey: convObjectKey });
+          convalidationSupportPath = convUploaded.publicUrl || convUploaded.objectKey;
+        }
+
         await runReducer('add_application_title', {
           trackingId,
           titleName: t.titulo,
           titleLevel: t.nivel,
+          graduationDate: t.fechaGrado || undefined,
+          originUniversity: t.universidadOrigen || undefined,
+          universityType: t.tipoUniversidad || 'NACIONAL',
+          titleConvalidated: (t.tituloConvalidado || 'NO') === 'SI',
+          convalidationSupportName: t.convalidacionSupportName || undefined,
+          convalidationSupportPath,
           supportName,
           supportPath,
           supportUrl: supportPath,
@@ -654,6 +673,7 @@ const ExpedientesPage = (_props: Props) => {
         await runReducer('add_application_experience', {
           trackingId,
           experienceType: e.tipo,
+          companyName: e.empresa || undefined,
           startedAt: e.inicio,
           endedAt: e.fin,
           certified: e.certificacion === 'SI',
