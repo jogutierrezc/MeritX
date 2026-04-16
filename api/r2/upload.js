@@ -27,10 +27,19 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'R2 environment variables not configured' });
   }
 
-  const { fileName, fileType, documentKey } = req.body ?? {};
+  const { fileName, fileType, documentKey, objectKey: objectKeyInput } = req.body ?? {};
 
-  if (!fileName || !fileType || !documentKey) {
-    return res.status(400).json({ error: 'Missing required fields: fileName, fileType, documentKey' });
+  if (!fileName || !fileType) {
+    return res.status(400).json({ error: 'Missing required fields: fileName, fileType' });
+  }
+
+  const normalizedObjectKeyInput = typeof objectKeyInput === 'string' ? objectKeyInput.trim().replace(/^\/+/, '') : '';
+  if (!normalizedObjectKeyInput && !documentKey) {
+    return res.status(400).json({ error: 'Missing required field: documentKey or objectKey' });
+  }
+
+  if (normalizedObjectKeyInput.includes('..')) {
+    return res.status(400).json({ error: 'Invalid objectKey' });
   }
 
   try {
@@ -47,7 +56,7 @@ export default async function handler(req, res) {
       },
     });
 
-    const objectKey = `rag-documents/${documentKey}`;
+    const objectKey = normalizedObjectKeyInput || `rag-documents/${documentKey}`;
 
     const command = new PutObjectCommand({
       Bucket: R2_BUCKET_NAME,

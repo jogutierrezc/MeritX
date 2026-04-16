@@ -83,8 +83,8 @@ interface Props {
     sources: string[];
   } | null;
   onSaveProfileEvidence: (payload: {
-    titles: Array<{ id: number; supportName: string; supportPath: string }>;
-    experiences: Array<{ id: number; supportName: string; supportPath: string }>;
+    titles: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
+    experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
     publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
   }) => Promise<void>;
   onAddLanguage?: (trackingId: string, lang: { language_name: string; language_level: string; convalidation: boolean }) => Promise<void>;
@@ -258,11 +258,13 @@ export const AnalysisDetailView: React.FC<Props> = ({
           id: row.id,
           supportName: row.supportName || '',
           supportPath: row.supportPath || '',
+          supportFile: row.supportFile || null,
         })),
         experiences: experienceDraft.map((row) => ({
           id: row.id,
           supportName: row.supportName || '',
           supportPath: row.supportPath || '',
+          supportFile: row.supportFile || null,
         })),
         publications: publicationDraft.map((row) => ({
           id: row.id,
@@ -1083,6 +1085,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
                                 ...row,
                                 supportName: file.name,
                                 supportPath: buildSupportPath('titles', row.id, file.name),
+                                supportFile: file,
                               };
                               setTitleDraft(next);
                             }}
@@ -1112,6 +1115,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
                             ...item,
                             supportName: file.name,
                             supportPath: buildSupportPath('experience', item.id, file.name),
+                            supportFile: file,
                           })));
                         }}
                       />
@@ -1140,6 +1144,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
                                 ...row,
                                 supportName: file.name,
                                 supportPath: buildSupportPath('experience', row.id, file.name),
+                                supportFile: file,
                               };
                               setExperienceDraft(next);
                             }}

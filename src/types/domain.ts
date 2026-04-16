@@ -27,6 +27,7 @@ export type FormState = {
     nivel: 'Pregrado' | 'Especialización' | 'Especialización Médico Quirúrgica' | 'Maestría' | 'Maestría de Profundización' | 'Maestría de Investigación' | 'Doctorado';
     supportName?: string;
     supportPath?: string;
+    supportFile?: File | null;
   }>;
   idiomas: Array<{
     idioma: string;
@@ -43,6 +44,7 @@ export type FormState = {
     certificacion: 'SI' | 'NO';
     supportName?: string;
     supportPath?: string;
+    supportFile?: File | null;
   }>;
   orcid: string;
 };

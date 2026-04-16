@@ -60,6 +60,7 @@ export type SelectedTitleDetail = {
   titleLevel: string;
   supportName?: string;
   supportPath?: string;
+  supportFile?: File | null;
 };
 
 export type SelectedExperienceDetail = {
@@ -70,6 +71,7 @@ export type SelectedExperienceDetail = {
   certified: boolean;
   supportName?: string;
   supportPath?: string;
+  supportFile?: File | null;
 };
 
 export type SelectedPublicationDetail = {

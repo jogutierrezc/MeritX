@@ -19,6 +19,7 @@ import { calculateAdvancedEscalafon, getSuggestedCategoryByPoints } from '../../
 import { normativeToRagChunks } from '../../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../../services/orcid';
+import { buildSupportObjectKey, uploadFileToR2 } from '../../services/r2Upload';
 import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { AnalysisDetailView } from './perfiles/AnalysisDetailView';
@@ -1039,13 +1040,29 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         outputMessage: res.outputMessage,
       });
 
-      for (const t of formData.titulos) {
+      for (const [titleIndex, t] of formData.titulos.entries()) {
+        let supportName = t.supportName || undefined;
+        let supportPath = t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined);
+
+        if (t.supportFile instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'titles',
+            rowRef: titleIndex,
+            fileName: t.supportFile.name,
+          });
+          const uploaded = await uploadFileToR2({ file: t.supportFile, objectKey });
+          supportName = t.supportFile.name;
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('add_application_title', {
           trackingId,
           titleName: t.titulo,
           titleLevel: t.nivel,
-          supportName: t.supportName || undefined,
-          supportPath: t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined),
+          supportName,
+          supportPath,
+          supportUrl: supportPath,
         });
       }
 
@@ -1070,15 +1087,31 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         });
       }
 
-      for (const e of formData.experiencia) {
+      for (const [experienceIndex, e] of formData.experiencia.entries()) {
+        let supportName = e.supportName || undefined;
+        let supportPath = e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined);
+
+        if (e.supportFile instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'experience',
+            rowRef: experienceIndex,
+            fileName: e.supportFile.name,
+          });
+          const uploaded = await uploadFileToR2({ file: e.supportFile, objectKey });
+          supportName = e.supportFile.name;
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('add_application_experience', {
           trackingId,
           experienceType: e.tipo,
           startedAt: e.inicio,
           endedAt: e.fin,
           certified: e.certificacion === 'SI',
-          supportName: e.supportName || undefined,
-          supportPath: e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined),
+          supportName,
+          supportPath,
+          supportUrl: supportPath,
         });
       }
 
@@ -1549,8 +1582,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
   const handleSaveProfileEvidence = async (
     payload: {
-      titles: Array<{ id: number; supportName: string; supportPath: string }>;
-      experiences: Array<{ id: number; supportName: string; supportPath: string }>;
+      titles: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
+      experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
       publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
     },
   ) => {
@@ -1561,20 +1594,44 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
       for (const row of payload.titles) {
         const supportName = normalizeOptionalString(row.supportName);
-        const supportPath = normalizeOptionalString(row.supportPath);
+        let supportPath = normalizeOptionalString(row.supportPath);
+
+        if (row.supportFile instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId: selectedAnalysisRequest.id,
+            scope: 'titles',
+            rowRef: row.id,
+            fileName: row.supportFile.name,
+          });
+          const uploaded = await uploadFileToR2({ file: row.supportFile, objectKey });
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('update_application_title_support', {
           id: row.id,
-          supportName,
+          supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
           supportPath,
         });
       }
 
       for (const row of payload.experiences) {
         const supportName = normalizeOptionalString(row.supportName);
-        const supportPath = normalizeOptionalString(row.supportPath);
+        let supportPath = normalizeOptionalString(row.supportPath);
+
+        if (row.supportFile instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId: selectedAnalysisRequest.id,
+            scope: 'experience',
+            rowRef: row.id,
+            fileName: row.supportFile.name,
+          });
+          const uploaded = await uploadFileToR2({ file: row.supportFile, objectKey });
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('update_application_experience_support', {
           id: row.id,
-          supportName,
+          supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
           supportPath,
         });
       }

@@ -29,6 +29,7 @@ import type { FormState } from '../types/domain';
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
+import { buildSupportObjectKey, uploadFileToR2 } from '../services/r2Upload';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
 import { getPortalSession } from '../services/portalAuth';
 
@@ -357,13 +358,29 @@ const InicioPage = ({ standalone = false }: Props) => {
         outputMessage: 'Expediente recibido. Pendiente de auditoría por auxiliares.',
       });
 
-      for (const item of formData.titulos) {
+      for (const [titleIndex, item] of formData.titulos.entries()) {
+        let supportName = item.soporteNombre || undefined;
+        let supportPath = item.soporteNombre ? `professor-supports/titles/${trackingId}/${item.soporteNombre}` : undefined;
+
+        if (item.soporte instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'titles',
+            rowRef: titleIndex,
+            fileName: item.soporte.name,
+          });
+          const uploaded = await uploadFileToR2({ file: item.soporte, objectKey });
+          supportName = item.soporte.name;
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('add_application_title', {
           trackingId,
           titleName: item.titulo,
           titleLevel: item.nivel,
-          supportName: item.soporteNombre || undefined,
-          supportPath: item.soporteNombre ? `professor-supports/titles/${trackingId}/${item.soporteNombre}` : undefined,
+          supportName,
+          supportPath,
+          supportUrl: supportPath,
         });
       }
 
@@ -388,15 +405,31 @@ const InicioPage = ({ standalone = false }: Props) => {
         });
       }
 
-      for (const item of formData.experiencia) {
+      for (const [experienceIndex, item] of formData.experiencia.entries()) {
+        let supportName = item.soporteNombre || undefined;
+        let supportPath = item.soporteNombre ? `professor-supports/experience/${trackingId}/${item.soporteNombre}` : undefined;
+
+        if (item.soporte instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'experience',
+            rowRef: experienceIndex,
+            fileName: item.soporte.name,
+          });
+          const uploaded = await uploadFileToR2({ file: item.soporte, objectKey });
+          supportName = item.soporte.name;
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('add_application_experience', {
           trackingId,
           experienceType: item.tipo,
           startedAt: item.inicio,
           endedAt: item.fin,
           certified: item.certificacion === 'SI',
-          supportName: item.soporteNombre || undefined,
-          supportPath: item.soporteNombre ? `professor-supports/experience/${trackingId}/${item.soporteNombre}` : undefined,
+          supportName,
+          supportPath,
+          supportUrl: supportPath,
         });
       }
 

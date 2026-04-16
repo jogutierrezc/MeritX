@@ -8,6 +8,7 @@ import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { normativeToRagChunks } from '../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
+import { buildSupportObjectKey, uploadFileToR2 } from '../services/r2Upload';
 import { useSpacetime } from '../context/SpacetimeContext';
 import { getPortalSession } from '../services/portalAuth';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -544,13 +545,29 @@ const ExpedientesPage = (_props: Props) => {
         outputMessage: res.outputMessage,
       });
 
-      for (const t of formData.titulos) {
+      for (const [titleIndex, t] of formData.titulos.entries()) {
+        let supportName = t.supportName || undefined;
+        let supportPath = t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined);
+
+        if (t.supportFile instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'titles',
+            rowRef: titleIndex,
+            fileName: t.supportFile.name,
+          });
+          const uploaded = await uploadFileToR2({ file: t.supportFile, objectKey });
+          supportName = t.supportFile.name;
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('add_application_title', {
           trackingId,
           titleName: t.titulo,
           titleLevel: t.nivel,
-          supportName: t.supportName || undefined,
-          supportPath: t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined),
+          supportName,
+          supportPath,
+          supportUrl: supportPath,
         });
       }
 
@@ -575,15 +592,31 @@ const ExpedientesPage = (_props: Props) => {
         });
       }
 
-      for (const e of formData.experiencia) {
+      for (const [experienceIndex, e] of formData.experiencia.entries()) {
+        let supportName = e.supportName || undefined;
+        let supportPath = e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined);
+
+        if (e.supportFile instanceof File) {
+          const objectKey = buildSupportObjectKey({
+            trackingId,
+            scope: 'experience',
+            rowRef: experienceIndex,
+            fileName: e.supportFile.name,
+          });
+          const uploaded = await uploadFileToR2({ file: e.supportFile, objectKey });
+          supportName = e.supportFile.name;
+          supportPath = uploaded.publicUrl || uploaded.objectKey;
+        }
+
         await runReducer('add_application_experience', {
           trackingId,
           experienceType: e.tipo,
           startedAt: e.inicio,
           endedAt: e.fin,
           certified: e.certificacion === 'SI',
-          supportName: e.supportName || undefined,
-          supportPath: e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined),
+          supportName,
+          supportPath,
+          supportUrl: supportPath,
         });
       }
 

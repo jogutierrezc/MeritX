@@ -242,6 +242,7 @@ const NuevoView: React.FC<Props> = ({
                         ...arr[i],
                         supportName: selected?.name || '',
                         supportPath: selected ? `professor-supports/titles/${Date.now()}-${selected.name}` : '',
+                        supportFile: selected || null,
                       };
                       setFormData({ ...formData, titulos: arr });
                     }}
@@ -546,6 +547,7 @@ const NuevoView: React.FC<Props> = ({
                         ...arr[i],
                         supportName: selected?.name || '',
                         supportPath: selected ? `professor-supports/experience/${Date.now()}-${selected.name}` : '',
+                        supportFile: selected || null,
                       };
                       setFormData({ ...formData, experiencia: arr });
                     }}
