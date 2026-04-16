@@ -578,6 +578,7 @@ const ExpedientesPage = (_props: Props) => {
 
       const allUploads = [...titleUploads, ...experienceUploads];
       const uploadResultsById = new Map<string, string>(); // key: "titles-X" or "experiences-X" -> url
+      const uploadMetaByObjectKey = new Map(allUploads.map((u) => [u.objectKey, u]));
 
       // Step 2: Execute all uploads in parallel
       if (allUploads.length > 0) {
@@ -587,11 +588,12 @@ const ExpedientesPage = (_props: Props) => {
           (completed, total) => {
             console.debug(`[ExpedientesPage] Upload progress: ${completed}/${total}`);
           },
+          4,
         );
 
         // Map successful uploads
         results.successful.forEach((uploadResult) => {
-          const matchingUpload = allUploads.find((u) => u.file.name === uploadResult.fileName);
+          const matchingUpload = uploadMetaByObjectKey.get(uploadResult.objectKey);
           if (matchingUpload) {
             const mapKey = 'titleIndex' in matchingUpload ? `titles-${matchingUpload.titleIndex}` : `experiences-${matchingUpload.experienceIndex}`;
             uploadResultsById.set(mapKey, uploadResult.publicUrl || uploadResult.objectKey);

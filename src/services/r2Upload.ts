@@ -161,6 +161,7 @@ export const uploadFileToR2 = async (params: { file: File; objectKey: string }) 
 export const uploadMultipleFilesToR2 = async (
   uploads: Array<{ file: File; objectKey: string }>,
   onProgress?: (completed: number, total: number) => void,
+  maxConcurrency: number = 4,
 ): Promise<{
   successful: UploadResult[];
   failed: UploadError[];
@@ -176,37 +177,45 @@ export const uploadMultipleFilesToR2 = async (
 
   // Track progress
   let completed = 0;
+  const concurrency = Math.max(1, Math.min(maxConcurrency, uploads.length));
+  let nextIndex = 0;
 
-  const promises = uploads.map(async (upload) => {
-    try {
-      const result = await uploadFileToR2(upload);
-      const uploadResult: UploadResult = {
-        objectKey: result.objectKey,
-        publicUrl: result.publicUrl,
-        fileName: upload.file.name,
-        success: true,
-      };
-      results.successful.push(uploadResult);
-      console.info(`[R2] ✓ Complete: ${upload.file.name}`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      const uploadError: UploadError = {
-        fileName: upload.file.name,
-        objectKey: upload.objectKey,
-        error: msg,
-        success: false,
-        retryable: isRetryableError(0, error),
-      };
-      results.failed.push(uploadError);
-      console.error(`[R2] ✗ Failed: ${upload.file.name} - ${msg}`);
-    } finally {
-      completed += 1;
-      onProgress?.(completed, uploads.length);
+  const worker = async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= uploads.length) return;
+
+      const upload = uploads[currentIndex];
+      try {
+        const result = await uploadFileToR2(upload);
+        const uploadResult: UploadResult = {
+          objectKey: result.objectKey,
+          publicUrl: result.publicUrl,
+          fileName: upload.file.name,
+          success: true,
+        };
+        results.successful.push(uploadResult);
+        console.info(`[R2] ✓ Complete: ${upload.file.name}`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        const uploadError: UploadError = {
+          fileName: upload.file.name,
+          objectKey: upload.objectKey,
+          error: msg,
+          success: false,
+          retryable: isRetryableError(0, error),
+        };
+        results.failed.push(uploadError);
+        console.error(`[R2] ✗ Failed: ${upload.file.name} - ${msg}`);
+      } finally {
+        completed += 1;
+        onProgress?.(completed, uploads.length);
+      }
     }
-  });
+  };
 
-  // Wait for all in parallel (Promise.all doesn't throw, we catch per-upload)
-  await Promise.all(promises);
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
   return results;
 };

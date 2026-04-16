@@ -1674,6 +1674,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
       const allUploads = [...titleUploads, ...experienceUploads];
       const uploadResultsById = new Map<number, { url: string; type: string }>();
+      const uploadMetaByObjectKey = new Map(allUploads.map((u) => [u.objectKey, u]));
 
       // Step 2: Execute all uploads in parallel with progress tracking
       if (allUploads.length > 0) {
@@ -1683,11 +1684,12 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           (completed, total) => {
             console.debug(`[PerfilesModule] Upload progress: ${completed}/${total}`);
           },
+          4,
         );
 
         // Map successful uploads back to row IDs
         results.successful.forEach((uploadResult) => {
-          const matchingUpload = allUploads.find((u) => u.file.name === uploadResult.fileName);
+          const matchingUpload = uploadMetaByObjectKey.get(uploadResult.objectKey);
           if (matchingUpload) {
             uploadResultsById.set(matchingUpload.rowId, {
               url: uploadResult.publicUrl || uploadResult.objectKey,
