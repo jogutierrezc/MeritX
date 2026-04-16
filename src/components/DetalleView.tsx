@@ -79,7 +79,11 @@ const DetalleView: React.FC<Props> = ({
 
   const startEditLang = (l: AppLanguage) => {
     setEditingLangId(l.id || null);
-    setLangForm({ language_name: l.language_name, language_level: l.languageLevel, convalidation: !!l.convalidation });
+    setLangForm({
+      language_name: l.language_name ?? l.languageName ?? '',
+      language_level: (l.language_level ?? l.languageLevel) as string,
+      convalidation: !!l.convalidation,
+    });
   };
 
   const startAddLang = () => {

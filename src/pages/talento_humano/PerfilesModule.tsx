@@ -2297,7 +2297,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         }),
       ].join('\n');
 
-      const ragContext = buildRagContextForChat(structuredRagQuestion);
+      const ragContext = await buildRagContextForChat(structuredRagQuestion);
       const aiCurrentScore = aiRows.reduce((acc, row) => acc + row.puntajeSugerido, 0);
 
       const barrierDiag = selectedAnalysis.suggested.barrierDiagnosis;

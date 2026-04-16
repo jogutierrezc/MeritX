@@ -80,14 +80,12 @@ export type SelectedPublicationDetail = {
   sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL';
 };
 
+import type { EscalafonResult } from '../../../types/domain';
+
 export type SelectedAnalysis = {
   rows: MatrixRow[];
   matrixTotal: number;
-  suggested: {
-    finalPts: number;
-    finalCat: { name: string; bgColor?: string };
-    outputMessage?: string;
-  };
+  suggested: EscalafonResult;
   hasDocumentSupports: boolean;
   titles: SelectedTitleDetail[];
   experiences: SelectedExperienceDetail[];
