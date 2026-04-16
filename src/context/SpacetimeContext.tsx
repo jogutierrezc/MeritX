@@ -43,30 +43,18 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
         const currentSession = getPortalSession();
         setSession(currentSession);
 
-        // ── Portal login reducer ───────────────────────────────────────────
-        if (currentSession) {
-          const credentials = getPortalCredentialsForRole(currentSession.role);
-          if (credentials) {
-            const reducers = c.reducers as any;
-            const loginFn = reducers.portalLogin || reducers.portal_login;
-            if (typeof loginFn === 'function') {
-              Promise.resolve(loginFn({
-                role: currentSession.role,
-                username: credentials.username,
-                password: credentials.password
-              }))
-                .then(() => {
-                  if (isMounted) setPortalAuthReady(true);
-                })
-                .catch((e) => {
-                  console.error('Error enviando portal_login:', e);
-                  if (isMounted) setPortalAuthReady(false);
-                });
-            } else {
-              if (isMounted) setPortalAuthReady(true);
-            }
-          }
-        }
+        const subscribeQueries = (queries: string[]) => {
+          c.subscriptionBuilder()
+            .onApplied(() => {
+              if (isMounted) setGlobalDataReady(true);
+            })
+            .onError((err) => {
+              // Keep app usable with cached/local module subscriptions even if one global query fails.
+              console.warn('Subscription warning in SpacetimeContext', err);
+              if (isMounted) setGlobalDataReady(true);
+            })
+            .subscribe(queries);
+        };
 
         // ── Subscripciones optimizadas por bandwidth ───────────────────────
         //
@@ -92,7 +80,7 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
         ];
 
         // Tablas de portal: solo para usuarios autenticados
-        const portalQueries = currentSession ? [
+        const portalQueries = [
           'SELECT * FROM user_profile',
           'SELECT * FROM user_faculty_assignment',
           'SELECT * FROM api_config',
@@ -118,16 +106,41 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
           'SELECT * FROM audit_event',
           'SELECT * FROM audit_score_snapshot',
           'SELECT * FROM report_snapshot',
-        ] : [];
+        ];
 
-        c.subscriptionBuilder()
-          .onApplied(() => {
-            if (isMounted) setGlobalDataReady(true);
-          })
-          .onError((err) => {
-            console.error('Subscription error in SpacetimeContext', err);
-          })
-          .subscribe([...baseQueries, ...portalQueries]);
+        const subscribeBaseOnly = () => {
+          if (isMounted) setPortalAuthReady(Boolean(currentSession) ? false : true);
+          subscribeQueries(baseQueries);
+        };
+
+        // ── Portal login reducer ───────────────────────────────────────────
+        if (currentSession) {
+          const credentials = getPortalCredentialsForRole(currentSession.role);
+          const reducers = c.reducers as any;
+          const loginFn = reducers.portalLogin || reducers.portal_login;
+
+          if (credentials && typeof loginFn === 'function') {
+            Promise.resolve(loginFn({
+              role: currentSession.role,
+              username: credentials.username,
+              password: credentials.password,
+            }))
+              .then(() => {
+                if (!isMounted) return;
+                setPortalAuthReady(true);
+                subscribeQueries([...baseQueries, ...portalQueries]);
+              })
+              .catch((e) => {
+                console.error('Error enviando portal_login:', e);
+                subscribeBaseOnly();
+              });
+          } else {
+            subscribeBaseOnly();
+          }
+          return;
+        }
+
+        subscribeBaseOnly();
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('Global Spacetime connect error:', err);

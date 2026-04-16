@@ -1592,9 +1592,35 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     try {
       setLoading(true);
 
+      const currentTitleById = new Map(
+        allTitles
+          .filter((row) => row.trackingId === selectedAnalysisRequest.id)
+          .map((row) => [
+            Number(row.id),
+            {
+              supportName: normalizeOptionalString(row.supportName),
+              supportPath: normalizeOptionalString(row.supportPath),
+            },
+          ]),
+      );
+
+      const currentExperienceById = new Map(
+        allExperiences
+          .filter((row) => row.trackingId === selectedAnalysisRequest.id)
+          .map((row) => [
+            Number(row.id),
+            {
+              supportName: normalizeOptionalString(row.supportName),
+              supportPath: normalizeOptionalString(row.supportPath),
+            },
+          ]),
+      );
+
       for (const row of payload.titles) {
         const supportName = normalizeOptionalString(row.supportName);
         let supportPath = normalizeOptionalString(row.supportPath);
+        const current = currentTitleById.get(row.id);
+        let shouldPersist = false;
 
         if (row.supportFile instanceof File) {
           const objectKey = buildSupportObjectKey({
@@ -1605,6 +1631,17 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           });
           const uploaded = await uploadFileToR2({ file: row.supportFile, objectKey });
           supportPath = uploaded.publicUrl || uploaded.objectKey;
+          shouldPersist = true;
+        }
+
+        if (!shouldPersist) {
+          shouldPersist =
+            (current?.supportName || undefined) !== (supportName || undefined) ||
+            (current?.supportPath || undefined) !== (supportPath || undefined);
+        }
+
+        if (!shouldPersist) {
+          continue;
         }
 
         await runReducer('update_application_title_support', {
@@ -1617,6 +1654,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       for (const row of payload.experiences) {
         const supportName = normalizeOptionalString(row.supportName);
         let supportPath = normalizeOptionalString(row.supportPath);
+        const current = currentExperienceById.get(row.id);
+        let shouldPersist = false;
 
         if (row.supportFile instanceof File) {
           const objectKey = buildSupportObjectKey({
@@ -1627,6 +1666,17 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           });
           const uploaded = await uploadFileToR2({ file: row.supportFile, objectKey });
           supportPath = uploaded.publicUrl || uploaded.objectKey;
+          shouldPersist = true;
+        }
+
+        if (!shouldPersist) {
+          shouldPersist =
+            (current?.supportName || undefined) !== (supportName || undefined) ||
+            (current?.supportPath || undefined) !== (supportPath || undefined);
+        }
+
+        if (!shouldPersist) {
+          continue;
         }
 
         await runReducer('update_application_experience_support', {
@@ -1643,7 +1693,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         });
       }
 
-      if (reloadRef.current) await reloadRef.current();
+      if (reloadRef.current) {
+        void reloadRef.current().catch((error) => {
+          console.warn('Reload async warning after profile evidence save:', error);
+        });
+      }
       window.alert('Perfil actualizado. Se guardaron soportes y fuentes de producción.');
     } catch (error) {
       console.error(error);
