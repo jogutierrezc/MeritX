@@ -2,7 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, MessageSquareText, Send } from 'lucide-react';
 
 import { DbConnection } from '../../module_bindings';
-import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
+import {
+  clearPortalSession,
+  getPortalCredentialsForRole,
+  getPortalSession,
+  isInvalidPortalCredentialsError,
+} from '../../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import type { FormState } from '../../types/domain';
 import { calculateAdvancedEscalafon, getSuggestedCategoryByPoints } from '../../utils/calculateEscalafon';
@@ -477,7 +482,14 @@ const ChatMetriXModule = () => {
       .withDatabaseName(databaseName)
       .onConnect((conn: DbConnection) => {
         
-        ensurePortalSession(conn).catch((e) => console.warn('Portal session en ChatMetriXModule:', e));
+        ensurePortalSession(conn).catch((e) => {
+          if (isInvalidPortalCredentialsError(e)) {
+            clearPortalSession();
+            setConnectionWarning('La sesión del portal expiró o fue reiniciada. Inicia sesión nuevamente.');
+            return;
+          }
+          console.warn('Portal session en ChatMetriXModule:', e);
+        });
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('ChatMetriXModule connect error:', err);

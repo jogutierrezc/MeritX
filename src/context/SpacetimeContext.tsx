@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { DbConnection } from '../module_bindings';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
-import { getPortalSession, getPortalCredentialsForRole, type PortalSession } from '../services/portalAuth';
+import {
+  clearPortalSession,
+  getPortalSession,
+  getPortalCredentialsForRole,
+  isInvalidPortalCredentialsError,
+  type PortalSession,
+} from '../services/portalAuth';
 
 interface SpacetimeContextType {
   connection: DbConnection | null;
@@ -131,7 +137,12 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
                 subscribeQueries([...baseQueries, ...portalQueries]);
               })
               .catch((e) => {
-                console.error('Error enviando portal_login:', e);
+                if (isInvalidPortalCredentialsError(e)) {
+                  clearPortalSession();
+                  if (isMounted) setSession(null);
+                } else {
+                  console.error('Error enviando portal_login:', e);
+                }
                 subscribeBaseOnly();
               });
           } else {

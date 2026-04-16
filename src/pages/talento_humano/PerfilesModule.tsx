@@ -20,7 +20,12 @@ import { normativeToRagChunks } from '../../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../../services/orcid';
 import { buildSupportObjectKey, uploadFileToR2, uploadMultipleFilesToR2 } from '../../services/r2Upload';
-import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
+import {
+  clearPortalSession,
+  getPortalCredentialsForRole,
+  getPortalSession,
+  isInvalidPortalCredentialsError,
+} from '../../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { AnalysisDetailView } from './perfiles/AnalysisDetailView';
 import { openMeritxReportWindow, renderMeritxReportError, renderMeritxReportWindow } from './perfiles/meritxReportWindow';
@@ -714,7 +719,12 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         
         ensurePortalSession(conn)
           .catch((e) => {
-            console.warn('Portal session en PerfilesModule:', e);
+            if (isInvalidPortalCredentialsError(e)) {
+              clearPortalSession();
+              setConnectionWarning('La sesión del portal expiró o fue reiniciada. Inicia sesión de nuevo.');
+            } else {
+              console.warn('Portal session en PerfilesModule:', e);
+            }
           })
           .finally(() => {
             onReadyResolve?.();

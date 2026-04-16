@@ -16,6 +16,7 @@ import {
   clearPortalSession,
   getPortalSession,
   getRequiredRoleForModule,
+  PORTAL_SESSION_CHANGED_EVENT,
   savePortalSession,
   type PortalSession,
 } from './services/portalAuth';
@@ -73,6 +74,12 @@ const App = () => {
     const onPopState = () => setActiveModule(getModuleFromPath(window.location.pathname));
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  useEffect(() => {
+    const syncPortalSession = () => setPortalSession(getPortalSession());
+    window.addEventListener(PORTAL_SESSION_CHANGED_EVENT, syncPortalSession);
+    return () => window.removeEventListener(PORTAL_SESSION_CHANGED_EVENT, syncPortalSession);
   }, []);
 
   useEffect(() => {
