@@ -29,7 +29,7 @@ import type { FormState } from '../types/domain';
 import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
-import { buildSupportObjectKey, uploadFileToR2 } from '../services/r2Upload';
+import { buildSupportObjectKey, uploadFileToR2, uploadMultipleFilesToR2 } from '../services/r2Upload';
 import { getSpacetimeConnectionConfig } from '../services/spacetime';
 import { getPortalSession } from '../services/portalAuth';
 
@@ -358,21 +358,72 @@ const InicioPage = ({ standalone = false }: Props) => {
         outputMessage: 'Expediente recibido. Pendiente de auditoría por auxiliares.',
       });
 
-      for (const [titleIndex, item] of formData.titulos.entries()) {
-        let supportName = item.soporteNombre || undefined;
-        let supportPath = item.soporteNombre ? `professor-supports/titles/${trackingId}/${item.soporteNombre}` : undefined;
-
-        if (item.soporte instanceof File) {
-          const objectKey = buildSupportObjectKey({
+      // Step 1: Collect all file uploads (titles + experiences) for parallel processing
+      const titleUploads = formData.titulos
+        .map((item, titleIndex) => ({
+          item,
+          titleIndex,
+          hasFile: item.soporte instanceof File,
+          file: item.soporte as File,
+          objectKey: buildSupportObjectKey({
             trackingId,
             scope: 'titles',
             rowRef: titleIndex,
-            fileName: item.soporte.name,
-          });
-          const uploaded = await uploadFileToR2({ file: item.soporte, objectKey });
-          supportName = item.soporte.name;
-          supportPath = uploaded.publicUrl || uploaded.objectKey;
+            fileName: (item.soporte as File).name,
+          }),
+        }))
+        .filter((u) => u.hasFile);
+
+      const experienceUploads = formData.experiencia
+        .map((item, experienceIndex) => ({
+          item,
+          experienceIndex,
+          hasFile: item.soporte instanceof File,
+          file: item.soporte as File,
+          objectKey: buildSupportObjectKey({
+            trackingId,
+            scope: 'experience',
+            rowRef: experienceIndex,
+            fileName: (item.soporte as File).name,
+          }),
+        }))
+        .filter((u) => u.hasFile);
+
+      const allUploads = [...titleUploads, ...experienceUploads];
+      const uploadResultsById = new Map<string, string>(); // key: "titles-X" or "experiences-X" -> url
+
+      // Step 2: Execute all uploads in parallel
+      if (allUploads.length > 0) {
+        console.info(`[InicioPage] Starting parallel uploads: ${allUploads.length} files`);
+        const results = await uploadMultipleFilesToR2(
+          allUploads.map((u) => ({ file: u.file, objectKey: u.objectKey })),
+          (completed, total) => {
+            console.debug(`[InicioPage] Upload progress: ${completed}/${total}`);
+          },
+        );
+
+        // Map successful uploads
+        results.successful.forEach((uploadResult) => {
+          const matchingUpload = allUploads.find((u) => u.file.name === uploadResult.fileName);
+          if (matchingUpload) {
+            const mapKey = 'titleIndex' in matchingUpload ? `titles-${matchingUpload.titleIndex}` : `experiences-${matchingUpload.experienceIndex}`;
+            uploadResultsById.set(mapKey, uploadResult.publicUrl || uploadResult.objectKey);
+            console.info(`[InicioPage] ✓ Mapped ${uploadResult.fileName} to ${mapKey}`);
+          }
+        });
+
+        if (results.failed.length > 0) {
+          console.warn(`[InicioPage] ${results.failed.length} uploads failed:`, results.failed);
+          const failedNames = results.failed.map((f) => f.fileName).join(', ');
+          window.alert(`⚠️ Subidos ${allUploads.length - results.failed.length}/${allUploads.length} archivos.\n\nFallaron: ${failedNames}`);
         }
+      }
+
+      // Step 3: Add titles with uploaded support paths
+      for (const [titleIndex, item] of formData.titulos.entries()) {
+        const uploadedUrl = uploadResultsById.get(`titles-${titleIndex}`);
+        const supportName = uploadedUrl ? item.soporte instanceof File ? (item.soporte as File).name : item.soporteNombre : item.soporteNombre || undefined;
+        const supportPath = uploadedUrl || (item.soporteNombre ? `professor-supports/titles/${trackingId}/${item.soporteNombre}` : undefined);
 
         await runReducer('add_application_title', {
           trackingId,
@@ -405,21 +456,11 @@ const InicioPage = ({ standalone = false }: Props) => {
         });
       }
 
+      // Step 4: Add experiences with uploaded support paths
       for (const [experienceIndex, item] of formData.experiencia.entries()) {
-        let supportName = item.soporteNombre || undefined;
-        let supportPath = item.soporteNombre ? `professor-supports/experience/${trackingId}/${item.soporteNombre}` : undefined;
-
-        if (item.soporte instanceof File) {
-          const objectKey = buildSupportObjectKey({
-            trackingId,
-            scope: 'experience',
-            rowRef: experienceIndex,
-            fileName: item.soporte.name,
-          });
-          const uploaded = await uploadFileToR2({ file: item.soporte, objectKey });
-          supportName = item.soporte.name;
-          supportPath = uploaded.publicUrl || uploaded.objectKey;
-        }
+        const uploadedUrl = uploadResultsById.get(`experiences-${experienceIndex}`);
+        const supportName = uploadedUrl ? item.soporte instanceof File ? (item.soporte as File).name : item.soporteNombre : item.soporteNombre || undefined;
+        const supportPath = uploadedUrl || (item.soporteNombre ? `professor-supports/experience/${trackingId}/${item.soporteNombre}` : undefined);
 
         await runReducer('add_application_experience', {
           trackingId,

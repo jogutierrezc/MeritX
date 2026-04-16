@@ -8,7 +8,7 @@ import { calculateAdvancedEscalafon } from '../utils/calculateEscalafon';
 import { normativeToRagChunks } from '../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../services/orcid';
-import { buildSupportObjectKey, uploadFileToR2 } from '../services/r2Upload';
+import { buildSupportObjectKey, uploadFileToR2, uploadMultipleFilesToR2 } from '../services/r2Upload';
 import { useSpacetime } from '../context/SpacetimeContext';
 import { getPortalSession } from '../services/portalAuth';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -545,21 +545,72 @@ const ExpedientesPage = (_props: Props) => {
         outputMessage: res.outputMessage,
       });
 
-      for (const [titleIndex, t] of formData.titulos.entries()) {
-        let supportName = t.supportName || undefined;
-        let supportPath = t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined);
-
-        if (t.supportFile instanceof File) {
-          const objectKey = buildSupportObjectKey({
+      // Step 1: Collect all file uploads (titles + experiences) for parallel processing
+      const titleUploads = formData.titulos
+        .map((t, titleIndex) => ({
+          item: t,
+          titleIndex,
+          hasFile: t.supportFile instanceof File,
+          file: t.supportFile as File,
+          objectKey: buildSupportObjectKey({
             trackingId,
             scope: 'titles',
             rowRef: titleIndex,
-            fileName: t.supportFile.name,
-          });
-          const uploaded = await uploadFileToR2({ file: t.supportFile, objectKey });
-          supportName = t.supportFile.name;
-          supportPath = uploaded.publicUrl || uploaded.objectKey;
+            fileName: (t.supportFile as File).name,
+          }),
+        }))
+        .filter((u) => u.hasFile);
+
+      const experienceUploads = formData.experiencia
+        .map((e, experienceIndex) => ({
+          item: e,
+          experienceIndex,
+          hasFile: e.supportFile instanceof File,
+          file: e.supportFile as File,
+          objectKey: buildSupportObjectKey({
+            trackingId,
+            scope: 'experience',
+            rowRef: experienceIndex,
+            fileName: (e.supportFile as File).name,
+          }),
+        }))
+        .filter((u) => u.hasFile);
+
+      const allUploads = [...titleUploads, ...experienceUploads];
+      const uploadResultsById = new Map<string, string>(); // key: "titles-X" or "experiences-X" -> url
+
+      // Step 2: Execute all uploads in parallel
+      if (allUploads.length > 0) {
+        console.info(`[ExpedientesPage] Starting parallel uploads: ${allUploads.length} files`);
+        const results = await uploadMultipleFilesToR2(
+          allUploads.map((u) => ({ file: u.file, objectKey: u.objectKey })),
+          (completed, total) => {
+            console.debug(`[ExpedientesPage] Upload progress: ${completed}/${total}`);
+          },
+        );
+
+        // Map successful uploads
+        results.successful.forEach((uploadResult) => {
+          const matchingUpload = allUploads.find((u) => u.file.name === uploadResult.fileName);
+          if (matchingUpload) {
+            const mapKey = 'titleIndex' in matchingUpload ? `titles-${matchingUpload.titleIndex}` : `experiences-${matchingUpload.experienceIndex}`;
+            uploadResultsById.set(mapKey, uploadResult.publicUrl || uploadResult.objectKey);
+            console.info(`[ExpedientesPage] ✓ Mapped ${uploadResult.fileName} to ${mapKey}`);
+          }
+        });
+
+        if (results.failed.length > 0) {
+          console.warn(`[ExpedientesPage] ${results.failed.length} uploads failed:`, results.failed);
+          const failedNames = results.failed.map((f) => f.fileName).join(', ');
+          window.alert(`⚠️ Subidos ${allUploads.length - results.failed.length}/${allUploads.length} archivos.\n\nFallaron: ${failedNames}`);
         }
+      }
+
+      // Step 3: Add titles with uploaded support paths
+      for (const [titleIndex, t] of formData.titulos.entries()) {
+        const uploadedUrl = uploadResultsById.get(`titles-${titleIndex}`);
+        const supportName = uploadedUrl ? (t.supportFile instanceof File ? (t.supportFile as File).name : t.supportName) : t.supportName || undefined;
+        const supportPath = uploadedUrl || t.supportPath || (t.supportName ? `professor-supports/titles/${trackingId}/${t.supportName}` : undefined);
 
         await runReducer('add_application_title', {
           trackingId,
@@ -592,21 +643,11 @@ const ExpedientesPage = (_props: Props) => {
         });
       }
 
+      // Step 4: Add experiences with uploaded support paths
       for (const [experienceIndex, e] of formData.experiencia.entries()) {
-        let supportName = e.supportName || undefined;
-        let supportPath = e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined);
-
-        if (e.supportFile instanceof File) {
-          const objectKey = buildSupportObjectKey({
-            trackingId,
-            scope: 'experience',
-            rowRef: experienceIndex,
-            fileName: e.supportFile.name,
-          });
-          const uploaded = await uploadFileToR2({ file: e.supportFile, objectKey });
-          supportName = e.supportFile.name;
-          supportPath = uploaded.publicUrl || uploaded.objectKey;
-        }
+        const uploadedUrl = uploadResultsById.get(`experiences-${experienceIndex}`);
+        const supportName = uploadedUrl ? (e.supportFile instanceof File ? (e.supportFile as File).name : e.supportName) : e.supportName || undefined;
+        const supportPath = uploadedUrl || e.supportPath || (e.supportName ? `professor-supports/experience/${trackingId}/${e.supportName}` : undefined);
 
         await runReducer('add_application_experience', {
           trackingId,
@@ -625,7 +666,7 @@ const ExpedientesPage = (_props: Props) => {
       setView('lista');
     } catch (e) {
       console.error(e);
-      window.alert('No fue posible registrar el expediente. Revisa consola para mÃ¡s detalle.');
+      window.alert('No fue posible registrar el expediente. Revisa consola para más detalle.');
     } finally {
       setLoading(false);
     }

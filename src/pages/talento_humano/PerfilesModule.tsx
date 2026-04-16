@@ -19,7 +19,7 @@ import { calculateAdvancedEscalafon, getSuggestedCategoryByPoints } from '../../
 import { normativeToRagChunks } from '../../utils/ragNormativeParser';
 import { importScopusProduccion as importScopusProduccionFromApi } from '../../services/scopus';
 import { importOrcidProduccion as importOrcidProduccionFromApi } from '../../services/orcid';
-import { buildSupportObjectKey, uploadFileToR2 } from '../../services/r2Upload';
+import { buildSupportObjectKey, uploadFileToR2, uploadMultipleFilesToR2 } from '../../services/r2Upload';
 import { getPortalCredentialsForRole, getPortalSession } from '../../services/portalAuth';
 import { getSpacetimeConnectionConfig } from '../../services/spacetime';
 import { AnalysisDetailView } from './perfiles/AnalysisDetailView';
@@ -1619,38 +1619,102 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           ]),
       );
 
+      // Step 1: Collect all file uploads (titles + experiences)
+      const titleUploads = payload.titles
+        .filter((row) => row.supportFile instanceof File)
+        .map((row) => ({
+          file: row.supportFile as File,
+          objectKey: buildSupportObjectKey({
+            trackingId: selectedAnalysisRequest.id,
+            scope: 'titles',
+            rowRef: row.id,
+            fileName: row.supportFile!.name,
+          }),
+          rowId: row.id,
+          rowType: 'title' as const,
+        }));
+
+      const experienceUploads = payload.experiences
+        .filter((row) => row.supportFile instanceof File)
+        .map((row) => ({
+          file: row.supportFile as File,
+          objectKey: buildSupportObjectKey({
+            trackingId: selectedAnalysisRequest.id,
+            scope: 'experience',
+            rowRef: row.id,
+            fileName: row.supportFile!.name,
+          }),
+          rowId: row.id,
+          rowType: 'experience' as const,
+        }));
+
+      const allUploads = [...titleUploads, ...experienceUploads];
+      const uploadResultsById = new Map<number, { url: string; type: string }>();
+
+      // Step 2: Execute all uploads in parallel with progress tracking
+      if (allUploads.length > 0) {
+        console.info(`[PerfilesModule] Starting parallel uploads: ${allUploads.length} files`);
+        const results = await uploadMultipleFilesToR2(
+          allUploads.map((u) => ({ file: u.file, objectKey: u.objectKey })),
+          (completed, total) => {
+            console.debug(`[PerfilesModule] Upload progress: ${completed}/${total}`);
+          },
+        );
+
+        // Map successful uploads back to row IDs
+        results.successful.forEach((uploadResult) => {
+          const matchingUpload = allUploads.find((u) => u.file.name === uploadResult.fileName);
+          if (matchingUpload) {
+            uploadResultsById.set(matchingUpload.rowId, {
+              url: uploadResult.publicUrl || uploadResult.objectKey,
+              type: matchingUpload.rowType,
+            });
+            console.info(`[PerfilesModule] ✓ Mapped ${uploadResult.fileName} to row ${matchingUpload.rowId}`);
+          }
+        });
+
+        // Log failures
+        if (results.failed.length > 0) {
+          console.warn(`[PerfilesModule] ${results.failed.length} uploads failed:`, results.failed);
+          const failedNames = results.failed.map((f) => f.fileName).join(', ');
+          const failedCount = results.failed.length;
+          const totalAttempted = results.total;
+          window.alert(
+            `⚠️ Subidos ${totalAttempted - failedCount}/${totalAttempted} archivos.\n\nFallaron: ${failedNames}\n\nReintenta estos archivos.`,
+          );
+        }
+      }
+
+      // Step 3: Prepare all reducers (titles, experiences, publications)
+      const titleReducers: Array<() => Promise<void>> = [];
+      const experienceReducers: Array<() => Promise<void>> = [];
+      const publicationReducers: Array<() => Promise<void>> = [];
+
       for (const row of payload.titles) {
         const supportName = normalizeOptionalString(row.supportName);
         let supportPath = normalizeOptionalString(row.supportPath);
         const current = currentTitleById.get(row.id);
-        let shouldPersist = false;
 
-        if (row.supportFile instanceof File) {
-          const objectKey = buildSupportObjectKey({
-            trackingId: selectedAnalysisRequest.id,
-            scope: 'titles',
-            rowRef: row.id,
-            fileName: row.supportFile.name,
-          });
-          const uploaded = await uploadFileToR2({ file: row.supportFile, objectKey });
-          supportPath = uploaded.publicUrl || uploaded.objectKey;
-          shouldPersist = true;
+        // Use uploaded URL if available, otherwise keep parsed supportPath from form
+        if (uploadResultsById.has(row.id)) {
+          supportPath = uploadResultsById.get(row.id)!.url;
         }
 
-        if (!shouldPersist) {
-          shouldPersist =
-            (current?.supportName || undefined) !== (supportName || undefined) ||
-            (current?.supportPath || undefined) !== (supportPath || undefined);
-        }
+        const hasChanged =
+          (current?.supportName || undefined) !== (supportName || undefined) ||
+          (current?.supportPath || undefined) !== (supportPath || undefined) ||
+          uploadResultsById.has(row.id);
 
-        if (!shouldPersist) {
+        if (!hasChanged) {
           continue;
         }
 
-        await runReducer('update_application_title_support', {
-          id: row.id,
-          supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
-          supportPath,
+        titleReducers.push(async () => {
+          await runReducer('update_application_title_support', {
+            id: row.id,
+            supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
+            supportPath,
+          });
         });
       }
 
@@ -1658,52 +1722,61 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         const supportName = normalizeOptionalString(row.supportName);
         let supportPath = normalizeOptionalString(row.supportPath);
         const current = currentExperienceById.get(row.id);
-        let shouldPersist = false;
 
-        if (row.supportFile instanceof File) {
-          const objectKey = buildSupportObjectKey({
-            trackingId: selectedAnalysisRequest.id,
-            scope: 'experience',
-            rowRef: row.id,
-            fileName: row.supportFile.name,
-          });
-          const uploaded = await uploadFileToR2({ file: row.supportFile, objectKey });
-          supportPath = uploaded.publicUrl || uploaded.objectKey;
-          shouldPersist = true;
+        // Use uploaded URL if available, otherwise keep parsed supportPath from form
+        if (uploadResultsById.has(row.id)) {
+          supportPath = uploadResultsById.get(row.id)!.url;
         }
 
-        if (!shouldPersist) {
-          shouldPersist =
-            (current?.supportName || undefined) !== (supportName || undefined) ||
-            (current?.supportPath || undefined) !== (supportPath || undefined);
-        }
+        const hasChanged =
+          (current?.supportName || undefined) !== (supportName || undefined) ||
+          (current?.supportPath || undefined) !== (supportPath || undefined) ||
+          uploadResultsById.has(row.id);
 
-        if (!shouldPersist) {
+        if (!hasChanged) {
           continue;
         }
 
-        await runReducer('update_application_experience_support', {
-          id: row.id,
-          supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
-          supportPath,
+        experienceReducers.push(async () => {
+          await runReducer('update_application_experience_support', {
+            id: row.id,
+            supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
+            supportPath,
+          });
         });
       }
 
       for (const row of payload.publications) {
-        await runReducer('update_application_publication_source_kind', {
-          id: row.id,
-          sourceKind: row.sourceKind,
+        publicationReducers.push(async () => {
+          await runReducer('update_application_publication_source_kind', {
+            id: row.id,
+            sourceKind: row.sourceKind,
+          });
         });
       }
 
+      // Step 4: Execute all reducers in sequence (one type at a time to avoid conflicts)
+      const allReducers = [...titleReducers, ...experienceReducers, ...publicationReducers];
+      if (allReducers.length > 0) {
+        console.info(`[PerfilesModule] Executing ${allReducers.length} database updates`);
+        for (const reducer of allReducers) {
+          await reducer();
+        }
+      }
+
+      // Step 5: Async reload (non-blocking)
       if (reloadRef.current) {
         void reloadRef.current().catch((error) => {
           console.warn('Reload async warning after profile evidence save:', error);
         });
       }
-      window.alert('Perfil actualizado. Se guardaron soportes y fuentes de producción.');
+
+      const successCount = allUploads.length - (allUploads.length - uploadResultsById.size);
+      window.alert(
+        `✅ Perfil actualizado.\n${successCount}/${allUploads.length} archivos subidos.\nSoportes y fuentes guardadas.`,
+      );
     } catch (error) {
-      console.error(error);
+      console.error('[PerfilesModule] Unexpected error:', error);
       window.alert(error instanceof Error ? error.message : 'No fue posible actualizar los soportes del perfil.');
     } finally {
       setLoading(false);
