@@ -686,6 +686,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       .withUri(host)
       .withDatabaseName(databaseName)
       .onConnect((conn: DbConnection) => {
+        setConnected(true);
         
         ensurePortalSession(conn)
           .catch((e) => {
@@ -697,6 +698,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('PerfilesModule connect error:', err);
+        setConnected(false);
         
         onReadyReject?.(err);
       })
@@ -980,6 +982,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       }
       connection.disconnect();
       connectionRef.current = null;
+      setConnected(false);
     };
   }, []);
 
