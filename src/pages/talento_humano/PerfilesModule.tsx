@@ -114,6 +114,30 @@ const sanitizeOpenRouterModelList = (value?: string) => {
   return Array.from(new Set([...cleaned, ...OPENROUTER_DEFAULT_MODELS])).join(',');
 };
 
+const buildPreferredMeritxRuntime = (params: {
+  provider?: string;
+  model?: string;
+  geminiKey?: string;
+  apifreellmKey?: string;
+  openrouterKey?: string;
+}) => {
+  const openrouterKey = String(params.openrouterKey || '').trim();
+  const preferredProvider = openrouterKey ? 'openrouter' : params.provider;
+  const preferredModel = openrouterKey
+    ? normalizeAiProvider(params.provider) === 'openrouter'
+      ? sanitizeOpenRouterModelList(params.model)
+      : sanitizeOpenRouterModelList('')
+    : params.model;
+
+  return resolveAiRuntime({
+    provider: preferredProvider,
+    model: preferredModel,
+    geminiKey: params.geminiKey,
+    apifreellmKey: params.apifreellmKey,
+    openrouterKey,
+  });
+};
+
 const resolveAiRuntime = (params: {
   provider?: string;
   model?: string;
@@ -2451,7 +2475,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const generateMeritxNarrative = async () => {
     if (!selectedAnalysis || !selectedAnalysisRequest) return;
 
-    const runtime = resolveAiRuntime({
+    const runtime = buildPreferredMeritxRuntime({
       provider: aiProvider,
       model: aiModel,
       geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
@@ -2467,6 +2491,12 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     const popup = openMeritxReportWindow(selectedAnalysisRequest.nombre);
     setMeritxNarrativeLoading(true);
     try {
+      console.info('[MeritX] Generando informe con motor IA:', {
+        provider: runtime.provider,
+        model: runtime.provider === 'openrouter' ? String(runtime.model).split(',')[0] : runtime.model,
+        source: runtime.provider === 'openrouter' ? 'openrouter_config/system_setting' : 'api_config/env',
+      });
+
       const supportCount = selectedAnalysis.rows.filter((row) => row.hasSupport).length;
       const noSupportCount = selectedAnalysis.rows.length - supportCount;
       const matrixAnalysis = [
@@ -2598,6 +2628,10 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         aiRows,
         meritxNarrative: nextNarrative,
         generatedAt: new Date().toISOString(),
+        aiEngine: {
+          provider: runtime.provider,
+          model: runtime.provider === 'openrouter' ? String(runtime.model).split(',')[0] : runtime.model,
+        },
       });
     } catch (error) {
       renderMeritxReportError(

@@ -16,6 +16,10 @@ type MeritxReportPayload = {
   aiRows: AiCriterionRow[];
   meritxNarrative: MeritxNarrativeReport;
   generatedAt?: string;
+  aiEngine?: {
+    provider: string;
+    model: string;
+  };
 };
 
 const escapeHtml = (value: string) =>
@@ -276,12 +280,25 @@ const buildShell = (title: string, body: string) => `
       .report-actions-note {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 8px;
         color: #94a3b8;
         font-weight: 700;
         font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.2em;
+      }
+      .report-engine-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
       }
       .report-print-button {
         display: inline-flex;
@@ -296,6 +313,9 @@ const buildShell = (title: string, body: string) => `
         box-shadow: 0 10px 24px rgba(15,23,42,0.16);
         border: 0;
         cursor: pointer;
+      }
+      .report-print-button:hover {
+        background: #0f172a;
       }
       .teacher-card {
         background: white;
@@ -969,6 +989,7 @@ const buildReportHtml = ({
   aiRows,
   meritxNarrative,
   generatedAt,
+  aiEngine,
 }: MeritxReportPayload) => {
   const supportCount = selectedAnalysis.rows.filter((row) => row.hasSupport).length;
   const reserveGap = Math.abs(selectedAnalysis.matrixTotal - selectedAnalysis.suggested.finalPts);
@@ -1194,9 +1215,13 @@ const buildReportHtml = ({
               </div>
               <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
                 <div class="report-actions-note">
+                  ${aiEngine ? `<span class="report-engine-chip">Motor IA: ${escapeHtml(String(aiEngine.provider).toUpperCase())} · ${escapeHtml(aiEngine.model)}</span>` : ''}
                   <span>Historial</span>
                   <span>Auditoría Técnica Talento Humano • MeritX IA</span>
                 </div>
+                <button class="report-print-button print-hidden" type="button" onclick="window.print()">
+                  <span>Imprimir informe</span>
+                </button>
               </div>
             </div>
 
