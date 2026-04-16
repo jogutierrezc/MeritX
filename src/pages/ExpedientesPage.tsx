@@ -24,6 +24,7 @@ type StoredRagDocument = {
   fileType: string;
   active: boolean;
   contentBase64?: string;
+  storagePath?: string;
 };
 
 type RankedRagChunk = {
@@ -620,10 +621,15 @@ const ExpedientesPage = (_props: Props) => {
           : typeof row.content_base64 === 'string'
             ? row.content_base64
             : undefined,
+        storagePath: typeof row.storagePath === 'string'
+          ? row.storagePath
+          : typeof row.storage_path === 'string'
+            ? row.storage_path
+            : undefined,
       }));
   };
 
-  const buildRagContext = (req: RequestRecord, caseDetail: string) => {
+  const buildRagContext = async (req: RequestRecord, caseDetail: string) => {
     const queryTerms = Array.from(
       new Set(
         normalizeForSearch(
@@ -647,7 +653,23 @@ const ExpedientesPage = (_props: Props) => {
     const fallbackNormativeChunks: RankedRagChunk[] = [];
     const activeRagDocuments = getActiveRagDocuments();
     for (const document of activeRagDocuments) {
-      const decoded = decodeBase64Document(document.contentBase64);
+      let decoded = '';
+      const r2Url = document.storagePath && import.meta.env.VITE_R2_PUBLIC_URL
+        ? `${import.meta.env.VITE_R2_PUBLIC_URL}/${document.storagePath}`
+        : null;
+
+      if (r2Url) {
+        try {
+          const res = await fetch(r2Url);
+          if (res.ok) {
+            decoded = await res.text();
+          }
+        } catch (error) {
+          console.error('[buildRagContext] fetch R2 error:', error);
+        }
+      } else if (document.contentBase64) {
+        decoded = decodeBase64Document(document.contentBase64) || '';
+      }
       if (!decoded) continue;
       const chunks = chunkText(decoded, ragChunkSize, ragChunkOverlap);
       for (const chunk of chunks) {
@@ -853,7 +875,7 @@ const ExpedientesPage = (_props: Props) => {
         `EXPERIENCIA: ${expTxt}`,
       ].filter(Boolean).join('\n');
 
-      const ragContext = buildRagContext(req, caseDetail);
+      const ragContext = await buildRagContext(req, caseDetail);
 
       const iaRowsPayload = [
         {

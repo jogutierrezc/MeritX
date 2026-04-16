@@ -32,6 +32,7 @@ type StoredRagDocument = {
   fileName: string;
   active: boolean;
   contentBase64?: string;
+  storagePath?: string;
 };
 
 const THINKING_STEPS = [
@@ -580,10 +581,15 @@ const ChatMetriXModule = () => {
           : typeof row.content_base64 === 'string'
             ? row.content_base64
             : undefined,
+        storagePath: typeof row.storagePath === 'string'
+          ? row.storagePath
+          : typeof row.storage_path === 'string'
+            ? row.storage_path
+            : undefined,
       }));
   };
 
-  const buildRagContext = (question: string) => {
+  const buildRagContext = async (question: string) => {
     const queryTerms = Array.from(
       new Set(
         normalizeForSearch(question)
@@ -596,7 +602,21 @@ const ChatMetriXModule = () => {
     const fallbackNormativeChunks: Array<{ fileName: string; chunk: string; score: number }> = [];
     const docs = getActiveRagDocuments();
     for (const doc of docs) {
-      const decoded = decodeBase64Document(doc.contentBase64);
+      let decoded = '';
+      const r2Url = doc.storagePath && import.meta.env.VITE_R2_PUBLIC_URL
+        ? `${import.meta.env.VITE_R2_PUBLIC_URL}/${doc.storagePath}`
+        : null;
+
+      if (r2Url) {
+        try {
+          const res = await fetch(r2Url);
+          if (res.ok) decoded = await res.text();
+        } catch (error) {
+          console.error('[buildRagContext] fetch R2 error:', error);
+        }
+      } else if (doc.contentBase64) {
+        decoded = decodeBase64Document(doc.contentBase64) || '';
+      }
       if (!decoded) continue;
       const chunks = chunkText(decoded, ragChunkSize, ragChunkOverlap);
       for (const chunk of chunks) {
@@ -727,7 +747,7 @@ const ChatMetriXModule = () => {
     setLoading(true);
 
     try {
-      const ragResult = buildRagContext(userMessage.content);
+      const ragResult = await buildRagContext(userMessage.content);
       const ragContext = ragResult.context;
       const conversationText = conversation
         .map((entry) => `${entry.role === 'user' ? 'Usuario' : 'MetriX'}: ${entry.content}`)

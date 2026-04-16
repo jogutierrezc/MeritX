@@ -651,27 +651,50 @@ const AdminPortal = () => {
   };
 
   const uploadRagDocument = async (file: File) => {
-    const contentBase64: string = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('No fue posible leer el archivo para RAG.'));
-      reader.onload = () => {
-        const raw = String(reader.result ?? '');
-        resolve(raw.includes(',') ? raw.split(',')[1] : raw);
-      };
-      reader.readAsDataURL(file);
-    });
-    const documentKey = `${Date.now()}-${file.name}`.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase();
+    const documentKey = `${Date.now()}-${file.name}`
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .toLowerCase();
     const bucketName = ragConfig.bucketName.trim() || DEFAULT_RAG_CONFIG.bucketName;
-    const nextDoc: RagDocument = {
-      documentKey,
-      fileName: file.name,
-      fileType: file.type || 'application/octet-stream',
-      fileSizeBytes: file.size,
-      bucketName,
-      storagePath: `${bucketName}/${documentKey}`,
-      active: true,
-      uploadedAt: new Date().toISOString(),
-    };
+
+    // ── Paso 1: Solicitar presigned URL a la API de Vercel ────────────────
+    let presignedUrl: string;
+    let publicUrl: string | null;
+    try {
+      const res = await fetch('/api/r2/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type || 'application/octet-stream',
+          documentKey,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Error generando URL de subida: ${err}`);
+      }
+      const data = await res.json();
+      presignedUrl = data.presignedUrl;
+      publicUrl = data.publicUrl ?? null;
+    } catch (error) {
+      console.error('[uploadRagDocument] R2 presign error:', error);
+      throw error;
+    }
+
+    // ── Paso 2: Subir archivo directamente a Cloudflare R2 ────────────────
+    // El archivo NO pasa por SpacetimeDB — va directo a R2.
+    const uploadRes = await fetch(presignedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    });
+    if (!uploadRes.ok) {
+      throw new Error(`Error subiendo archivo a R2: ${uploadRes.status} ${uploadRes.statusText}`);
+    }
+
+    // ── Paso 3: Guardar solo la metadata + URL en SpacetimeDB ─────────────
+    // Solo se transmiten ~200 bytes vía WebSocket (sin el contenido del archivo).
+    const storagePath = `rag-documents/${documentKey}`;
     try {
       await runReducer('upsert_rag_document', {
         documentKey,
@@ -679,12 +702,23 @@ const AdminPortal = () => {
         fileType: file.type || 'application/octet-stream',
         fileSizeBytes: BigInt(file.size),
         bucketName,
-        storagePath: `${bucketName}/${documentKey}`,
-        contentBase64,
+        storagePath,
+        contentBase64: undefined,
         active: true,
       });
     } catch (error) {
       if (!isReducerMissingError(error, 'upsert_rag_document')) throw error;
+      // Fallback: guardar en system_setting si el reducer no existe aún
+      const nextDoc: RagDocument = {
+        documentKey,
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        fileSizeBytes: file.size,
+        bucketName,
+        storagePath,
+        active: true,
+        uploadedAt: new Date().toISOString(),
+      };
       const docs = [nextDoc, ...ragDocuments.filter((d) => d.documentKey !== nextDoc.documentKey)];
       setRagDocuments(docs);
       await runReducer('upsert_system_setting', {
@@ -697,6 +731,18 @@ const AdminPortal = () => {
   };
 
   const deactivateRagDocument = async (documentKey: string) => {
+    // Intentar eliminar el archivo de R2 primero (best-effort, no bloquea)
+    const doc = ragDocuments.find((d) => d.documentKey === documentKey);
+    if (doc) {
+      const objectKey = doc.storagePath || `rag-documents/${documentKey}`;
+      fetch('/api/r2/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectKey }),
+      }).catch((e) => console.warn('[deactivateRagDocument] R2 delete warning:', e));
+    }
+
+    // Desactivar en SpacetimeDB
     try {
       await runReducer('deactivate_rag_document', { documentKey });
     } catch (error) {

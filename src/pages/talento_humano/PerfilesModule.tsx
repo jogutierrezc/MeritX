@@ -66,6 +66,7 @@ type StoredRagDocument = {
   fileType: string;
   active: boolean;
   contentBase64?: string;
+  storagePath?: string;
 };
 
 const normalizeForSearch = (value: string) =>
@@ -1755,10 +1756,15 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           : typeof row.content_base64 === 'string'
             ? row.content_base64
             : undefined,
+        storagePath: typeof row.storagePath === 'string'
+          ? row.storagePath
+          : typeof row.storage_path === 'string'
+            ? row.storage_path
+            : undefined,
       }));
   };
 
-  const buildRagContextForChat = (question: string) => {
+  const buildRagContextForChat = async (question: string) => {
     if (!selectedAnalysis || !selectedAnalysisRequest) {
       return 'No hay un expediente seleccionado para construir contexto RAG.';
     }
@@ -1851,7 +1857,21 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     };
     const activeRagDocuments = getActiveRagDocuments();
     for (const document of activeRagDocuments) {
-      const decoded = decodeBase64Document(document.contentBase64);
+      let decoded = '';
+      const r2Url = document.storagePath && import.meta.env.VITE_R2_PUBLIC_URL
+        ? `${import.meta.env.VITE_R2_PUBLIC_URL}/${document.storagePath}`
+        : null;
+
+      if (r2Url) {
+        try {
+          const res = await fetch(r2Url);
+          if (res.ok) decoded = await res.text();
+        } catch (error) {
+          console.error('[buildRagContextForChat] fetch R2 error:', error);
+        }
+      } else if (document.contentBase64) {
+        decoded = decodeBase64Document(document.contentBase64) || '';
+      }
       if (!decoded) continue;
       const chunks = chunkText(decoded, ragChunkSize, ragChunkOverlap);
       docChunksCount += chunks.length;
@@ -2112,7 +2132,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     setMetriXLoading(true);
 
     try {
-      const ragContext = buildRagContextForChat(userMessage.content);
+      const ragContext = await buildRagContextForChat(userMessage.content);
 
       const matrixBase = selectedAnalysis.rows.map((row) => ({
         criterio: row.criterio,
