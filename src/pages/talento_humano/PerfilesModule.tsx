@@ -55,6 +55,24 @@ const normalizePublicationSource = (value?: string) => {
   return 'MANUAL' as const;
 };
 
+const normalizeOptionalString = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+
+  // Spacetime option values may arrive as tagged tuples: [0, value] | [1, {}]
+  if (Array.isArray(value) && value.length >= 2 && typeof value[0] === 'number') {
+    if (value[0] === 0 && typeof value[1] === 'string') {
+      const trimmed = value[1].trim();
+      return trimmed || undefined;
+    }
+    return undefined;
+  }
+
+  return undefined;
+};
+
 const isIndexedPublicationSource = (value?: string) => {
   const source = normalizePublicationSource(value);
   return source === 'SCOPUS' || source === 'ORCID';
@@ -1463,8 +1481,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       titulos: titles.map((row) => ({
         titulo: row.titleName,
         nivel: normalizeTitleLevel(row.titleLevel),
-        supportName: row.supportName || undefined,
-        supportPath: row.supportPath || undefined,
+        supportName: normalizeOptionalString(row.supportName),
+        supportPath: normalizeOptionalString(row.supportPath),
       })),
       idiomas: languages.map((row) => ({
         idioma: row.languageName,
@@ -1484,8 +1502,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         inicio: row.startedAt,
         fin: row.endedAt,
         certificacion: row.certified ? 'SI' : 'NO',
-        supportName: row.supportName || undefined,
-        supportPath: row.supportPath || undefined,
+        supportName: normalizeOptionalString(row.supportName),
+        supportPath: normalizeOptionalString(row.supportPath),
       })),
       orcid: '',
     };
@@ -1496,8 +1514,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       id: Number(row.id),
       titleName: row.titleName,
       titleLevel: row.titleLevel,
-      supportName: row.supportName || undefined,
-      supportPath: row.supportPath || undefined,
+      supportName: normalizeOptionalString(row.supportName),
+      supportPath: normalizeOptionalString(row.supportPath),
     }));
 
     const experienceDetails: SelectedExperienceDetail[] = experiences.map((row) => ({
@@ -1506,8 +1524,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       startedAt: row.startedAt,
       endedAt: row.endedAt,
       certified: Boolean(row.certified),
-      supportName: row.supportName || undefined,
-      supportPath: row.supportPath || undefined,
+      supportName: normalizeOptionalString(row.supportName),
+      supportPath: normalizeOptionalString(row.supportPath),
     }));
 
     const publicationDetails: SelectedPublicationDetail[] = publications.map((row) => ({
@@ -1542,18 +1560,22 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       setLoading(true);
 
       for (const row of payload.titles) {
+        const supportName = normalizeOptionalString(row.supportName);
+        const supportPath = normalizeOptionalString(row.supportPath);
         await runReducer('update_application_title_support', {
           id: row.id,
-          supportName: row.supportName.trim() || undefined,
-          supportPath: row.supportPath.trim() || undefined,
+          supportName,
+          supportPath,
         });
       }
 
       for (const row of payload.experiences) {
+        const supportName = normalizeOptionalString(row.supportName);
+        const supportPath = normalizeOptionalString(row.supportPath);
         await runReducer('update_application_experience_support', {
           id: row.id,
-          supportName: row.supportName.trim() || undefined,
-          supportPath: row.supportPath.trim() || undefined,
+          supportName,
+          supportPath,
         });
       }
 
