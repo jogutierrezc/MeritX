@@ -57,6 +57,34 @@ const OPENROUTER_PRESET_METRIX = {
     'IMPORTANTE: Trata "Magister" y "Maestría" como sinónimos exactos.',
 };
 
+const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+const waitMs = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+const isModelOverloadError = (value: unknown) => {
+  const text = normalizeForSearch(String(value || ''));
+  return (
+    text.includes('overload') ||
+    text.includes('overloaded') ||
+    text.includes('capacity') ||
+    text.includes('rate limit') ||
+    text.includes('too many requests') ||
+    text.includes('temporarily unavailable') ||
+    text.includes('503') ||
+    text.includes('429')
+  );
+};
+
+const toUserFriendlyAiError = (error: unknown) => {
+  if (isModelOverloadError(error)) {
+    return 'MetriX está temporalmente ocupado. Reintenté con modelos alternos automáticamente, pero ninguno respondió a tiempo. Intenta de nuevo en unos segundos.';
+  }
+  return 'No fue posible procesar la consulta con MetriX en este momento. Intenta nuevamente.';
+};
+
 const normalizeForSearch = (value: string) =>
   value
     .normalize('NFD')
@@ -192,47 +220,96 @@ const requestOpenRouterText = async (
   userPrompt: string,
   preset = OPENROUTER_PRESET_METRIX,
 ) => {
+  const getOpenRouterAvailableFreeModels = async () => {
+    try {
+      const modelsRes = await fetch('https://openrouter.ai/api/v1/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+      if (!modelsRes.ok) return [] as string[];
+
+      const modelsData = await modelsRes.json();
+      const allIds = Array.isArray(modelsData?.data)
+        ? modelsData.data
+          .map((item: any) => String(item?.id || '').trim())
+          .filter(Boolean)
+        : [];
+
+      return allIds
+        .filter((id: string) => normalizeForSearch(id).includes('free'))
+        .filter((id: string) => !OPENROUTER_BLOCKED_MODELS.map((m) => normalizeForSearch(m)).includes(normalizeForSearch(id)))
+        .slice(0, 10);
+    } catch {
+      return [] as string[];
+    }
+  };
+
   const candidates = String(model || '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
-  const ordered = Array.from(new Set([
+
+  const orderedInitial = Array.from(new Set([
     ...candidates,
     ...preset.modelPriority,
   ]));
 
-  let lastError: Error | null = null;
-  for (const candidate of ordered) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: candidate,
-        temperature: preset.temperature,
-        top_p: preset.topP,
-        max_tokens: preset.maxTokens,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
+  const tryCandidates = async (ordered: string[]) => {
+    let lastError: Error | null = null;
 
-    if (res.ok) {
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      if (typeof content === 'string') return content;
-      if (Array.isArray(content)) return content.map((item: any) => String(item?.text || '')).join(' ');
-      return '';
+    for (const candidate of ordered) {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: candidate,
+            temperature: preset.temperature,
+            top_p: preset.topP,
+            max_tokens: preset.maxTokens,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const content = data?.choices?.[0]?.message?.content;
+          if (typeof content === 'string') return content;
+          if (Array.isArray(content)) return content.map((item: any) => String(item?.text || '')).join(' ');
+          return '';
+        }
+
+        const bodyText = await res.text();
+        lastError = new Error(`OpenRouter(${candidate}) HTTP ${res.status}: ${bodyText}`);
+
+        if (RETRYABLE_HTTP_STATUS.has(res.status) && attempt < 2) {
+          await waitMs(350 * attempt);
+          continue;
+        }
+
+        break;
+      }
     }
 
-    lastError = new Error(await res.text());
-  }
+    throw lastError || new Error('OpenRouter no respondió con contenido válido.');
+  };
 
-  throw lastError || new Error('OpenRouter no respondió con contenido válido.');
+  try {
+    return await tryCandidates(orderedInitial);
+  } catch (error) {
+    const discovered = await getOpenRouterAvailableFreeModels();
+    const extraCandidates = discovered.filter((candidate: string) => !orderedInitial.includes(candidate));
+    if (extraCandidates.length === 0) throw error;
+    return tryCandidates(extraCandidates);
+  }
 };
 
 const normalizePublicationSource = (value: unknown): 'SCOPUS' | 'ORCID' | 'MANUAL' => {
@@ -893,13 +970,13 @@ const ChatMetriXModule = () => {
         },
       ]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No fue posible procesar la consulta con MetriX.';
+      const message = toUserFriendlyAiError(error);
       setMessages((prev) => [
         ...prev,
         {
           id: `chat-assistant-${Date.now()}`,
           role: 'assistant',
-          content: `Error: ${message}`,
+          content: message,
           createdAt: new Date().toISOString(),
         },
       ]);
