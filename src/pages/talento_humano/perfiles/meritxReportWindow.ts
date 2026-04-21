@@ -15,11 +15,9 @@ export type MeritxReportPayload = {
   selectedAnalysis: SelectedAnalysis;
   aiRows: AiCriterionRow[];
   meritxNarrative: MeritxNarrativeReport;
-  generatedAt?: string;
-  aiEngine?: {
-    provider: string;
-    model: string;
-  };
+  generatedAt?: string | null;
+  aiEngine?: { provider: string; model: string } | string;
+  currentLanguages?: any[];
 };
 
 const escapeHtml = (value: string) =>
@@ -1215,7 +1213,7 @@ const buildReportHtml = ({
               </div>
               <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
                 <div class="report-actions-note">
-                  ${aiEngine ? `<span class="report-engine-chip">Motor IA: ${escapeHtml(String(aiEngine.provider).toUpperCase())} · ${escapeHtml(aiEngine.model)}</span>` : ''}
+                  ${aiEngine ? `<span class="report-engine-chip">Motor IA: ${escapeHtml(typeof aiEngine === 'string' ? aiEngine : String(aiEngine.provider).toUpperCase() + ' · ' + aiEngine.model)}</span>` : ''}
                   <span>Historial</span>
                   <span>Auditoría Técnica Talento Humano • MeritX IA</span>
                 </div>

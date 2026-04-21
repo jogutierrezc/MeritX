@@ -15,6 +15,7 @@ const escapeHtml = (unsafe: string) => {
 export const buildPrintFormatHtml = ({
   selectedAnalysisRequest,
   selectedAnalysis,
+  currentLanguages
 }: MeritxReportPayload) => {
   const generatedLabel = new Date().toLocaleDateString('es-CO', {
     year: 'numeric',
@@ -52,7 +53,7 @@ export const buildPrintFormatHtml = ({
     `;
   });
 
-  const languagesRows = selectedAnalysis.languages.map((l) => {
+  const languagesRows = (currentLanguages || []).map((l: any) => {
     const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && r.criterio === 'IDIOMA EXTRANJERO');
     const cant = row ? 1 : '';
     const valor = row ? formatNumber(row.valor) : '';

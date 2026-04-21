@@ -351,13 +351,23 @@ export const AnalysisDetailView: React.FC<Props> = ({
             </button>
             <button 
               onClick={() => {
+                const safeNarrative = meritxNarrative || {
+                  analisisMatriz: '',
+                  analisisMotor: '',
+                  analisisOficial: '',
+                  analisisNormativo: '',
+                  conclusionIntermedia: 'Pendiente de análisis IA.',
+                  puntajeIntermedio: selectedAnalysis.suggested.finalPts
+                };
+                
                 openPrintFormatWindow({
                   selectedAnalysisRequest,
                   selectedAnalysis,
                   aiRows,
-                  meritxNarrative,
+                  meritxNarrative: safeNarrative,
                   generatedAt: null,
-                  aiEngine
+                  aiEngine,
+                  currentLanguages
                 });
               }}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100 font-medium text-sm">
