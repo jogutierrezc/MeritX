@@ -39,6 +39,7 @@ interface Props {
   manualNarrative: string;
   versionRowsForSelected: AnalysisVersionRecord[];
   currentRole: string;
+  userCampus?: string;
   chatMessages?: ChatMessage[];
   chatInput?: string;
   chatLoading?: boolean;
@@ -216,6 +217,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
   manualNarrative,
   versionRowsForSelected,
   currentRole,
+  userCampus = 'VALLEDUPAR',
   chatMessages = [],
   chatInput = '',
   chatLoading = false,
@@ -315,6 +317,11 @@ export const AnalysisDetailView: React.FC<Props> = ({
     if (rows.length === 0) return null;
     return rows.reduce((latest, v) => (v.createdAt > latest.createdAt ? v : latest));
   });
+
+  const canModify = useMemo(() => {
+    if (currentRole === 'admin') return true;
+    return currentRole === 'talento_humano' && userCampus === 'BUCARAMANGA';
+  }, [currentRole, userCampus]);
 
   const typeConfig = {
     MOTOR: { label: 'Motor Escalafón', color: 'border-blue-300 bg-blue-50', textColor: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
@@ -527,9 +534,9 @@ export const AnalysisDetailView: React.FC<Props> = ({
               disabled={meritxNarrativeLoading}
               onClick={onGenerateMeritxNarrative}
             />
-            <ActionButton label="Guardar Versión Motor" color="bg-white border-indigo-200 text-indigo-600" outline onClick={onSaveMotorVersion} />
-            <ActionButton label="Guardar Versión IA" color="bg-white border-indigo-200 text-indigo-600" outline disabled={aiRows.length === 0} onClick={onSaveAiVersion} />
-            <ActionButton label={manualMode ? 'Ocultar Tabla Manual TH' : 'Crear Tabla Manual TH'} color="bg-white border-slate-200 text-slate-600" outline onClick={onToggleManualMode} />
+            <ActionButton label="Guardar Versión Motor" color="bg-white border-indigo-200 text-indigo-600" outline onClick={onSaveMotorVersion} disabled={!canModify} />
+            <ActionButton label="Guardar Versión IA" color="bg-white border-indigo-200 text-indigo-600" outline disabled={!canModify || aiRows.length === 0} onClick={onSaveAiVersion} />
+            <ActionButton label={manualMode ? 'Ocultar Tabla Manual TH' : 'Crear Tabla Manual TH'} color="bg-white border-slate-200 text-slate-600" outline onClick={onToggleManualMode} disabled={!canModify} />
           </div>
         </div>
 
@@ -702,7 +709,8 @@ export const AnalysisDetailView: React.FC<Props> = ({
                 </button>
                 <button
                   onClick={onSaveManualVersion}
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 hover:bg-emerald-100"
+                  disabled={!canModify}
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                 >
                   Guardar versión manual TH
                 </button>
@@ -835,7 +843,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         </button>
                         <button
                           onClick={() => onApproveVersion(row.versionId)}
-                          disabled={currentRole !== 'cap' || row.versionStatus === 'OFICIAL'}
+                          disabled={!canModify || row.versionStatus === 'OFICIAL'}
                           className="px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Aprobar Oficial
