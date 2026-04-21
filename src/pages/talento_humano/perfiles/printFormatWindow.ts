@@ -1,48 +1,48 @@
 import { MeritxReportPayload } from './meritxReportWindow';
+import { normalizeText } from './helpers';
 
 const formatNumber = (val: number) =>
-  val.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    val.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 const escapeHtml = (unsafe: string) => {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 };
 
 export const buildPrintFormatHtml = ({
-  selectedAnalysisRequest,
-  selectedAnalysis,
-  currentLanguages
+    selectedAnalysisRequest,
+    selectedAnalysis,
+    currentLanguages
 }: MeritxReportPayload) => {
-  const generatedLabel = new Date().toLocaleDateString('es-CO', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+    const generatedLabel = new Date().toLocaleDateString('es-CO', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    });
 
-  const barrier = selectedAnalysis.suggested.barrierDiagnosis;
-  const isMissingTitle = barrier?.missingTitle ? 'X' : '';
-  const isMissingPts = barrier?.missingPts ? 'X' : '';
-  // Usually missing points implies missing production or experience.
-  // We'll mark experience or production if they are missing points, though we can't definitively know which one.
-  // Actually, we'll just mark "Puntaje Mínimo Requerido".
-  
-  // Also idioma is not explicitly in the checkboxes, maybe we add it or add to "Observaciones"
-  const observaciones = barrier?.missingIdioma
-    ? `No acredita el nivel de idioma requerido (${barrier.requiredIdioma}).`
-    : '';
+    const barrier = selectedAnalysis.suggested.barrierDiagnosis;
+    const isMissingTitle = barrier?.missingTitle ? 'X' : '';
+    const isMissingPts = barrier?.missingPts ? 'X' : '';
+    const isMissingExp = (barrier?.missingPts && selectedAnalysis.suggested.ptsExpBruta === 0) ? 'X' : '';
+    const isMissingProd = (barrier?.missingPts && selectedAnalysis.suggested.ptsPI === 0) ? 'X' : '';
 
-  // 1. Estudios Cursados
-  const titlesRows = selectedAnalysis.titles.map((t) => {
-    // Find the corresponding row in selectedAnalysis.rows to get the points
-    const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && r.criterio === t.titleLevel);
-    const cant = row ? 1 : '';
-    const valor = row ? formatNumber(row.valor) : '';
-    const puntaje = (row && row.hasSupport) ? formatNumber(row.puntaje) : '0.0';
-    return `
+    // Also idioma is not explicitly in the checkboxes, maybe we add it or add to "Observaciones"
+    const observaciones = barrier?.missingIdioma
+        ? `No acredita el nivel de idioma requerido (${barrier.requiredIdioma}).`
+        : '';
+
+    // 1. Estudios Cursados
+    const titlesRows = selectedAnalysis.titles.map((t) => {
+        // Find the corresponding row in selectedAnalysis.rows to get the points
+        const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && normalizeText(r.criterio) === normalizeText(t.titleLevel));
+        const cant = row ? 1 : '';
+        const valor = row ? formatNumber(row.valor) : '';
+        const puntaje = row ? formatNumber(row.puntaje) : '0.0';
+        return `
       <tr>
         <td>${escapeHtml(t.titleLevel)}</td>
         <td>${escapeHtml(t.titleName)}</td>
@@ -51,14 +51,14 @@ export const buildPrintFormatHtml = ({
         <td class="text-center">${puntaje}</td>
       </tr>
     `;
-  });
+    });
 
-  const languagesRows = (currentLanguages || []).map((l: any) => {
-    const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && r.criterio === 'IDIOMA EXTRANJERO');
-    const cant = row ? 1 : '';
-    const valor = row ? formatNumber(row.valor) : '';
-    const puntaje = (row && row.hasSupport) ? formatNumber(row.puntaje) : '0.0';
-    return `
+    const languagesRows = (currentLanguages || []).map((l: any) => {
+        const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && normalizeText(r.criterio) === 'IDIOMA EXTRANJERO');
+        const cant = row ? 1 : '';
+        const valor = row ? formatNumber(row.valor) : '';
+        const puntaje = row ? formatNumber(row.puntaje) : '0.0';
+        return `
       <tr>
         <td>IDIOMA EXTRANJERO (${escapeHtml(l.languageLevel)})</td>
         <td>${escapeHtml(l.languageName)}</td>
@@ -67,28 +67,28 @@ export const buildPrintFormatHtml = ({
         <td class="text-center">${puntaje}</td>
       </tr>
     `;
-  });
+    });
 
-  const estudiosHtml = [...titlesRows, ...languagesRows].join('');
+    const estudiosHtml = [...titlesRows, ...languagesRows].join('');
 
-  // 2. Experiencia Laboral y Docente
-  const expRowsMap = new Map();
-  selectedAnalysis.experiences.forEach(e => {
-    const type = e.experienceType;
-    if (!expRowsMap.has(type)) {
-      expRowsMap.set(type, { years: 0 });
-    }
-  });
-  
-  // Get the calculated rows for experience
-  const expRowsHtml = selectedAnalysis.rows
-    .filter(r => r.section === 'Experiencia')
-    .map(r => {
-      const type = r.criterio;
-      const years = formatNumber(r.cantidad);
-      const valor = formatNumber(r.valor);
-      const puntaje = r.hasSupport ? formatNumber(r.puntaje) : '0.0';
-      return `
+    // 2. Experiencia Laboral y Docente
+    const expRowsMap = new Map();
+    selectedAnalysis.experiences.forEach(e => {
+        const type = e.experienceType;
+        if (!expRowsMap.has(type)) {
+            expRowsMap.set(type, { years: 0 });
+        }
+    });
+
+    // Get the calculated rows for experience
+    const expRowsHtml = selectedAnalysis.rows
+        .filter(r => r.section === 'Experiencia')
+        .map(r => {
+            const type = r.criterio;
+            const years = formatNumber(r.cantidad);
+            const valor = formatNumber(r.valor);
+            const puntaje = formatNumber(r.puntaje);
+            return `
         <tr>
           <td>${escapeHtml(type)}</td>
           <td class="text-center">${years}</td>
@@ -96,15 +96,15 @@ export const buildPrintFormatHtml = ({
           <td class="text-center">${puntaje}</td>
         </tr>
       `;
-    }).join('');
+        }).join('');
 
-  // Soportes Presentados
-  const soportesPresentados = selectedAnalysis.rows
-    .filter(r => r.hasSupport)
-    .map(r => `<li style="margin-bottom: 3px;">${escapeHtml(r.criterio)}: ${escapeHtml(r.supportNote || 'Soporte adjunto')}</li>`)
-    .join('');
+    // Soportes Presentados
+    const soportesPresentados = selectedAnalysis.rows
+        .filter(r => r.hasSupport)
+        .map(r => `<li style="margin-bottom: 3px;">${escapeHtml(r.criterio)}: ${escapeHtml(r.supportNote || 'Soporte adjunto')}</li>`)
+        .join('');
 
-  return `
+    return `
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -265,12 +265,11 @@ export const buildPrintFormatHtml = ({
         <table class="header-table">
             <tr>
                 <td class="logo-cell">
-                    <div style="font-weight: bold; color: var(--udes-green); font-size: 14pt;">UDES</div>
-                    <div style="font-size: 7pt;">Universidad de Santander</div>
+                    <img src="https://cucuta.udes.edu.co/images/logo/udes-logo-principal.svg" alt="UDES" style="max-height: 40px; max-width: 100%;">
                 </td>
                 <td class="title-cell">FORMATO DE CATEGORIZACIÓN DOCENTE</td>
                 <td class="info-cell">
-                    <strong>Código:</strong> F-TH-02 <br>
+                    <strong>Código:</strong> TAH-FT-004-UDES <br>
                     <strong>Versión:</strong> 05 <br>
                     <strong>Fecha Aprob:</strong> 11/11/2025
                 </td>
@@ -411,9 +410,9 @@ export const buildPrintFormatHtml = ({
                 
                 <div class="checkbox-group">
                     <div class="checkbox-item"><div class="box">${isMissingTitle}</div> Formación Académica (Nivel de estudios)</div>
-                    <div class="checkbox-item"><div class="box"></div> Años de Experiencia Docente / Profesional</div>
+                    <div class="checkbox-item"><div class="box">${isMissingExp}</div> Años de Experiencia Docente / Profesional</div>
                     <div class="checkbox-item"><div class="box">${isMissingPts}</div> Puntaje Mínimo Requerido</div>
-                    <div class="checkbox-item"><div class="box"></div> Producción Intelectual / Investigativa</div>
+                    <div class="checkbox-item"><div class="box">${isMissingProd}</div> Producción Intelectual / Investigativa</div>
                 </div>
 
                 <div style="margin-top: 10px;">
@@ -436,11 +435,11 @@ export const buildPrintFormatHtml = ({
 };
 
 export const openPrintFormatWindow = (payload: MeritxReportPayload) => {
-  const popup = window.open('', '_blank', 'width=1000,height=960');
-  if (!popup) return null;
+    const popup = window.open('', '_blank', 'width=1000,height=960');
+    if (!popup) return null;
 
-  popup.document.open();
-  popup.document.write(buildPrintFormatHtml(payload));
-  popup.document.close();
-  return popup;
+    popup.document.open();
+    popup.document.write(buildPrintFormatHtml(payload));
+    popup.document.close();
+    return popup;
 };
