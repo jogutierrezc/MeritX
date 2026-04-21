@@ -1054,8 +1054,16 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     }
 
     if (!selectedConvocatoriaId) {
-      window.alert('Selecciona una convocatoria abierta para registrar el expediente.');
-      return;
+      const session = getPortalSession();
+      const canIgnoreConvocatoria =
+        openConvocatorias.length === 0 &&
+        session &&
+        ['talento_humano', 'admin'].includes(session.role);
+
+      if (!canIgnoreConvocatoria) {
+        window.alert('Selecciona una convocatoria abierta para registrar el expediente.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -1070,7 +1078,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         campus: 'VALLEDUPAR',
         programName: formData.programa.trim(),
         facultyName: formData.facultad.trim(),
-        convocatoriaId: selectedConvocatoriaId,
+        convocatoriaId: selectedConvocatoriaId || undefined,
         scopusProfile: formData.scopusProfile.trim() || undefined,
         finalPoints: res.finalPts,
         finalCategory: res.finalCat.name,

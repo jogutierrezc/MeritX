@@ -142,6 +142,7 @@ export const ApplicationExperience = __t.object("ApplicationExperience", {
   supportName: __t.option(__t.string()),
   supportUrl: __t.option(__t.string()),
   supportPath: __t.option(__t.string()),
+  companyName: __t.option(__t.string()),
 });
 export type ApplicationExperience = __Infer<typeof ApplicationExperience>;
 
@@ -174,6 +175,12 @@ export const ApplicationTitle = __t.object("ApplicationTitle", {
   supportName: __t.option(__t.string()),
   supportUrl: __t.option(__t.string()),
   supportPath: __t.option(__t.string()),
+  graduationDate: __t.string(),
+  originUniversity: __t.string(),
+  universityType: __t.string(),
+  titleConvalidated: __t.bool(),
+  convalidationSupportName: __t.string(),
+  convalidationSupportPath: __t.string(),
 });
 export type ApplicationTitle = __Infer<typeof ApplicationTitle>;
 
@@ -251,6 +258,19 @@ export const EmailTemplate = __t.object("EmailTemplate", {
 });
 export type EmailTemplate = __Infer<typeof EmailTemplate>;
 
+export const ExternalIesCategory = __t.object("ExternalIesCategory", {
+  trackingId: __t.string(),
+  category: __t.string(),
+  iesName: __t.string(),
+  certificationName: __t.option(__t.string()),
+  certificationPath: __t.option(__t.string()),
+  certificationUrl: __t.option(__t.string()),
+  createdBy: __t.option(__t.string()),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type ExternalIesCategory = __Infer<typeof ExternalIesCategory>;
+
 export const Faculty = __t.object("Faculty", {
   facultyId: __t.string(),
   facultyName: __t.string(),
@@ -259,6 +279,18 @@ export const Faculty = __t.object("Faculty", {
   updatedAt: __t.timestamp(),
 });
 export type Faculty = __Infer<typeof Faculty>;
+
+export const MeritxReportCache = __t.object("MeritxReportCache", {
+  trackingId: __t.string(),
+  htmlContent: __t.string(),
+  narrativeJson: __t.string(),
+  aiProvider: __t.string(),
+  aiModel: __t.string(),
+  generatedBy: __t.option(__t.string()),
+  generatedAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type MeritxReportCache = __Infer<typeof MeritxReportCache>;
 
 export const OpenrouterConfig = __t.object("OpenrouterConfig", {
   configKey: __t.string(),
@@ -373,6 +405,19 @@ export const SystemSetting = __t.object("SystemSetting", {
   updatedAt: __t.timestamp(),
 });
 export type SystemSetting = __Infer<typeof SystemSetting>;
+
+export const ThBucaramangaValidation = __t.object("ThBucaramangaValidation", {
+  id: __t.u32(),
+  trackingId: __t.string(),
+  campusScope: __t.string(),
+  proposedCategory: __t.string(),
+  reasons: __t.string(),
+  validatedByName: __t.string(),
+  approvedForSignature: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type ThBucaramangaValidation = __Infer<typeof ThBucaramangaValidation>;
 
 export const UserFacultyAssignment = __t.object("UserFacultyAssignment", {
   userEmail: __t.string(),

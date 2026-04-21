@@ -8,9 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
-    "spacetime:publish": "spacetime publish --server maincloud --module-path spacetimedb categoria-k4x5z",
-    "spacetime:sql": "spacetime sql --server maincloud categoria-k4x5z"
+    "spacetime:generate": "C:\\Users\\jagc\\AppData\\Local\\SpacetimeDB\\spacetime.exe generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
+    "spacetime:publish": "C:\\Users\\jagc\\AppData\\Local\\SpacetimeDB\\spacetime.exe publish --server maincloud --module-path spacetimedb categoria-k4x5z",
+    "spacetime:sql": "C:\\Users\\jagc\\AppData\\Local\\SpacetimeDB\\spacetime.exe sql --server maincloud categoria-k4x5z"
   },
   "dependencies": {
     "axios": "1.15.0",

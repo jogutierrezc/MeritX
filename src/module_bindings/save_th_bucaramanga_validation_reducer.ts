@@ -12,12 +12,9 @@ import {
 
 export default {
   trackingId: __t.string(),
-  experienceType: __t.string(),
-  companyName: __t.option(__t.string()),
-  startedAt: __t.string(),
-  endedAt: __t.string(),
-  certified: __t.bool(),
-  supportName: __t.option(__t.string()),
-  supportUrl: __t.option(__t.string()),
-  supportPath: __t.option(__t.string()),
+  campusScope: __t.string(),
+  proposedCategory: __t.string(),
+  reasons: __t.string(),
+  validatedByName: __t.string(),
+  approvedForSignature: __t.bool(),
 };

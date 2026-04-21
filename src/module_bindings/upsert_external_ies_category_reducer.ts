@@ -12,12 +12,9 @@ import {
 
 export default {
   trackingId: __t.string(),
-  experienceType: __t.string(),
-  companyName: __t.option(__t.string()),
-  startedAt: __t.string(),
-  endedAt: __t.string(),
-  certified: __t.bool(),
-  supportName: __t.option(__t.string()),
-  supportUrl: __t.option(__t.string()),
-  supportPath: __t.option(__t.string()),
+  category: __t.string(),
+  iesName: __t.string(),
+  certificationName: __t.option(__t.string()),
+  certificationPath: __t.option(__t.string()),
+  certificationUrl: __t.option(__t.string()),
 };
