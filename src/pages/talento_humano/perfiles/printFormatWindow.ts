@@ -1,5 +1,5 @@
 import { MeritxReportPayload } from './meritxReportWindow';
-import { normalizeText } from './helpers';
+import { normalizeText, normalizeTitleLevel } from './helpers';
 
 const formatNumber = (val: number) =>
     val.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -36,16 +36,25 @@ export const buildPrintFormatHtml = ({
         : '';
 
     // 1. Estudios Cursados
+    const usedRows = new Set();
     const titlesRows = selectedAnalysis.titles.map((t) => {
         // Find the corresponding row in selectedAnalysis.rows to get the points
-        const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && normalizeText(r.criterio) === normalizeText(t.titleLevel));
+        const row = selectedAnalysis.rows.find(r => {
+            if (r.section !== 'Estudios Cursados') return false;
+            if (normalizeTitleLevel(r.criterio) !== normalizeTitleLevel(t.titleLevel || '')) return false;
+            if (usedRows.has(r)) return false;
+            return true;
+        });
+        if (row) {
+            usedRows.add(row);
+        }
         const cant = row ? 1 : '';
         const valor = row ? formatNumber(row.valor) : '';
         const puntaje = row ? formatNumber(row.puntaje) : '0.0';
         return `
       <tr>
-        <td>${escapeHtml(t.titleLevel)}</td>
-        <td>${escapeHtml(t.titleName)}</td>
+        <td>${escapeHtml(t.titleLevel || '')}</td>
+        <td>${escapeHtml(t.titleName || '')}</td>
         <td class="text-center">${cant}</td>
         <td class="text-center">${valor}</td>
         <td class="text-center">${puntaje}</td>
