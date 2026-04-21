@@ -95,9 +95,9 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
           'SELECT * FROM email_template',
           'SELECT * FROM rag_config',
           // Omitimos content_base64 porque ahora usamos R2_URL a traves de storage_path
-          'SELECT document_key, file_name, file_type, file_size_bytes, bucket_name, storage_path, active, uploaded_by, uploaded_at, updated_at FROM rag_document',
+          'SELECT * FROM rag_document',
           // Omitimos json_content
-          'SELECT normative_key, title, document_id, bucket_name, storage_path, active, uploaded_by, uploaded_at, updated_at FROM rag_normative',
+          'SELECT * FROM rag_normative',
           'SELECT * FROM application',
           'SELECT * FROM application_title',
           'SELECT * FROM application_language',
