@@ -23,6 +23,7 @@ import {
 import type { AppLanguage, BarrierDiagnosis, RequestRecord } from '../../../types/domain';
 import { normalizeText, toSafeNumber } from './helpers';
 import type { AiCriterionRow, AnalysisVersionRecord, ChatMessage, ManualRow, SelectedAnalysis } from './types';
+import { openPrintFormatWindow } from './printFormatWindow';
 
 interface Props {
   selectedAnalysisRequest: RequestRecord;
@@ -32,6 +33,7 @@ interface Props {
   aiNarrative: string;
   aiSuggestedCategory: string | null;
   aiTotalScore: number;
+  aiEngine?: string;
   manualMode: boolean;
   manualRows: ManualRow[];
   manualNarrative: string;
@@ -208,6 +210,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
   aiNarrative,
   aiSuggestedCategory,
   aiTotalScore,
+  aiEngine,
   manualMode,
   manualRows,
   manualNarrative,
@@ -346,7 +349,18 @@ export const AnalysisDetailView: React.FC<Props> = ({
             >
               <Pencil size={18} /> Editar perfil y soportes
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium text-sm">
+            <button 
+              onClick={() => {
+                openPrintFormatWindow({
+                  selectedAnalysisRequest,
+                  selectedAnalysis,
+                  aiRows,
+                  meritxNarrative,
+                  generatedAt: null,
+                  aiEngine
+                });
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100 font-medium text-sm">
               <Printer size={18} /> Imprimir
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm font-medium text-sm">
@@ -363,7 +377,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <DetailItem icon={<BookOpen className="text-indigo-500" />} label="Facultad" value={selectedAnalysisRequest.facultad} />
-          <DetailItem icon={<Award className="text-indigo-500" />} label="Programa" value="No disponible" />
+          <DetailItem icon={<Award className="text-indigo-500" />} label="Programa" value={selectedAnalysisRequest.programa || 'No disponible'} />
           <DetailItem icon={<Calendar className="text-indigo-500" />} label="Fecha Postulación" value="No disponible" />
           <DetailItem icon={<Hash className="text-indigo-500" />} label="No. Registro / Radicado" value={selectedAnalysisRequest.id} />
         </div>

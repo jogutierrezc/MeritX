@@ -1,7 +1,7 @@
 import type { RequestRecord } from '../../../types/domain';
 import type { AiCriterionRow, SelectedAnalysis } from './types';
 
-type MeritxNarrativeReport = {
+export type MeritxNarrativeReport = {
   analisisMatriz: string;
   analisisMotor: string;
   analisisOficial: string;
@@ -10,7 +10,7 @@ type MeritxNarrativeReport = {
   puntajeIntermedio: number;
 };
 
-type MeritxReportPayload = {
+export type MeritxReportPayload = {
   selectedAnalysisRequest: RequestRecord;
   selectedAnalysis: SelectedAnalysis;
   aiRows: AiCriterionRow[];
@@ -579,8 +579,8 @@ const buildShell = (title: string, body: string) => `
         opacity: 0.85;
       }
       .resolution-grid {
-        display: grid;
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
         gap: 24px;
         padding-top: 40px;
         border-top: 1px solid #e2e8f0;
@@ -886,7 +886,7 @@ const buildShell = (title: string, body: string) => `
           display: block;
         }
         .resolution-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          flex-direction: column;
         }
       }
       @media print {
@@ -917,8 +917,8 @@ const buildShell = (title: string, body: string) => `
           box-shadow: none;
         }
         @page {
-          margin: 1cm;
-          size: landscape;
+          margin: 1.5cm;
+          size: letter portrait;
         }
       }
     </style>
@@ -1000,7 +1000,7 @@ const buildReportHtml = ({
     id: selectedAnalysisRequest.documento,
     radicado: selectedAnalysisRequest.id,
     facultad: selectedAnalysisRequest.facultad || 'No disponible',
-    programa: 'No disponible',
+    programa: selectedAnalysisRequest.programa || 'No disponible',
     fechaPostulacion: generatedLabel.toLocaleDateString('es-CO', {
       year: 'numeric',
       month: 'long',
