@@ -110,7 +110,7 @@ export const buildPrintFormatHtml = ({
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Formato de Categorización Docente - UDES</title>
+    <title>CATEGORIZACIÓN</title>
     <style>
         :root {
             --udes-blue: #1a365d;
