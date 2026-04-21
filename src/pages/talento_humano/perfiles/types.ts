@@ -58,6 +58,8 @@ export type SelectedTitleDetail = {
   id: number;
   titleName: string;
   titleLevel: string;
+  originUniversity?: string;
+  titleConvalidated?: boolean;
   supportName?: string;
   supportPath?: string;
   supportFile?: File | null;

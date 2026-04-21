@@ -1612,6 +1612,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       id: Number(row.id),
       titleName: row.titleName,
       titleLevel: row.titleLevel,
+      originUniversity: row.originUniversity || row.origin_university,
+      titleConvalidated: Boolean(row.titleConvalidated || row.title_convalidated),
       supportName: normalizeOptionalString(row.supportName),
       supportPath: normalizeOptionalString(row.supportPath),
     }));
@@ -1647,7 +1649,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
   const handleSaveProfileEvidence = async (
     payload: {
-      titles: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
+      titles: Array<{ id: number; titleLevel?: string; supportName: string; supportPath: string; supportFile?: File | null }>;
       experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
       publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
     },

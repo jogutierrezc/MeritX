@@ -145,6 +145,28 @@ const BarrierAlertPanel = ({ bd }: { bd: BarrierDiagnosis }) => {
   );
 };
 
+const SupportPreviewLink = ({ path, name }: { path?: string; name?: string }) => {
+  if (!path) return <span className="text-slate-400">Sin soporte</span>;
+
+  const baseUrl = import.meta.env.VITE_R2_PUBLIC_URL || '';
+  const fullUrl = path.startsWith('http') ? path : `${baseUrl}/${path}`;
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="truncate max-w-[150px] font-medium" title={name || path}>{name || 'Ver archivo'}</span>
+      <a
+        href={fullUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors border border-indigo-100 bg-white shadow-sm"
+        title="Abrir soporte en ventana nueva"
+      >
+        <Eye size={14} />
+      </a>
+    </div>
+  );
+};
+
 const DetailItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
   <div className="flex items-start gap-3">
     <div className="p-2 bg-indigo-50 rounded-lg shrink-0">{icon}</div>
@@ -222,6 +244,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
 }) => {
   const [experienceModalOpen, setExperienceModalOpen] = useState(false);
   const [publicationModalOpen, setPublicationModalOpen] = useState(false);
+  const [titleModalOpen, setTitleModalOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [savingProfileEvidence, setSavingProfileEvidence] = useState(false);
   const [editingLangId, setEditingLangId] = useState<number | 'new' | null>(null);
@@ -247,6 +270,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
     setPublicationDraft(selectedAnalysis.publications);
     setExperienceModalOpen(false);
     setPublicationModalOpen(false);
+    setTitleModalOpen(false);
     setProfileEditOpen(false);
   }, [selectedAnalysis]);
 
@@ -399,7 +423,19 @@ export const AnalysisDetailView: React.FC<Props> = ({
                       <td className="px-6 py-4 font-semibold text-xs text-slate-500 uppercase">{item.section}</td>
                       <td className="px-6 py-4 font-bold text-slate-700 uppercase">{item.criterio}</td>
                       <td className="px-6 py-4 text-slate-500">
-                        {item.section === 'Experiencia' ? (
+                        {item.section === 'Estudios Cursados' ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-slate-700">
+                              {selectedAnalysis.titles.length} registro(s) de formación reportados.
+                            </p>
+                            <button
+                              onClick={() => setTitleModalOpen(true)}
+                              className="text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700 underline hover:no-underline"
+                            >
+                              Ver más
+                            </button>
+                          </div>
+                        ) : item.section === 'Experiencia' ? (
                           <div className="space-y-1">
                             <p className="text-xs font-semibold text-slate-700">
                               {selectedAnalysis.experiences.length} registro(s) de experiencia reportados.
@@ -999,7 +1035,57 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         <td className="py-2 text-slate-600">{row.startedAt || '-'}</td>
                         <td className="py-2 text-slate-600">{row.endedAt || 'Actual'}</td>
                         <td className="py-2 text-slate-600">{row.certified ? 'Sí' : 'No'}</td>
-                        <td className="py-2 text-slate-600">{row.supportName || row.supportPath || 'Sin soporte'}</td>
+                        <td className="py-2 text-slate-600">
+                          <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {titleModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Detalle ampliado</p>
+                  <h3 className="text-lg font-black text-slate-900">Formación académica reportada</h3>
+                </div>
+                <button onClick={() => setTitleModalOpen(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-100">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[70vh] overflow-auto p-5">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 border-b border-slate-200">
+                      <th className="pb-2">Título</th>
+                      <th className="pb-2">Nivel</th>
+                      <th className="pb-2">Universidad</th>
+                      <th className="pb-2 text-center">Convalidado</th>
+                      <th className="pb-2">Soporte</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedAnalysis.titles.map((row) => (
+                      <tr key={row.id}>
+                        <td className="py-3 font-semibold text-slate-700">{row.titleName}</td>
+                        <td className="py-3 text-slate-600">{row.titleLevel}</td>
+                        <td className="py-3 text-slate-600">{row.originUniversity || '-'}</td>
+                        <td className="py-3 text-center">
+                          {row.titleConvalidated ? (
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold">SÍ</span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-bold">NO</span>
+                          )}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1085,9 +1171,9 @@ export const AnalysisDetailView: React.FC<Props> = ({
                             <option>Maestría de Investigación</option>
                             <option>Doctorado</option>
                           </select>
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
-                          </p>
+                          <div className="mt-1">
+                            <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                          </div>
                         </div>
                         <label className="flex items-center justify-center rounded border border-dashed border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
                           Cargar soporte
@@ -1144,9 +1230,9 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         <div>
                           <p className="text-xs font-bold text-slate-800">{row.experienceType}</p>
                           <p className="text-[11px] text-slate-500">{row.startedAt} - {row.endedAt || 'Actual'}</p>
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
-                          </p>
+                          <div className="mt-1">
+                            <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                          </div>
                         </div>
                         <label className="flex items-center justify-center rounded border border-dashed border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
                           Cargar soporte
