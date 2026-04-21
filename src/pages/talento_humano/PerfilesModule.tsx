@@ -1612,8 +1612,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       id: Number(row.id),
       titleName: row.titleName,
       titleLevel: row.titleLevel,
-      originUniversity: row.originUniversity || row.origin_university,
-      titleConvalidated: Boolean(row.titleConvalidated || row.title_convalidated),
+      originUniversity: row.originUniversity,
+      titleConvalidated: Boolean(row.titleConvalidated),
       supportName: normalizeOptionalString(row.supportName),
       supportPath: normalizeOptionalString(row.supportPath),
     }));
