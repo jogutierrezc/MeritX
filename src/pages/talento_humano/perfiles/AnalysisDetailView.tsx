@@ -83,7 +83,7 @@ interface Props {
     sources: string[];
   } | null;
   onSaveProfileEvidence: (payload: {
-    titles: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
+    titles: Array<{ id: number; titleLevel?: string; supportName: string; supportPath: string; supportFile?: File | null }>;
     experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
     publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
   }) => Promise<void>;
@@ -256,6 +256,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
       await onSaveProfileEvidence({
         titles: titleDraft.map((row) => ({
           id: row.id,
+          titleLevel: row.titleLevel,
           supportName: row.supportName || '',
           supportPath: row.supportPath || '',
           supportFile: row.supportFile || null,
@@ -1065,9 +1066,25 @@ export const AnalysisDetailView: React.FC<Props> = ({
                   <div className="space-y-2">
                     {titleDraft.map((row, index) => (
                       <div key={row.id} className="grid gap-2 md:grid-cols-[1.6fr_1fr] rounded-lg border border-slate-200 p-3">
-                        <div>
+                        <div className="flex flex-col gap-1">
                           <p className="text-xs font-bold text-slate-800">{row.titleName}</p>
-                          <p className="text-[11px] text-slate-500">{row.titleLevel}</p>
+                          <select
+                            value={row.titleLevel}
+                            onChange={(event) => {
+                              const next = [...titleDraft];
+                              next[index] = { ...row, titleLevel: event.target.value };
+                              setTitleDraft(next);
+                            }}
+                            className="w-full max-w-[240px] rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 focus:border-indigo-400 outline-none transition-colors"
+                          >
+                            <option>Pregrado</option>
+                            <option>Especialización</option>
+                            <option>Especialización Médico Quirúrgica</option>
+                            <option>Maestría</option>
+                            <option>Maestría de Profundización</option>
+                            <option>Maestría de Investigación</option>
+                            <option>Doctorado</option>
+                          </select>
                           <p className="mt-1 text-[11px] text-slate-500">
                             Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
                           </p>

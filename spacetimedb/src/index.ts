@@ -1724,6 +1724,7 @@ export const add_application_experience = spacetimedb.reducer(
 export const update_application_title_support = spacetimedb.reducer(
   {
     id: t.u32(),
+    title_level: t.string().optional(),
     support_name: t.string().optional(),
     support_path: t.string().optional(),
   },
@@ -1734,6 +1735,7 @@ export const update_application_title_support = spacetimedb.reducer(
 
     ctx.db.application_title.id.update({
       ...current,
+      title_level: args.title_level ?? current.title_level,
       support_name: args.support_name,
       support_path: args.support_path,
     });

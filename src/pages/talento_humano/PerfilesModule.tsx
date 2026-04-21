@@ -1665,6 +1665,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
             {
               supportName: normalizeOptionalString(row.supportName),
               supportPath: normalizeOptionalString(row.supportPath),
+              titleLevel: normalizeOptionalString(row.titleLevel),
             },
           ]),
       );
@@ -1767,6 +1768,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         const hasChanged =
           (current?.supportName || undefined) !== (supportName || undefined) ||
           (current?.supportPath || undefined) !== (supportPath || undefined) ||
+          (current?.titleLevel || undefined) !== (row.titleLevel || undefined) ||
           uploadResultsById.has(row.id);
 
         if (!hasChanged) {
@@ -1776,8 +1778,9 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         titleReducers.push(async () => {
           await runReducer('update_application_title_support', {
             id: row.id,
+            titleLevel: row.titleLevel,
             supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
-            supportPath,
+            supportPath: supportPath,
           });
         });
       }
