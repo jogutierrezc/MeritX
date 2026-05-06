@@ -94,10 +94,10 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
           'SELECT * FROM resend_config',
           'SELECT * FROM email_template',
           'SELECT * FROM rag_config',
-          // Omitimos content_base64 porque ahora usamos R2_URL a traves de storage_path
-          'SELECT document_key, file_name, file_type, file_size_bytes, bucket_name, storage_path, active, uploaded_by, uploaded_at, updated_at FROM rag_document',
-          // Omitimos json_content
-          'SELECT normative_key, title, document_id, bucket_name, storage_path, active, uploaded_by, uploaded_at, updated_at FROM rag_normative',
+          // Mantener la forma completa de la fila evita desalineaciones de decode en algunos clientes/bindings.
+          // Enviamos un placeholder para columnas grandes para no transferir payloads pesados.
+          "SELECT document_key, file_name, file_type, file_size_bytes, bucket_name, storage_path, NULL AS content_base_64, active, uploaded_by, uploaded_at, updated_at FROM rag_document",
+          "SELECT normative_key, title, document_id, '' AS json_content, bucket_name, storage_path, active, uploaded_by, uploaded_at, updated_at FROM rag_normative",
           'SELECT * FROM application',
           'SELECT * FROM application_title',
           'SELECT * FROM application_language',

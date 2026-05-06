@@ -25,6 +25,9 @@ type Props = {
   onAddLanguage: (trackingId: string, lang: any) => Promise<void>;
   onUpdateLanguage: (id: number, lang: any) => Promise<void>;
   onDeleteLanguage: (id: number) => Promise<void>;
+  onAddTitle: (trackingId: string, title: any) => Promise<void>;
+  onAddPublication: (trackingId: string, publication: any) => Promise<void>;
+  onAddExperience: (trackingId: string, experience: any) => Promise<void>;
 };
 
 const levelBadge = (level: string) => (
@@ -72,10 +75,42 @@ const DetalleView: React.FC<Props> = ({
   onAddLanguage,
   onUpdateLanguage,
   onDeleteLanguage,
+  onAddTitle,
+  onAddPublication,
+  onAddExperience,
 }) => {
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [editingLangId, setEditingLangId] = useState<number | 'new' | null>(null);
   const [langForm, setLangForm] = useState({ language_name: '', language_level: 'A2', convalidation: false });
+  const [addingTitle, setAddingTitle] = useState(false);
+  const [addingPublication, setAddingPublication] = useState(false);
+  const [addingExperience, setAddingExperience] = useState(false);
+  const [titleForm, setTitleForm] = useState({
+    title_name: '',
+    title_level: 'Pregrado',
+    graduation_date: '',
+    origin_university: '',
+    university_type: 'NACIONAL',
+    title_convalidated: false,
+    support_file: null as File | null,
+    convalidation_support_file: null as File | null,
+  });
+  const [publicationForm, setPublicationForm] = useState({
+    publication_title: '',
+    quartile: 'Q4',
+    publication_year: String(new Date().getFullYear()),
+    publication_type: 'Artículo',
+    authors_count: 1,
+    source_kind: 'MANUAL',
+  });
+  const [experienceForm, setExperienceForm] = useState({
+    experience_type: 'Docencia Universitaria',
+    company_name: '',
+    started_at: '',
+    ended_at: '',
+    certified: false,
+    support_file: null as File | null,
+  });
 
   const startEditLang = (l: AppLanguage) => {
     setEditingLangId(l.id || null);
@@ -103,6 +138,50 @@ const DetalleView: React.FC<Props> = ({
       await onUpdateLanguage(editingLangId, langForm);
     }
     setEditingLangId(null);
+  };
+
+  const saveTitle = async () => {
+    if (!titleForm.title_name.trim()) return;
+    await onAddTitle(selectedRequest.id, titleForm);
+    setAddingTitle(false);
+    setTitleForm({
+      title_name: '',
+      title_level: 'Pregrado',
+      graduation_date: '',
+      origin_university: '',
+      university_type: 'NACIONAL',
+      title_convalidated: false,
+      support_file: null,
+      convalidation_support_file: null,
+    });
+  };
+
+  const savePublication = async () => {
+    if (!publicationForm.publication_title.trim()) return;
+    await onAddPublication(selectedRequest.id, publicationForm);
+    setAddingPublication(false);
+    setPublicationForm({
+      publication_title: '',
+      quartile: 'Q4',
+      publication_year: String(new Date().getFullYear()),
+      publication_type: 'Artículo',
+      authors_count: 1,
+      source_kind: 'MANUAL',
+    });
+  };
+
+  const saveExperience = async () => {
+    if (!experienceForm.started_at || !experienceForm.ended_at) return;
+    await onAddExperience(selectedRequest.id, experienceForm);
+    setAddingExperience(false);
+    setExperienceForm({
+      experience_type: 'Docencia Universitaria',
+      company_name: '',
+      started_at: '',
+      ended_at: '',
+      certified: false,
+      support_file: null,
+    });
   };
 
   const scoreBreakdown = useMemo(() => {
@@ -233,14 +312,93 @@ const DetalleView: React.FC<Props> = ({
             <div className="bg-blue-600 p-3"><GraduationCap className="text-white w-6 h-6" /></div>
             <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Títulos Académicos</h3>
             <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{titles.length} registrado(s)</span>
+            <button
+              onClick={() => setAddingTitle((prev) => !prev)}
+              className="ml-4 p-2 bg-slate-900 text-white rounded-full hover:bg-blue-600 transition-colors"
+              title="Agregar Título"
+            >
+              <Plus size={20} />
+            </button>
           </div>
+          {addingTitle && (
+            <div className="mb-6 p-6 border-4 border-slate-900 bg-blue-50 space-y-4 animate-in fade-in slide-in-from-top-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Nuevo título y soporte</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  value={titleForm.title_name}
+                  onChange={(e) => setTitleForm({ ...titleForm, title_name: e.target.value })}
+                  placeholder="Nombre del título"
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <select
+                  value={titleForm.title_level}
+                  onChange={(e) => setTitleForm({ ...titleForm, title_level: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                >
+                  {['Pregrado', 'Especialización', 'Maestría', 'Doctorado'].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <input
+                  type="date"
+                  value={titleForm.graduation_date}
+                  onChange={(e) => setTitleForm({ ...titleForm, graduation_date: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <input
+                  value={titleForm.origin_university}
+                  onChange={(e) => setTitleForm({ ...titleForm, origin_university: e.target.value })}
+                  placeholder="Universidad origen"
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <select
+                  value={titleForm.university_type}
+                  onChange={(e) => setTitleForm({ ...titleForm, university_type: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                >
+                  <option value="NACIONAL">Nacional</option>
+                  <option value="EXTRANJERA">Extranjera</option>
+                </select>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={titleForm.title_convalidated}
+                    onChange={(e) => setTitleForm({ ...titleForm, title_convalidated: e.target.checked })}
+                    className="w-5 h-5 accent-blue-600 border-2 border-slate-900"
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">Convalidado</span>
+                </label>
+                <label className="border-2 border-dashed border-slate-400 px-4 py-2 text-[10px] font-black uppercase text-slate-700 cursor-pointer flex items-center justify-center">
+                  {titleForm.support_file?.name || 'Adjuntar soporte título'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => setTitleForm({ ...titleForm, support_file: e.target.files?.[0] || null })}
+                  />
+                </label>
+                <label className="border-2 border-dashed border-amber-400 px-4 py-2 text-[10px] font-black uppercase text-amber-700 cursor-pointer flex items-center justify-center">
+                  {titleForm.convalidation_support_file?.name || 'Adjuntar resolución de convalidación'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => setTitleForm({ ...titleForm, convalidation_support_file: e.target.files?.[0] || null })}
+                  />
+                </label>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button onClick={saveTitle} className="bg-slate-900 text-white px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-green-600 transition-colors flex items-center gap-2"><Check size={16} /> Guardar</button>
+                <button onClick={() => setAddingTitle(false)} className="border-2 border-slate-900 px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-colors flex items-center gap-2"><X size={16} /> Cancelar</button>
+              </div>
+            </div>
+          )}
           {titles.length === 0 ? (
             <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin títulos registrados</p>
           ) : (
             <div className="space-y-3">
               {titles.map((t) => (
                 <div key={t.id} className="flex items-center justify-between border border-slate-100 bg-slate-50 px-6 py-4">
-                  <p className="font-bold text-slate-800">{t.titleName}</p>
+                  <div>
+                    <p className="font-bold text-slate-800">{t.titleName}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{(t as any).supportName || (t as any).support_name || 'Sin soporte cargado'}</p>
+                  </div>
                   {levelBadge(t.titleLevel)}
                 </div>
               ))}
@@ -372,7 +530,66 @@ const DetalleView: React.FC<Props> = ({
             <div className="bg-teal-600 p-3"><BookOpen className="text-white w-6 h-6" /></div>
             <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Producción Intelectual</h3>
             <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{publications.length} registrada(s)</span>
+            <button
+              onClick={() => setAddingPublication((prev) => !prev)}
+              className="ml-4 p-2 bg-slate-900 text-white rounded-full hover:bg-teal-600 transition-colors"
+              title="Agregar Investigación"
+            >
+              <Plus size={20} />
+            </button>
           </div>
+          {addingPublication && (
+            <div className="mb-6 p-6 border-4 border-slate-900 bg-teal-50 space-y-4 animate-in fade-in slide-in-from-top-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-teal-700">Nueva investigación</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  value={publicationForm.publication_title}
+                  onChange={(e) => setPublicationForm({ ...publicationForm, publication_title: e.target.value })}
+                  placeholder="Título"
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <select
+                  value={publicationForm.quartile}
+                  onChange={(e) => setPublicationForm({ ...publicationForm, quartile: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                >
+                  {['Q1', 'Q2', 'Q3', 'Q4'].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <input
+                  type="number"
+                  value={publicationForm.publication_year}
+                  onChange={(e) => setPublicationForm({ ...publicationForm, publication_year: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                  placeholder="Año"
+                />
+                <input
+                  value={publicationForm.publication_type}
+                  onChange={(e) => setPublicationForm({ ...publicationForm, publication_type: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                  placeholder="Tipo"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={publicationForm.authors_count}
+                  onChange={(e) => setPublicationForm({ ...publicationForm, authors_count: Math.max(1, Number(e.target.value || 1)) })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                  placeholder="Autores"
+                />
+                <select
+                  value={publicationForm.source_kind}
+                  onChange={(e) => setPublicationForm({ ...publicationForm, source_kind: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                >
+                  {['MANUAL', 'SCOPUS', 'ORCID'].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button onClick={savePublication} className="bg-slate-900 text-white px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-green-600 transition-colors flex items-center gap-2"><Check size={16} /> Guardar</button>
+                <button onClick={() => setAddingPublication(false)} className="border-2 border-slate-900 px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-colors flex items-center gap-2"><X size={16} /> Cancelar</button>
+              </div>
+            </div>
+          )}
           {publications.length === 0 ? (
             <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin publicaciones registradas</p>
           ) : (
@@ -405,7 +622,67 @@ const DetalleView: React.FC<Props> = ({
             <div className="bg-orange-500 p-3"><Briefcase className="text-white w-6 h-6" /></div>
             <h3 className="font-black text-xl uppercase tracking-[0.2em] text-slate-900">Experiencia</h3>
             <span className="ml-auto bg-slate-100 text-slate-600 text-[10px] font-black px-3 py-1 tracking-widest">{experiences.length} registrada(s)</span>
+            <button
+              onClick={() => setAddingExperience((prev) => !prev)}
+              className="ml-4 p-2 bg-slate-900 text-white rounded-full hover:bg-orange-500 transition-colors"
+              title="Agregar Experiencia"
+            >
+              <Plus size={20} />
+            </button>
           </div>
+          {addingExperience && (
+            <div className="mb-6 p-6 border-4 border-slate-900 bg-orange-50 space-y-4 animate-in fade-in slide-in-from-top-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-orange-700">Nueva experiencia y soporte</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <select
+                  value={experienceForm.experience_type}
+                  onChange={(e) => setExperienceForm({ ...experienceForm, experience_type: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                >
+                  {['Profesional', 'Docencia Universitaria', 'Investigación', 'Colciencias Senior', 'Colciencias Junior'].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <input
+                  value={experienceForm.company_name}
+                  onChange={(e) => setExperienceForm({ ...experienceForm, company_name: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                  placeholder="Empresa"
+                />
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={experienceForm.certified}
+                    onChange={(e) => setExperienceForm({ ...experienceForm, certified: e.target.checked })}
+                    className="w-5 h-5 accent-orange-600 border-2 border-slate-900"
+                  />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">Certificada</span>
+                </label>
+                <input
+                  type="date"
+                  value={experienceForm.started_at}
+                  onChange={(e) => setExperienceForm({ ...experienceForm, started_at: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <input
+                  type="date"
+                  value={experienceForm.ended_at}
+                  onChange={(e) => setExperienceForm({ ...experienceForm, ended_at: e.target.value })}
+                  className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
+                />
+                <label className="border-2 border-dashed border-slate-400 px-4 py-2 text-[10px] font-black uppercase text-slate-700 cursor-pointer flex items-center justify-center">
+                  {experienceForm.support_file?.name || 'Adjuntar soporte experiencia'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => setExperienceForm({ ...experienceForm, support_file: e.target.files?.[0] || null })}
+                  />
+                </label>
+              </div>
+              <div className="flex gap-4 pt-2">
+                <button onClick={saveExperience} className="bg-slate-900 text-white px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-green-600 transition-colors flex items-center gap-2"><Check size={16} /> Guardar</button>
+                <button onClick={() => setAddingExperience(false)} className="border-2 border-slate-900 px-6 py-2 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-100 transition-colors flex items-center gap-2"><X size={16} /> Cancelar</button>
+              </div>
+            </div>
+          )}
           {experiences.length === 0 ? (
             <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Sin experiencias registradas</p>
           ) : (
@@ -424,6 +701,7 @@ const DetalleView: React.FC<Props> = ({
                         <span className="inline-block bg-green-100 text-green-800 text-[9px] font-black uppercase tracking-widest px-3 py-1 border border-green-300">Certificado</span>
                       )}
                     </div>
+                    <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{(e as any).supportName || (e as any).support_name || 'Sin soporte cargado'}</p>
                   </div>
                 );
               })}

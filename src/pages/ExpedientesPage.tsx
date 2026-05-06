@@ -1271,6 +1271,117 @@ Reglas de salida:
     }
   };
 
+  const onAddTitle = async (trackingId: string, title: any) => {
+    try {
+      setLoading(true);
+
+      let supportPath: string | undefined;
+      let supportName: string | undefined;
+      if (title.support_file instanceof File) {
+        const objectKey = buildSupportObjectKey({
+          trackingId,
+          scope: 'titles',
+          rowRef: `edit-${Date.now()}`,
+          fileName: title.support_file.name,
+        });
+        const uploaded = await uploadFileToR2({ file: title.support_file, objectKey });
+        supportPath = uploaded.publicUrl || uploaded.objectKey;
+        supportName = title.support_file.name;
+      }
+
+      let convalidationSupportPath: string | undefined;
+      let convalidationSupportName: string | undefined;
+      if (title.convalidation_support_file instanceof File) {
+        const objectKey = buildSupportObjectKey({
+          trackingId,
+          scope: 'titles',
+          rowRef: `convalidation-edit-${Date.now()}`,
+          fileName: title.convalidation_support_file.name,
+        });
+        const uploaded = await uploadFileToR2({ file: title.convalidation_support_file, objectKey });
+        convalidationSupportPath = uploaded.publicUrl || uploaded.objectKey;
+        convalidationSupportName = title.convalidation_support_file.name;
+      }
+
+      await runReducer('add_application_title', {
+        trackingId,
+        titleName: String(title.title_name || '').trim(),
+        titleLevel: String(title.title_level || 'Pregrado').trim(),
+        graduationDate: title.graduation_date || undefined,
+        originUniversity: title.origin_university || undefined,
+        universityType: title.university_type || 'NACIONAL',
+        titleConvalidated: Boolean(title.title_convalidated),
+        convalidationSupportName,
+        convalidationSupportPath,
+        supportName,
+        supportPath,
+        supportUrl: supportPath,
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al agregar el título.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onAddPublication = async (trackingId: string, publication: any) => {
+    try {
+      setLoading(true);
+      await runReducer('add_application_publication', {
+        trackingId,
+        publicationTitle: String(publication.publication_title || '').trim(),
+        quartile: String(publication.quartile || 'Q4').trim(),
+        publicationYear: String(publication.publication_year || new Date().getFullYear()),
+        publicationType: String(publication.publication_type || 'Artículo').trim(),
+        authorsCount: Math.max(1, Number(publication.authors_count || 1)),
+        sourceKind: String(publication.source_kind || 'MANUAL').trim().toUpperCase(),
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al agregar la investigación.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onAddExperience = async (trackingId: string, experience: any) => {
+    try {
+      setLoading(true);
+
+      let supportPath: string | undefined;
+      let supportName: string | undefined;
+      if (experience.support_file instanceof File) {
+        const objectKey = buildSupportObjectKey({
+          trackingId,
+          scope: 'experience',
+          rowRef: `edit-${Date.now()}`,
+          fileName: experience.support_file.name,
+        });
+        const uploaded = await uploadFileToR2({ file: experience.support_file, objectKey });
+        supportPath = uploaded.publicUrl || uploaded.objectKey;
+        supportName = experience.support_file.name;
+      }
+
+      await runReducer('add_application_experience', {
+        trackingId,
+        experienceType: String(experience.experience_type || 'Docencia Universitaria').trim(),
+        companyName: String(experience.company_name || '').trim() || undefined,
+        startedAt: String(experience.started_at || '').trim(),
+        endedAt: String(experience.ended_at || '').trim(),
+        certified: Boolean(experience.certified),
+        supportName,
+        supportPath,
+        supportUrl: supportPath,
+      });
+    } catch (e) {
+      console.error(e);
+      window.alert('Error al agregar la experiencia.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onUpdateLanguage = async (id: number, lang: any) => {
     try {
       setLoading(true);
@@ -1348,6 +1459,9 @@ Reglas de salida:
             onAddLanguage={onAddLanguage}
             onUpdateLanguage={onUpdateLanguage}
             onDeleteLanguage={onDeleteLanguage}
+            onAddTitle={onAddTitle}
+            onAddPublication={onAddPublication}
+            onAddExperience={onAddExperience}
           />
         )}
       </div>
