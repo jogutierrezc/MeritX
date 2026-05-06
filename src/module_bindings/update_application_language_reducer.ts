@@ -11,13 +11,8 @@ import {
 } from "spacetimedb";
 
 export default {
-  trackingId: __t.string(),
-  experienceType: __t.string(),
-  companyName: __t.option(__t.string()),
-  startedAt: __t.string(),
-  endedAt: __t.string(),
-  certified: __t.bool(),
-  supportName: __t.option(__t.string()),
-  supportUrl: __t.option(__t.string()),
-  supportPath: __t.option(__t.string()),
+  id: __t.u32(),
+  languageName: __t.string(),
+  languageLevel: __t.string(),
+  convalidation: __t.bool(),
 };

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { ArrowLeft, BookOpen, Briefcase, Database, Globe, Languages, Link as LinkIcon, Minus, Plus } from 'lucide-react';
 import type { FormState } from '../types/domain';
 
@@ -81,7 +81,9 @@ const NuevoView: React.FC<Props> = ({
                 onChange={(e) => setSelectedConvocatoriaId(e.target.value)}
                 className="w-full p-4 bg-amber-50 border-2 border-amber-200 focus:border-amber-500 outline-none font-black text-[11px] uppercase"
               >
-                <option value="">SELECCIONA CONVOCATORIA ABIERTA</option>
+                <option value="">
+                  {openConvocatorias.length === 0 ? 'NO HAY CONVOCATORIAS ABIERTAS' : 'SELECCIONA CONVOCATORIA ABIERTA'}
+                </option>
                 {openConvocatorias.map((convocatoria) => (
                   <option key={convocatoria.id} value={convocatoria.id}>
                     {convocatoria.codigo} - {convocatoria.nombre} ({convocatoria.periodo})

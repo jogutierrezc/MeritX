@@ -188,13 +188,16 @@ const resolveAiRuntime = (params: {
   openrouterKey?: string;
 }) => {
   const configuredProvider = normalizeAiProvider(params.provider);
-  const geminiKey = String(params.geminiKey || '').trim();
-  const apifreellmKey = String(params.apifreellmKey || '').trim();
-  const openrouterKey = String(params.openrouterKey || '').trim();
+  
+  // Resolve keys with priority: Params (DB) > Environment Variables
+  const geminiKey = String(params.geminiKey || '').trim() || String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
+  const apifreellmKey = String(params.apifreellmKey || '').trim() || String(import.meta.env.VITE_APIFREELLM_API_KEY || '').trim();
+  const openrouterKey = String(params.openrouterKey || '').trim() || String(import.meta.env.VITE_OPENROUTER_API_KEY || '').trim();
 
   let provider: 'gemini' | 'apifreellm' | 'openrouter' = configuredProvider;
   let activeKey = provider === 'gemini' ? geminiKey : provider === 'openrouter' ? openrouterKey : apifreellmKey;
 
+  // Global priority fallback if the active provider has no key
   if (!activeKey) {
     if (openrouterKey) {
       provider = 'openrouter';

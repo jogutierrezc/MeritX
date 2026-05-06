@@ -23,6 +23,7 @@ import {
 import type { AppLanguage, BarrierDiagnosis, RequestRecord } from '../../../types/domain';
 import { normalizeText, toSafeNumber } from './helpers';
 import type { AiCriterionRow, AnalysisVersionRecord, ChatMessage, ManualRow, SelectedAnalysis } from './types';
+import { openPrintFormatWindow } from './printFormatWindow';
 
 interface Props {
   selectedAnalysisRequest: RequestRecord;
@@ -32,11 +33,13 @@ interface Props {
   aiNarrative: string;
   aiSuggestedCategory: string | null;
   aiTotalScore: number;
+  aiEngine?: string;
   manualMode: boolean;
   manualRows: ManualRow[];
   manualNarrative: string;
   versionRowsForSelected: AnalysisVersionRecord[];
   currentRole: string;
+  userCampus?: string;
   chatMessages?: ChatMessage[];
   chatInput?: string;
   chatLoading?: boolean;
@@ -83,7 +86,7 @@ interface Props {
     sources: string[];
   } | null;
   onSaveProfileEvidence: (payload: {
-    titles: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
+    titles: Array<{ id: number; titleLevel?: string; supportName: string; supportPath: string; supportFile?: File | null }>;
     experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
     publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
   }) => Promise<void>;
@@ -145,6 +148,28 @@ const BarrierAlertPanel = ({ bd }: { bd: BarrierDiagnosis }) => {
   );
 };
 
+const SupportPreviewLink = ({ path, name }: { path?: string; name?: string }) => {
+  if (!path) return <span className="text-slate-400">Sin soporte</span>;
+
+  const baseUrl = import.meta.env.VITE_R2_PUBLIC_URL || '';
+  const fullUrl = path.startsWith('http') ? path : `${baseUrl}/${path}`;
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="truncate max-w-[150px] font-medium" title={name || path}>{name || 'Ver archivo'}</span>
+      <a
+        href={fullUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded-lg hover:bg-indigo-50 transition-colors border border-indigo-100 bg-white shadow-sm"
+        title="Abrir soporte en ventana nueva"
+      >
+        <Eye size={14} />
+      </a>
+    </div>
+  );
+};
+
 const DetailItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
   <div className="flex items-start gap-3">
     <div className="p-2 bg-indigo-50 rounded-lg shrink-0">{icon}</div>
@@ -186,11 +211,13 @@ export const AnalysisDetailView: React.FC<Props> = ({
   aiNarrative,
   aiSuggestedCategory,
   aiTotalScore,
+  aiEngine,
   manualMode,
   manualRows,
   manualNarrative,
   versionRowsForSelected,
   currentRole,
+  userCampus = 'VALLEDUPAR',
   chatMessages = [],
   chatInput = '',
   chatLoading = false,
@@ -222,6 +249,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
 }) => {
   const [experienceModalOpen, setExperienceModalOpen] = useState(false);
   const [publicationModalOpen, setPublicationModalOpen] = useState(false);
+  const [titleModalOpen, setTitleModalOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [savingProfileEvidence, setSavingProfileEvidence] = useState(false);
   const [editingLangId, setEditingLangId] = useState<number | 'new' | null>(null);
@@ -247,6 +275,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
     setPublicationDraft(selectedAnalysis.publications);
     setExperienceModalOpen(false);
     setPublicationModalOpen(false);
+    setTitleModalOpen(false);
     setProfileEditOpen(false);
   }, [selectedAnalysis]);
 
@@ -256,6 +285,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
       await onSaveProfileEvidence({
         titles: titleDraft.map((row) => ({
           id: row.id,
+          titleLevel: row.titleLevel,
           supportName: row.supportName || '',
           supportPath: row.supportPath || '',
           supportFile: row.supportFile || null,
@@ -287,6 +317,11 @@ export const AnalysisDetailView: React.FC<Props> = ({
     if (rows.length === 0) return null;
     return rows.reduce((latest, v) => (v.createdAt > latest.createdAt ? v : latest));
   });
+
+  const canModify = useMemo(() => {
+    if (currentRole === 'admin') return true;
+    return currentRole === 'talento_humano' && userCampus === 'BUCARAMANGA';
+  }, [currentRole, userCampus]);
 
   const typeConfig = {
     MOTOR: { label: 'Motor Escalafón', color: 'border-blue-300 bg-blue-50', textColor: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
@@ -321,7 +356,28 @@ export const AnalysisDetailView: React.FC<Props> = ({
             >
               <Pencil size={18} /> Editar perfil y soportes
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium text-sm">
+            <button 
+              onClick={() => {
+                const safeNarrative = meritxNarrative || {
+                  analisisMatriz: '',
+                  analisisMotor: '',
+                  analisisOficial: '',
+                  analisisNormativo: '',
+                  conclusionIntermedia: 'Pendiente de análisis IA.',
+                  puntajeIntermedio: selectedAnalysis.suggested.finalPts
+                };
+                
+                openPrintFormatWindow({
+                  selectedAnalysisRequest,
+                  selectedAnalysis,
+                  aiRows,
+                  meritxNarrative: safeNarrative,
+                  generatedAt: null,
+                  aiEngine,
+                  currentLanguages
+                });
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100 font-medium text-sm">
               <Printer size={18} /> Imprimir
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm font-medium text-sm">
@@ -338,7 +394,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <DetailItem icon={<BookOpen className="text-indigo-500" />} label="Facultad" value={selectedAnalysisRequest.facultad} />
-          <DetailItem icon={<Award className="text-indigo-500" />} label="Programa" value="No disponible" />
+          <DetailItem icon={<Award className="text-indigo-500" />} label="Programa" value={selectedAnalysisRequest.programa || 'No disponible'} />
           <DetailItem icon={<Calendar className="text-indigo-500" />} label="Fecha Postulación" value="No disponible" />
           <DetailItem icon={<Hash className="text-indigo-500" />} label="No. Registro / Radicado" value={selectedAnalysisRequest.id} />
         </div>
@@ -398,7 +454,19 @@ export const AnalysisDetailView: React.FC<Props> = ({
                       <td className="px-6 py-4 font-semibold text-xs text-slate-500 uppercase">{item.section}</td>
                       <td className="px-6 py-4 font-bold text-slate-700 uppercase">{item.criterio}</td>
                       <td className="px-6 py-4 text-slate-500">
-                        {item.section === 'Experiencia' ? (
+                        {item.section === 'Estudios Cursados' ? (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-slate-700">
+                              {selectedAnalysis.titles.length} registro(s) de formación reportados.
+                            </p>
+                            <button
+                              onClick={() => setTitleModalOpen(true)}
+                              className="text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700 underline hover:no-underline"
+                            >
+                              Ver más
+                            </button>
+                          </div>
+                        ) : item.section === 'Experiencia' ? (
                           <div className="space-y-1">
                             <p className="text-xs font-semibold text-slate-700">
                               {selectedAnalysis.experiences.length} registro(s) de experiencia reportados.
@@ -466,9 +534,9 @@ export const AnalysisDetailView: React.FC<Props> = ({
               disabled={meritxNarrativeLoading}
               onClick={onGenerateMeritxNarrative}
             />
-            <ActionButton label="Guardar Versión Motor" color="bg-white border-indigo-200 text-indigo-600" outline onClick={onSaveMotorVersion} />
-            <ActionButton label="Guardar Versión IA" color="bg-white border-indigo-200 text-indigo-600" outline disabled={aiRows.length === 0} onClick={onSaveAiVersion} />
-            <ActionButton label={manualMode ? 'Ocultar Tabla Manual TH' : 'Crear Tabla Manual TH'} color="bg-white border-slate-200 text-slate-600" outline onClick={onToggleManualMode} />
+            <ActionButton label="Guardar Versión Motor" color="bg-white border-indigo-200 text-indigo-600" outline onClick={onSaveMotorVersion} disabled={!canModify} />
+            <ActionButton label="Guardar Versión IA" color="bg-white border-indigo-200 text-indigo-600" outline disabled={!canModify || aiRows.length === 0} onClick={onSaveAiVersion} />
+            <ActionButton label={manualMode ? 'Ocultar Tabla Manual TH' : 'Crear Tabla Manual TH'} color="bg-white border-slate-200 text-slate-600" outline onClick={onToggleManualMode} disabled={!canModify} />
           </div>
         </div>
 
@@ -641,7 +709,8 @@ export const AnalysisDetailView: React.FC<Props> = ({
                 </button>
                 <button
                   onClick={onSaveManualVersion}
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 hover:bg-emerald-100"
+                  disabled={!canModify}
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                 >
                   Guardar versión manual TH
                 </button>
@@ -774,7 +843,7 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         </button>
                         <button
                           onClick={() => onApproveVersion(row.versionId)}
-                          disabled={currentRole !== 'cap' || row.versionStatus === 'OFICIAL'}
+                          disabled={!canModify || row.versionStatus === 'OFICIAL'}
                           className="px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded text-[10px] font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Aprobar Oficial
@@ -998,7 +1067,57 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         <td className="py-2 text-slate-600">{row.startedAt || '-'}</td>
                         <td className="py-2 text-slate-600">{row.endedAt || 'Actual'}</td>
                         <td className="py-2 text-slate-600">{row.certified ? 'Sí' : 'No'}</td>
-                        <td className="py-2 text-slate-600">{row.supportName || row.supportPath || 'Sin soporte'}</td>
+                        <td className="py-2 text-slate-600">
+                          <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {titleModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Detalle ampliado</p>
+                  <h3 className="text-lg font-black text-slate-900">Formación académica reportada</h3>
+                </div>
+                <button onClick={() => setTitleModalOpen(false)} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-100">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="max-h-[70vh] overflow-auto p-5">
+                <table className="w-full min-w-[680px] text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 border-b border-slate-200">
+                      <th className="pb-2">Título</th>
+                      <th className="pb-2">Nivel</th>
+                      <th className="pb-2">Universidad</th>
+                      <th className="pb-2 text-center">Convalidado</th>
+                      <th className="pb-2">Soporte</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedAnalysis.titles.map((row) => (
+                      <tr key={row.id}>
+                        <td className="py-3 font-semibold text-slate-700">{row.titleName}</td>
+                        <td className="py-3 text-slate-600">{row.titleLevel}</td>
+                        <td className="py-3 text-slate-600">{row.originUniversity || '-'}</td>
+                        <td className="py-3 text-center">
+                          {row.titleConvalidated ? (
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold">SÍ</span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-bold">NO</span>
+                          )}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1065,12 +1184,28 @@ export const AnalysisDetailView: React.FC<Props> = ({
                   <div className="space-y-2">
                     {titleDraft.map((row, index) => (
                       <div key={row.id} className="grid gap-2 md:grid-cols-[1.6fr_1fr] rounded-lg border border-slate-200 p-3">
-                        <div>
+                        <div className="flex flex-col gap-1">
                           <p className="text-xs font-bold text-slate-800">{row.titleName}</p>
-                          <p className="text-[11px] text-slate-500">{row.titleLevel}</p>
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
-                          </p>
+                          <select
+                            value={row.titleLevel}
+                            onChange={(event) => {
+                              const next = [...titleDraft];
+                              next[index] = { ...row, titleLevel: event.target.value };
+                              setTitleDraft(next);
+                            }}
+                            className="w-full max-w-[240px] rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 focus:border-indigo-400 outline-none transition-colors"
+                          >
+                            <option>Pregrado</option>
+                            <option>Especialización</option>
+                            <option>Especialización Médico Quirúrgica</option>
+                            <option>Maestría</option>
+                            <option>Maestría de Profundización</option>
+                            <option>Maestría de Investigación</option>
+                            <option>Doctorado</option>
+                          </select>
+                          <div className="mt-1">
+                            <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                          </div>
                         </div>
                         <label className="flex items-center justify-center rounded border border-dashed border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
                           Cargar soporte
@@ -1127,9 +1262,9 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         <div>
                           <p className="text-xs font-bold text-slate-800">{row.experienceType}</p>
                           <p className="text-[11px] text-slate-500">{row.startedAt} - {row.endedAt || 'Actual'}</p>
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            Soporte actual: {row.supportName || row.supportPath || 'Sin soporte'}
-                          </p>
+                          <div className="mt-1">
+                            <SupportPreviewLink path={row.supportPath} name={row.supportName} />
+                          </div>
                         </div>
                         <label className="flex items-center justify-center rounded border border-dashed border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
                           Cargar soporte

@@ -12,6 +12,7 @@ import {
 
 export default {
   id: __t.u32(),
+  titleLevel: __t.option(__t.string()),
   supportName: __t.option(__t.string()),
   supportPath: __t.option(__t.string()),
 };

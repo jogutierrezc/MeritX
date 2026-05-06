@@ -18,4 +18,10 @@ export default __t.row({
   supportName: __t.option(__t.string()).name("support_name"),
   supportUrl: __t.option(__t.string()).name("support_url"),
   supportPath: __t.option(__t.string()).name("support_path"),
+  graduationDate: __t.string().name("graduation_date"),
+  originUniversity: __t.string().name("origin_university"),
+  universityType: __t.string().name("university_type"),
+  titleConvalidated: __t.bool().name("title_convalidated"),
+  convalidationSupportName: __t.string().name("convalidation_support_name"),
+  convalidationSupportPath: __t.string().name("convalidation_support_path"),
 });

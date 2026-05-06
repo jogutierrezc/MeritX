@@ -10,6 +10,7 @@ import type {
   ApplicationPublication,
   ApplicationTitle,
   Faculty,
+  UserProfile,
 } from '../../module_bindings/types';
 import LoadingOverlay from '../../components/LoadingOverlay';
 import NuevoView from '../../components/NuevoView';
@@ -151,13 +152,16 @@ const resolveAiRuntime = (params: {
   openrouterKey?: string;
 }) => {
   const configuredProvider = normalizeAiProvider(params.provider);
-  const geminiKey = String(params.geminiKey || '').trim();
-  const apifreellmKey = String(params.apifreellmKey || '').trim();
-  const openrouterKey = String(params.openrouterKey || '').trim();
+  
+  // Resolve keys with priority: Params (DB) > Environment Variables
+  const geminiKey = String(params.geminiKey || '').trim() || String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
+  const apifreellmKey = String(params.apifreellmKey || '').trim() || String(import.meta.env.VITE_APIFREELLM_API_KEY || '').trim();
+  const openrouterKey = String(params.openrouterKey || '').trim() || String(import.meta.env.VITE_OPENROUTER_API_KEY || '').trim();
 
   let provider: 'gemini' | 'apifreellm' | 'openrouter' = configuredProvider;
   let activeKey = provider === 'gemini' ? geminiKey : provider === 'openrouter' ? openrouterKey : apifreellmKey;
 
+  // Global priority fallback if the active provider has no key
   if (!activeKey) {
     if (openrouterKey) {
       provider = 'openrouter';
@@ -168,13 +172,6 @@ const resolveAiRuntime = (params: {
     } else if (geminiKey) {
       provider = 'gemini';
       activeKey = geminiKey;
-    } else {
-      // Last-resort: always check the env key regardless of configured provider
-      const envKey = String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-      if (envKey) {
-        provider = 'gemini';
-        activeKey = envKey;
-      }
     }
   }
 
@@ -623,6 +620,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [connectionWarning, setConnectionWarning] = useState('');
+  const [userCampus, setUserCampus] = useState<string>('VALLEDUPAR');
 
   const [requests, setRequests] = useState<RequestRecord[]>([]);
   const [formData, setFormData] = useState<FormState>(emptyForm);
@@ -758,6 +756,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       const ragTable = dbView.ragConfig || dbView.rag_config;
       const settingTable = dbView.systemSetting || dbView.system_setting;
       const openrouterTable = dbView.openrouterConfig || dbView.openrouter_config;
+      const userProfileTable = dbView.userProfile || dbView.user_profile;
 
       const apiTable = dbView.apiConfig || dbView.api_config;
       if (apiTable) {
@@ -799,6 +798,17 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           setRagTopK(Number(defaultRag.topK || 5));
           setRagChunkSize(Number(defaultRag.chunkSize || 1200));
           setRagChunkOverlap(Number(defaultRag.chunkOverlap || 150));
+        }
+      }
+
+      if (userProfileTable) {
+        const session = getPortalSession();
+        if (session?.username) {
+          const profiles = Array.from(userProfileTable.iter()) as UserProfile[];
+          const match = profiles.find((p) => p.correo === session.username || p.nombre === session.username);
+          if (match?.campus) {
+            setUserCampus(match.campus.toUpperCase());
+          }
         }
       }
 
@@ -901,6 +911,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       'SELECT * FROM academic_program',
       'SELECT * FROM convocatoria',
       'SELECT * FROM api_config',
+      'SELECT * FROM user_profile',
     ];
 
     // RAG/config tables: loaded separately so they never block profile rendering
@@ -1054,8 +1065,16 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     }
 
     if (!selectedConvocatoriaId) {
-      window.alert('Selecciona una convocatoria abierta para registrar el expediente.');
-      return;
+      const session = getPortalSession();
+      const canIgnoreConvocatoria =
+        openConvocatorias.length === 0 &&
+        session &&
+        ['talento_humano', 'admin'].includes(session.role);
+
+      if (!canIgnoreConvocatoria) {
+        window.alert('Selecciona una convocatoria abierta para registrar el expediente.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -1070,7 +1089,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         campus: 'VALLEDUPAR',
         programName: formData.programa.trim(),
         facultyName: formData.facultad.trim(),
-        convocatoriaId: selectedConvocatoriaId,
+        convocatoriaId: selectedConvocatoriaId || undefined,
         scopusProfile: formData.scopusProfile.trim() || undefined,
         finalPoints: res.finalPts,
         finalCategory: res.finalCat.name,
@@ -1604,6 +1623,8 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       id: Number(row.id),
       titleName: row.titleName,
       titleLevel: row.titleLevel,
+      originUniversity: row.originUniversity,
+      titleConvalidated: Boolean(row.titleConvalidated),
       supportName: normalizeOptionalString(row.supportName),
       supportPath: normalizeOptionalString(row.supportPath),
     }));
@@ -1639,7 +1660,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
   const handleSaveProfileEvidence = async (
     payload: {
-      titles: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
+      titles: Array<{ id: number; titleLevel?: string; supportName: string; supportPath: string; supportFile?: File | null }>;
       experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
       publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
     },
@@ -1657,6 +1678,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
             {
               supportName: normalizeOptionalString(row.supportName),
               supportPath: normalizeOptionalString(row.supportPath),
+              titleLevel: normalizeOptionalString(row.titleLevel),
             },
           ]),
       );
@@ -1759,6 +1781,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         const hasChanged =
           (current?.supportName || undefined) !== (supportName || undefined) ||
           (current?.supportPath || undefined) !== (supportPath || undefined) ||
+          (current?.titleLevel || undefined) !== (row.titleLevel || undefined) ||
           uploadResultsById.has(row.id);
 
         if (!hasChanged) {
@@ -1768,8 +1791,9 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
         titleReducers.push(async () => {
           await runReducer('update_application_title_support', {
             id: row.id,
+            titleLevel: row.titleLevel,
             supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
-            supportPath,
+            supportPath: supportPath,
           });
         });
       }
@@ -2750,6 +2774,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   };
 
   const handleSaveMotorVersion = async () => {
+    const canModify = (currentRole === 'talento_humano' && userCampus === 'BUCARAMANGA') || currentRole === 'admin';
+    if (!canModify) {
+      window.alert('No tienes permisos para modificar o guardar versiones en este campus.');
+      return;
+    }
     if (!selectedAnalysis) return;
     const rows = selectedAnalysis.rows.map((row) => ({
       section: row.section,
@@ -2775,6 +2804,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   };
 
   const handleSaveAiVersion = async () => {
+    const canModify = (currentRole === 'talento_humano' && userCampus === 'BUCARAMANGA') || currentRole === 'admin';
+    if (!canModify) {
+      window.alert('No tienes permisos para modificar o guardar versiones en este campus.');
+      return;
+    }
     if (!selectedAnalysis || aiRows.length === 0) {
       window.alert('Genera primero la tabla IA antes de guardarla.');
       return;
@@ -2812,6 +2846,11 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   };
 
   const handleSaveManualVersion = async () => {
+    const canModify = (currentRole === 'talento_humano' && userCampus === 'BUCARAMANGA') || currentRole === 'admin';
+    if (!canModify) {
+      window.alert('No tienes permisos para modificar o guardar versiones en este campus.');
+      return;
+    }
     if (!selectedAnalysis || manualRows.length === 0) {
       window.alert('No hay filas manuales para guardar.');
       return;
@@ -2843,8 +2882,10 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
   };
 
   const handleApproveVersion = async (versionId: string) => {
-    if (currentRole !== 'cap') {
-      window.alert('Solo el rol CAP puede aprobar una versión como oficial.');
+    const isThBucaramanga = currentRole === 'talento_humano' && userCampus === 'BUCARAMANGA';
+    
+    if (!isThBucaramanga && currentRole !== 'admin') {
+      window.alert('Solo el personal de Talento Humano del campus BUCARAMANGA puede aprobar una versión como oficial.');
       return;
     }
 
@@ -3001,6 +3042,7 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           manualNarrative={manualNarrative}
           versionRowsForSelected={versionRowsForSelected}
           currentRole={currentRole}
+          userCampus={userCampus}
           showMetriXChat={false}
           chatMessages={metriXChat}
           chatInput={metriXInput}

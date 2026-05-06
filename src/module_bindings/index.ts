@@ -46,6 +46,8 @@ import CreatePortalUserReducer from "./create_portal_user_reducer";
 import CreateReportSnapshotReducer from "./create_report_snapshot_reducer";
 import DeactivateRagDocumentReducer from "./deactivate_rag_document_reducer";
 import DeactivateRagNormativeReducer from "./deactivate_rag_normative_reducer";
+import DeleteApplicationLanguageReducer from "./delete_application_language_reducer";
+import DeletePortalRoleReducer from "./delete_portal_role_reducer";
 import ImportFacultyProgramsReducer from "./import_faculty_programs_reducer";
 import InitPortalRolesReducer from "./init_portal_roles_reducer";
 import LinkApplicationConvocatoriaReducer from "./link_application_convocatoria_reducer";
@@ -56,7 +58,9 @@ import RecordDecanoReviewReducer from "./record_decano_review_reducer";
 import RegisterProfessorReducer from "./register_professor_reducer";
 import RegisterUserProfileReducer from "./register_user_profile_reducer";
 import SaveApplicationAnalysisVersionReducer from "./save_application_analysis_version_reducer";
+import SaveThBucaramangaValidationReducer from "./save_th_bucaramanga_validation_reducer";
 import UpdateApplicationExperienceSupportReducer from "./update_application_experience_support_reducer";
+import UpdateApplicationLanguageReducer from "./update_application_language_reducer";
 import UpdateApplicationPublicationSourceKindReducer from "./update_application_publication_source_kind_reducer";
 import UpdateApplicationStatusReducer from "./update_application_status_reducer";
 import UpdateApplicationTitleSupportReducer from "./update_application_title_support_reducer";
@@ -65,7 +69,9 @@ import UpdateUserProfileReducer from "./update_user_profile_reducer";
 import UpsertAcademicProgramReducer from "./upsert_academic_program_reducer";
 import UpsertApiConfigReducer from "./upsert_api_config_reducer";
 import UpsertEmailTemplateReducer from "./upsert_email_template_reducer";
+import UpsertExternalIesCategoryReducer from "./upsert_external_ies_category_reducer";
 import UpsertFacultyReducer from "./upsert_faculty_reducer";
+import UpsertMeritxReportCacheReducer from "./upsert_meritx_report_cache_reducer";
 import UpsertOpenrouterConfigReducer from "./upsert_openrouter_config_reducer";
 import UpsertPortalRoleReducer from "./upsert_portal_role_reducer";
 import UpsertRagConfigReducer from "./upsert_rag_config_reducer";
@@ -95,7 +101,9 @@ import AuditEventRow from "./audit_event_table";
 import AuditScoreSnapshotRow from "./audit_score_snapshot_table";
 import ConvocatoriaRow from "./convocatoria_table";
 import EmailTemplateRow from "./email_template_table";
+import ExternalIesCategoryRow from "./external_ies_category_table";
 import FacultyRow from "./faculty_table";
+import MeritxReportCacheRow from "./meritx_report_cache_table";
 import OpenrouterConfigRow from "./openrouter_config_table";
 import PortalRoleRow from "./portal_role_table";
 import PortalSessionRow from "./portal_session_table";
@@ -105,6 +113,7 @@ import RagNormativeRow from "./rag_normative_table";
 import ReportSnapshotRow from "./report_snapshot_table";
 import ResendConfigRow from "./resend_config_table";
 import SystemSettingRow from "./system_setting_table";
+import ThBucaramangaValidationRow from "./th_bucaramanga_validation_table";
 import UserFacultyAssignmentRow from "./user_faculty_assignment_table";
 import UserProfileRow from "./user_profile_table";
 
@@ -115,6 +124,9 @@ const tablesSchema = __schema({
   academic_program: __table({
     name: 'academic_program',
     indexes: [
+      { accessor: 'active', name: 'academic_program_active_idx_btree', algorithm: 'btree', columns: [
+        'active',
+      ] },
       { accessor: 'faculty_id', name: 'academic_program_faculty_id_idx_btree', algorithm: 'btree', columns: [
         'facultyId',
       ] },
@@ -158,8 +170,14 @@ const tablesSchema = __schema({
       { accessor: 'document_number', name: 'application_document_number_idx_btree', algorithm: 'btree', columns: [
         'documentNumber',
       ] },
+      { accessor: 'faculty_name', name: 'application_faculty_name_idx_btree', algorithm: 'btree', columns: [
+        'facultyName',
+      ] },
       { accessor: 'professor_name', name: 'application_professor_name_idx_btree', algorithm: 'btree', columns: [
         'professorName',
+      ] },
+      { accessor: 'program_name', name: 'application_program_name_idx_btree', algorithm: 'btree', columns: [
+        'programName',
       ] },
       { accessor: 'status', name: 'application_status_idx_btree', algorithm: 'btree', columns: [
         'status',
@@ -452,6 +470,23 @@ const tablesSchema = __schema({
       { name: 'email_template_template_key_key', constraint: 'unique', columns: ['templateKey'] },
     ],
   }, EmailTemplateRow),
+  external_ies_category: __table({
+    name: 'external_ies_category',
+    indexes: [
+      { accessor: 'category', name: 'external_ies_category_category_idx_btree', algorithm: 'btree', columns: [
+        'category',
+      ] },
+      { accessor: 'ies_name', name: 'external_ies_category_ies_name_idx_btree', algorithm: 'btree', columns: [
+        'iesName',
+      ] },
+      { accessor: 'tracking_id', name: 'external_ies_category_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+    ],
+    constraints: [
+      { name: 'external_ies_category_tracking_id_key', constraint: 'unique', columns: ['trackingId'] },
+    ],
+  }, ExternalIesCategoryRow),
   faculty: __table({
     name: 'faculty',
     indexes: [
@@ -467,6 +502,23 @@ const tablesSchema = __schema({
       { name: 'faculty_faculty_name_key', constraint: 'unique', columns: ['facultyName'] },
     ],
   }, FacultyRow),
+  meritx_report_cache: __table({
+    name: 'meritx_report_cache',
+    indexes: [
+      { accessor: 'ai_model', name: 'meritx_report_cache_ai_model_idx_btree', algorithm: 'btree', columns: [
+        'aiModel',
+      ] },
+      { accessor: 'ai_provider', name: 'meritx_report_cache_ai_provider_idx_btree', algorithm: 'btree', columns: [
+        'aiProvider',
+      ] },
+      { accessor: 'tracking_id', name: 'meritx_report_cache_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+    ],
+    constraints: [
+      { name: 'meritx_report_cache_tracking_id_key', constraint: 'unique', columns: ['trackingId'] },
+    ],
+  }, MeritxReportCacheRow),
   openrouter_config: __table({
     name: 'openrouter_config',
     indexes: [
@@ -629,6 +681,29 @@ const tablesSchema = __schema({
       { name: 'system_setting_key_key', constraint: 'unique', columns: ['key'] },
     ],
   }, SystemSettingRow),
+  th_bucaramanga_validation: __table({
+    name: 'th_bucaramanga_validation',
+    indexes: [
+      { accessor: 'approved_for_signature', name: 'th_bucaramanga_validation_approved_for_signature_idx_btree', algorithm: 'btree', columns: [
+        'approvedForSignature',
+      ] },
+      { accessor: 'campus_scope', name: 'th_bucaramanga_validation_campus_scope_idx_btree', algorithm: 'btree', columns: [
+        'campusScope',
+      ] },
+      { accessor: 'id', name: 'th_bucaramanga_validation_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'proposed_category', name: 'th_bucaramanga_validation_proposed_category_idx_btree', algorithm: 'btree', columns: [
+        'proposedCategory',
+      ] },
+      { accessor: 'tracking_id', name: 'th_bucaramanga_validation_tracking_id_idx_btree', algorithm: 'btree', columns: [
+        'trackingId',
+      ] },
+    ],
+    constraints: [
+      { name: 'th_bucaramanga_validation_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ThBucaramangaValidationRow),
   user_faculty_assignment: __table({
     name: 'user_faculty_assignment',
     indexes: [
@@ -689,6 +764,8 @@ const reducersSchema = __reducers(
   __reducerSchema("create_report_snapshot", CreateReportSnapshotReducer),
   __reducerSchema("deactivate_rag_document", DeactivateRagDocumentReducer),
   __reducerSchema("deactivate_rag_normative", DeactivateRagNormativeReducer),
+  __reducerSchema("delete_application_language", DeleteApplicationLanguageReducer),
+  __reducerSchema("delete_portal_role", DeletePortalRoleReducer),
   __reducerSchema("import_faculty_programs", ImportFacultyProgramsReducer),
   __reducerSchema("init_portal_roles", InitPortalRolesReducer),
   __reducerSchema("link_application_convocatoria", LinkApplicationConvocatoriaReducer),
@@ -699,7 +776,9 @@ const reducersSchema = __reducers(
   __reducerSchema("register_professor", RegisterProfessorReducer),
   __reducerSchema("register_user_profile", RegisterUserProfileReducer),
   __reducerSchema("save_application_analysis_version", SaveApplicationAnalysisVersionReducer),
+  __reducerSchema("save_th_bucaramanga_validation", SaveThBucaramangaValidationReducer),
   __reducerSchema("update_application_experience_support", UpdateApplicationExperienceSupportReducer),
+  __reducerSchema("update_application_language", UpdateApplicationLanguageReducer),
   __reducerSchema("update_application_publication_source_kind", UpdateApplicationPublicationSourceKindReducer),
   __reducerSchema("update_application_status", UpdateApplicationStatusReducer),
   __reducerSchema("update_application_title_support", UpdateApplicationTitleSupportReducer),
@@ -708,7 +787,9 @@ const reducersSchema = __reducers(
   __reducerSchema("upsert_academic_program", UpsertAcademicProgramReducer),
   __reducerSchema("upsert_api_config", UpsertApiConfigReducer),
   __reducerSchema("upsert_email_template", UpsertEmailTemplateReducer),
+  __reducerSchema("upsert_external_ies_category", UpsertExternalIesCategoryReducer),
   __reducerSchema("upsert_faculty", UpsertFacultyReducer),
+  __reducerSchema("upsert_meritx_report_cache", UpsertMeritxReportCacheReducer),
   __reducerSchema("upsert_openrouter_config", UpsertOpenrouterConfigReducer),
   __reducerSchema("upsert_portal_role", UpsertPortalRoleReducer),
   __reducerSchema("upsert_rag_config", UpsertRagConfigReducer),
