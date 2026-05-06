@@ -86,9 +86,33 @@ interface Props {
     sources: string[];
   } | null;
   onSaveProfileEvidence: (payload: {
-    titles: Array<{ id: number; titleLevel?: string; supportName: string; supportPath: string; supportFile?: File | null }>;
-    experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
-    publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
+    titles: Array<{
+      id: number;
+      titleName: string;
+      titleLevel?: string;
+      originUniversity?: string;
+      titleConvalidated?: boolean;
+      supportName: string;
+      supportPath: string;
+      supportFile?: File | null;
+    }>;
+    experiences: Array<{
+      id: number;
+      experienceType: string;
+      startedAt: string;
+      endedAt: string;
+      certified: boolean;
+      supportName: string;
+      supportPath: string;
+      supportFile?: File | null;
+    }>;
+    publications: Array<{
+      id: number;
+      publicationTitle: string;
+      quartile: string;
+      publicationYear: string;
+      sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL';
+    }>;
   }) => Promise<void>;
   onAddLanguage?: (trackingId: string, lang: { language_name: string; language_level: string; convalidation: boolean }) => Promise<void>;
   onUpdateLanguage?: (id: number, lang: { language_name: string; language_level: string; convalidation: boolean }) => Promise<void>;
@@ -285,19 +309,29 @@ export const AnalysisDetailView: React.FC<Props> = ({
       await onSaveProfileEvidence({
         titles: titleDraft.map((row) => ({
           id: row.id,
+          titleName: row.titleName,
           titleLevel: row.titleLevel,
+          originUniversity: row.originUniversity,
+          titleConvalidated: row.titleConvalidated,
           supportName: row.supportName || '',
           supportPath: row.supportPath || '',
           supportFile: row.supportFile || null,
         })),
         experiences: experienceDraft.map((row) => ({
           id: row.id,
+          experienceType: row.experienceType,
+          startedAt: row.startedAt,
+          endedAt: row.endedAt,
+          certified: row.certified,
           supportName: row.supportName || '',
           supportPath: row.supportPath || '',
           supportFile: row.supportFile || null,
         })),
         publications: publicationDraft.map((row) => ({
           id: row.id,
+          publicationTitle: row.publicationTitle,
+          quartile: row.quartile,
+          publicationYear: row.publicationYear,
           sourceKind: row.sourceKind,
         })),
       });
@@ -1180,12 +1214,108 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
               <div className="max-h-[70vh] overflow-auto p-5 space-y-5">
                 <div>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Idiomas</p>
+                    <button
+                      onClick={startAddLang}
+                      className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700"
+                    >
+                      <Plus size={12} className="inline-block mr-1" /> Agregar idioma
+                    </button>
+                  </div>
+                  {editingLangId === 'new' && (
+                    <div className="mb-2 grid gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 md:grid-cols-[1fr_160px_120px_auto_auto]">
+                      <input
+                        value={langForm.language_name}
+                        onChange={(event) => setLangForm({ ...langForm, language_name: event.target.value })}
+                        placeholder="Idioma"
+                        className="rounded border border-slate-200 px-2 py-1 text-xs"
+                      />
+                      <select
+                        value={langForm.language_level}
+                        onChange={(event) => setLangForm({ ...langForm, language_level: event.target.value })}
+                        className="rounded border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        <option>A2</option>
+                        <option>B1</option>
+                        <option>B2</option>
+                        <option>C1</option>
+                      </select>
+                      <label className="flex items-center justify-center gap-2 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={langForm.convalidation}
+                          onChange={(event) => setLangForm({ ...langForm, convalidation: event.target.checked })}
+                        />
+                        Convalida
+                      </label>
+                      <button onClick={saveLang} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase text-emerald-700">Guardar</button>
+                      <button onClick={cancelLang} className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600">Cancelar</button>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {currentLanguages.map((row) => (
+                      <div key={row.id} className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_160px_120px_auto_auto]">
+                        {editingLangId === row.id ? (
+                          <>
+                            <input value={langForm.language_name} onChange={(event) => setLangForm({ ...langForm, language_name: event.target.value })} className="rounded border border-slate-200 px-2 py-1 text-xs" />
+                            <select value={langForm.language_level} onChange={(event) => setLangForm({ ...langForm, language_level: event.target.value })} className="rounded border border-slate-200 px-2 py-1 text-xs"><option>A2</option><option>B1</option><option>B2</option><option>C1</option></select>
+                            <label className="flex items-center justify-center gap-2 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase text-slate-600"><input type="checkbox" checked={langForm.convalidation} onChange={(event) => setLangForm({ ...langForm, convalidation: event.target.checked })} />Convalida</label>
+                            <button onClick={saveLang} className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-black uppercase text-emerald-700">Guardar</button>
+                            <button onClick={cancelLang} className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600">Cancelar</button>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs font-bold text-slate-800">{row.languageName || row.language_name}</p>
+                            <p className="text-xs font-semibold text-slate-600">{row.languageLevel || row.language_level}</p>
+                            <p className="text-xs font-semibold text-slate-600">{row.convalidation ? 'Convalidado' : 'Sin convalidar'}</p>
+                            <button onClick={() => startEditLang(row)} className="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] font-black uppercase text-indigo-700">Editar</button>
+                            <button onClick={() => row.id && onDeleteLanguage?.(row.id)} className="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-black uppercase text-rose-700">Eliminar</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
                   <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Títulos académicos</p>
+                  <div className="mb-2">
+                    <button
+                      onClick={() => {
+                        setTitleDraft((prev) => [
+                          ...prev,
+                          {
+                            id: -Date.now(),
+                            titleName: '',
+                            titleLevel: 'Pregrado',
+                            originUniversity: '',
+                            titleConvalidated: false,
+                            supportName: '',
+                            supportPath: '',
+                            supportFile: null,
+                          },
+                        ]);
+                      }}
+                      className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700"
+                    >
+                      <Plus size={12} className="inline-block mr-1" /> Agregar título
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {titleDraft.map((row, index) => (
-                      <div key={row.id} className="grid gap-2 md:grid-cols-[1.6fr_1fr] rounded-lg border border-slate-200 p-3">
+                      <div key={`${row.id}-${index}`} className="grid gap-2 md:grid-cols-[1.6fr_1fr] rounded-lg border border-slate-200 p-3">
                         <div className="flex flex-col gap-1">
-                          <p className="text-xs font-bold text-slate-800">{row.titleName}</p>
+                          <input
+                            value={row.titleName}
+                            onChange={(event) => {
+                              const next = [...titleDraft];
+                              next[index] = { ...row, titleName: event.target.value };
+                              setTitleDraft(next);
+                            }}
+                            placeholder="Nombre del título"
+                            className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-800"
+                          />
                           <select
                             value={row.titleLevel}
                             onChange={(event) => {
@@ -1203,6 +1333,16 @@ export const AnalysisDetailView: React.FC<Props> = ({
                             <option>Maestría de Investigación</option>
                             <option>Doctorado</option>
                           </select>
+                          <input
+                            value={row.originUniversity || ''}
+                            onChange={(event) => {
+                              const next = [...titleDraft];
+                              next[index] = { ...row, originUniversity: event.target.value };
+                              setTitleDraft(next);
+                            }}
+                            placeholder="Universidad"
+                            className="w-full max-w-[280px] rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700"
+                          />
                           <div className="mt-1">
                             <SupportPreviewLink path={row.supportPath} name={row.supportName} />
                           </div>
@@ -1226,6 +1366,14 @@ export const AnalysisDetailView: React.FC<Props> = ({
                             }}
                           />
                         </label>
+                        {row.id < 0 && (
+                          <button
+                            onClick={() => setTitleDraft((prev) => prev.filter((_, i) => i !== index))}
+                            className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700"
+                          >
+                            Eliminar nuevo
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1233,6 +1381,28 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
                 <div>
                   <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Experiencia</p>
+                  <div className="mb-2">
+                    <button
+                      onClick={() => {
+                        setExperienceDraft((prev) => [
+                          ...prev,
+                          {
+                            id: -Date.now(),
+                            experienceType: 'Docencia Universitaria',
+                            startedAt: '',
+                            endedAt: '',
+                            certified: false,
+                            supportName: '',
+                            supportPath: '',
+                            supportFile: null,
+                          },
+                        ]);
+                      }}
+                      className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700"
+                    >
+                      <Plus size={12} className="inline-block mr-1" /> Agregar experiencia
+                    </button>
+                  </div>
                   <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3">
                     <p className="text-[11px] font-semibold text-indigo-800">Carga única de certificado consolidado</p>
                     <p className="mt-1 text-[11px] text-indigo-700">
@@ -1258,10 +1428,39 @@ export const AnalysisDetailView: React.FC<Props> = ({
                   </div>
                   <div className="space-y-2">
                     {experienceDraft.map((row, index) => (
-                      <div key={row.id} className="grid gap-2 md:grid-cols-[1.3fr_1fr] rounded-lg border border-slate-200 p-3">
+                      <div key={`${row.id}-${index}`} className="grid gap-2 md:grid-cols-[1.3fr_1fr] rounded-lg border border-slate-200 p-3">
                         <div>
-                          <p className="text-xs font-bold text-slate-800">{row.experienceType}</p>
-                          <p className="text-[11px] text-slate-500">{row.startedAt} - {row.endedAt || 'Actual'}</p>
+                          <input
+                            value={row.experienceType}
+                            onChange={(event) => {
+                              const next = [...experienceDraft];
+                              next[index] = { ...row, experienceType: event.target.value };
+                              setExperienceDraft(next);
+                            }}
+                            className="w-full max-w-[320px] rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-800"
+                          />
+                          <div className="mt-1 grid max-w-[360px] grid-cols-2 gap-2">
+                            <input
+                              type="date"
+                              value={row.startedAt}
+                              onChange={(event) => {
+                                const next = [...experienceDraft];
+                                next[index] = { ...row, startedAt: event.target.value };
+                                setExperienceDraft(next);
+                              }}
+                              className="rounded border border-slate-200 px-2 py-1 text-[11px]"
+                            />
+                            <input
+                              type="date"
+                              value={row.endedAt}
+                              onChange={(event) => {
+                                const next = [...experienceDraft];
+                                next[index] = { ...row, endedAt: event.target.value };
+                                setExperienceDraft(next);
+                              }}
+                              className="rounded border border-slate-200 px-2 py-1 text-[11px]"
+                            />
+                          </div>
                           <div className="mt-1">
                             <SupportPreviewLink path={row.supportPath} name={row.supportName} />
                           </div>
@@ -1285,6 +1484,14 @@ export const AnalysisDetailView: React.FC<Props> = ({
                             }}
                           />
                         </label>
+                        {row.id < 0 && (
+                          <button
+                            onClick={() => setExperienceDraft((prev) => prev.filter((_, i) => i !== index))}
+                            className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700"
+                          >
+                            Eliminar nuevo
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1292,12 +1499,65 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
                 <div>
                   <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Producción científica</p>
+                  <div className="mb-2">
+                    <button
+                      onClick={() => {
+                        setPublicationDraft((prev) => [
+                          ...prev,
+                          {
+                            id: -Date.now(),
+                            publicationTitle: '',
+                            quartile: 'Q4',
+                            publicationYear: String(new Date().getFullYear()),
+                            sourceKind: 'MANUAL',
+                          },
+                        ]);
+                      }}
+                      className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700"
+                    >
+                      <Plus size={12} className="inline-block mr-1" /> Agregar investigación
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {publicationDraft.map((row, index) => (
-                      <div key={row.id} className="grid gap-2 md:grid-cols-[1.8fr_0.8fr_0.8fr] rounded-lg border border-slate-200 p-3">
+                      <div key={`${row.id}-${index}`} className="grid gap-2 md:grid-cols-[1.8fr_0.8fr_0.8fr] rounded-lg border border-slate-200 p-3">
                         <div>
-                          <p className="text-xs font-bold text-slate-800">{row.publicationTitle}</p>
-                          <p className="text-[11px] text-slate-500">Quartil: {row.quartile || 'Q4'} · Año: {row.publicationYear || '-'}</p>
+                          <input
+                            value={row.publicationTitle}
+                            onChange={(event) => {
+                              const next = [...publicationDraft];
+                              next[index] = { ...row, publicationTitle: event.target.value };
+                              setPublicationDraft(next);
+                            }}
+                            placeholder="Título de investigación"
+                            className="w-full rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-800"
+                          />
+                          <div className="mt-1 grid max-w-[260px] grid-cols-2 gap-2">
+                            <select
+                              value={row.quartile || 'Q4'}
+                              onChange={(event) => {
+                                const next = [...publicationDraft];
+                                next[index] = { ...row, quartile: event.target.value };
+                                setPublicationDraft(next);
+                              }}
+                              className="rounded border border-slate-200 px-2 py-1 text-[11px]"
+                            >
+                              <option>Q1</option>
+                              <option>Q2</option>
+                              <option>Q3</option>
+                              <option>Q4</option>
+                            </select>
+                            <input
+                              type="number"
+                              value={row.publicationYear || ''}
+                              onChange={(event) => {
+                                const next = [...publicationDraft];
+                                next[index] = { ...row, publicationYear: event.target.value };
+                                setPublicationDraft(next);
+                              }}
+                              className="rounded border border-slate-200 px-2 py-1 text-[11px]"
+                            />
+                          </div>
                         </div>
                         <select
                           value={row.sourceKind}
@@ -1315,6 +1575,14 @@ export const AnalysisDetailView: React.FC<Props> = ({
                         <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 text-center">
                           {row.sourceKind === 'MANUAL' ? 'Sin soporte' : 'Con soporte'}
                         </div>
+                        {row.id < 0 && (
+                          <button
+                            onClick={() => setPublicationDraft((prev) => prev.filter((_, i) => i !== index))}
+                            className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700"
+                          >
+                            Eliminar nuevo
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

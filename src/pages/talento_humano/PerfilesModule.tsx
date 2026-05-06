@@ -1660,9 +1660,33 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
 
   const handleSaveProfileEvidence = async (
     payload: {
-      titles: Array<{ id: number; titleLevel?: string; supportName: string; supportPath: string; supportFile?: File | null }>;
-      experiences: Array<{ id: number; supportName: string; supportPath: string; supportFile?: File | null }>;
-      publications: Array<{ id: number; sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL' }>;
+      titles: Array<{
+        id: number;
+        titleName: string;
+        titleLevel?: string;
+        originUniversity?: string;
+        titleConvalidated?: boolean;
+        supportName: string;
+        supportPath: string;
+        supportFile?: File | null;
+      }>;
+      experiences: Array<{
+        id: number;
+        experienceType: string;
+        startedAt: string;
+        endedAt: string;
+        certified: boolean;
+        supportName: string;
+        supportPath: string;
+        supportFile?: File | null;
+      }>;
+      publications: Array<{
+        id: number;
+        publicationTitle: string;
+        quartile: string;
+        publicationYear: string;
+        sourceKind: 'SCOPUS' | 'ORCID' | 'MANUAL';
+      }>;
     },
   ) => {
     if (!selectedAnalysisRequest) return;
@@ -1778,15 +1802,31 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           supportPath = uploadResultsById.get(row.id)!.url;
         }
 
+        if (row.id <= 0) {
+          const titleName = String(row.titleName || '').trim();
+          if (!titleName) continue;
+          titleReducers.push(async () => {
+            await runReducer('add_application_title', {
+              trackingId: selectedAnalysisRequest.id,
+              titleName,
+              titleLevel: row.titleLevel || 'Pregrado',
+              originUniversity: row.originUniversity || undefined,
+              titleConvalidated: Boolean(row.titleConvalidated),
+              supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
+              supportPath,
+              supportUrl: supportPath,
+            });
+          });
+          continue;
+        }
+
         const hasChanged =
           (current?.supportName || undefined) !== (supportName || undefined) ||
           (current?.supportPath || undefined) !== (supportPath || undefined) ||
           (current?.titleLevel || undefined) !== (row.titleLevel || undefined) ||
           uploadResultsById.has(row.id);
 
-        if (!hasChanged) {
-          continue;
-        }
+        if (!hasChanged) continue;
 
         titleReducers.push(async () => {
           await runReducer('update_application_title_support', {
@@ -1808,14 +1848,29 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
           supportPath = uploadResultsById.get(row.id)!.url;
         }
 
+        if (row.id <= 0) {
+          if (!row.startedAt || !row.endedAt) continue;
+          experienceReducers.push(async () => {
+            await runReducer('add_application_experience', {
+              trackingId: selectedAnalysisRequest.id,
+              experienceType: row.experienceType || 'Docencia Universitaria',
+              startedAt: row.startedAt,
+              endedAt: row.endedAt,
+              certified: Boolean(row.certified),
+              supportName: row.supportFile instanceof File ? row.supportFile.name : supportName,
+              supportPath,
+              supportUrl: supportPath,
+            });
+          });
+          continue;
+        }
+
         const hasChanged =
           (current?.supportName || undefined) !== (supportName || undefined) ||
           (current?.supportPath || undefined) !== (supportPath || undefined) ||
           uploadResultsById.has(row.id);
 
-        if (!hasChanged) {
-          continue;
-        }
+        if (!hasChanged) continue;
 
         experienceReducers.push(async () => {
           await runReducer('update_application_experience_support', {
@@ -1827,6 +1882,23 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       }
 
       for (const row of payload.publications) {
+        if (row.id <= 0) {
+          const publicationTitle = String(row.publicationTitle || '').trim();
+          if (!publicationTitle) continue;
+          publicationReducers.push(async () => {
+            await runReducer('add_application_publication', {
+              trackingId: selectedAnalysisRequest.id,
+              publicationTitle,
+              quartile: row.quartile || 'Q4',
+              publicationYear: row.publicationYear || String(new Date().getFullYear()),
+              publicationType: 'Artículo',
+              authorsCount: 1,
+              sourceKind: row.sourceKind,
+            });
+          });
+          continue;
+        }
+
         publicationReducers.push(async () => {
           await runReducer('update_application_publication_source_kind', {
             id: row.id,
