@@ -1031,8 +1031,8 @@ export const init = spacetimedb.init((ctx) => {
       scopus_api_key: '',
       orcid_client_id: '',
       orcid_client_secret: '',
-      ai_provider: 'gemini',
-      ai_model: 'gemini-2.5-flash',
+      ai_provider: 'openrouter',
+      ai_model: 'google/gemma-3-27b-it:free,google/gemma-2-9b-it:free',
       updated_at: ctx.timestamp,
     });
   }
@@ -1067,10 +1067,10 @@ export const init = spacetimedb.init((ctx) => {
       retrieval_top_k: 5,
       chunk_size: 1500,
       chunk_overlap: 200,
-      selected_provider: 'gemini',
-      selected_model: 'gemini-2.5-flash',
-      fallback_provider: 'apifreellm',
-      fallback_model: 'gpt-4o-mini',
+      selected_provider: 'openrouter',
+      selected_model: 'google/gemma-3-27b-it:free',
+      fallback_provider: 'openrouter',
+      fallback_model: 'google/gemma-2-9b-it:free',
       system_context: 'Responde con base en normativa interna, priorizando documentos RAG activos y reglas de escalafón UDES.',
       updated_at: ctx.timestamp,
     });

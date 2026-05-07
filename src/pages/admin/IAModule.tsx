@@ -51,8 +51,6 @@ export const IAModule = ({ aiConfig, onAiConfigChange, actions, onActionsChange 
             }
             className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
           >
-            <option value="gemini">Gemini</option>
-            <option value="apifreellm">APIFreeLLM</option>
             <option value="openrouter">OpenRouter</option>
           </select>
         </div>
@@ -62,7 +60,7 @@ export const IAModule = ({ aiConfig, onAiConfigChange, actions, onActionsChange 
           <input
             value={aiConfig.model}
             onChange={(e) => onAiConfigChange({ ...aiConfig, model: e.target.value })}
-            placeholder="gemini-2.5-flash"
+            placeholder="google/gemma-3-27b-it:free"
             className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
           />
           <button

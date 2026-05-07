@@ -4,8 +4,6 @@ import type { ApiConfig } from '../types/config';
 import {
   testScopusConnection,
   testOrcidConnection,
-  testGeminiConnection,
-  testApifreellmConnection,
   testOpenRouterConnection,
   generateRegistrationCode,
   type IntegrationTestResult,
@@ -25,18 +23,6 @@ export const APIConfigSection: React.FC<Props> = ({ apiConfig, onUpdateApiConfig
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
 
   const testConnections = {
-    geminiApiKey: async () => {
-      setTesting((p) => ({ ...p, geminiApiKey: true }));
-      const result = await testGeminiConnection(apiConfig.geminiApiKey);
-      setTestResults((p) => ({ ...p, geminiApiKey: result }));
-      setTesting((p) => ({ ...p, geminiApiKey: false }));
-    },
-    apifreellmApiKey: async () => {
-      setTesting((p) => ({ ...p, apifreellmApiKey: true }));
-      const result = await testApifreellmConnection(apiConfig.apifreellmApiKey);
-      setTestResults((p) => ({ ...p, apifreellmApiKey: result }));
-      setTesting((p) => ({ ...p, apifreellmApiKey: false }));
-    },
     openrouterApiKey: async () => {
       setTesting((p) => ({ ...p, openrouterApiKey: true }));
       const result = await testOpenRouterConnection(apiConfig.openrouterApiKey);
@@ -57,7 +43,7 @@ export const APIConfigSection: React.FC<Props> = ({ apiConfig, onUpdateApiConfig
     },
   };
 
-  const handleGenerateCode = (service: 'scopus' | 'orcid' | 'gemini') => {
+  const handleGenerateCode = (service: 'scopus' | 'orcid') => {
     const code = generateRegistrationCode(service);
     setRegistrationCode(code);
     setShowRegistration(service);
@@ -178,7 +164,7 @@ export const APIConfigSection: React.FC<Props> = ({ apiConfig, onUpdateApiConfig
           )}
           {showRegistrationBtn && (
             <button
-              onClick={() => handleGenerateCode(field as 'scopus' | 'orcid' | 'gemini')}
+              onClick={() => handleGenerateCode(field as 'scopus' | 'orcid')}
               className="flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600"
             >
               Código de registro
@@ -198,27 +184,15 @@ export const APIConfigSection: React.FC<Props> = ({ apiConfig, onUpdateApiConfig
       <div className="space-y-4 rounded-[2rem] border border-slate-100 bg-white p-8 shadow-xl">
         <div className="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
           <p className="text-sm font-semibold text-blue-900">
-            💡 Prueba la conexión de cada servicio y genera códigos de registro si es necesario.
+            💡 El motor IA usa exclusivamente OpenRouter con modelos gratuitos (:free). Prueba la conexión y guarda la API Key activa.
           </p>
         </div>
-
-        <APIField
-          field="geminiApiKey"
-          label="Google Gemini API Key"
-          testFn={testConnections.geminiApiKey}
-          showRegistrationBtn={true}
-        />
-
-        <APIField
-          field="apifreellmApiKey"
-          label="APIFreeLLM API Key"
-          testFn={testConnections.apifreellmApiKey}
-        />
 
         <APIField
           field="openrouterApiKey"
           label="OpenRouter API Key"
           testFn={testConnections.openrouterApiKey}
+          showRegistrationBtn={false}
         />
 
         <APIField

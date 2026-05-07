@@ -79,10 +79,8 @@ export const RAGConfigSection: React.FC<Props> = ({
   });
 
   const hasApiKeyForSelected = useMemo(() => {
-    if (ragConfig.selectedProvider === 'gemini') return !!apiConfig.geminiApiKey.trim();
-    if (ragConfig.selectedProvider === 'openrouter') return !!apiConfig.openrouterApiKey.trim();
-    return !!apiConfig.apifreellmApiKey.trim();
-  }, [ragConfig.selectedProvider, apiConfig.geminiApiKey, apiConfig.apifreellmApiKey, apiConfig.openrouterApiKey]);
+    return !!apiConfig.openrouterApiKey.trim();
+  }, [apiConfig.openrouterApiKey]);
 
   const activeDocuments = ragDocuments.filter((doc) => doc.active);
   const activeNormatives = ragNormatives.filter((n) => n.active);
@@ -186,11 +184,9 @@ export const RAGConfigSection: React.FC<Props> = ({
               <label className="ml-1 text-xs font-black uppercase tracking-widest text-slate-400">Proveedor principal</label>
               <select
                 value={ragConfig.selectedProvider}
-                onChange={(e) => onChangeRagConfig({ ...ragConfig, selectedProvider: e.target.value as RagConfig['selectedProvider'] })}
+                onChange={() => onChangeRagConfig({ ...ragConfig, selectedProvider: 'openrouter' })}
                 className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
               >
-                <option value="gemini">Gemini</option>
-                <option value="apifreellm">APIFreeLLM</option>
                 <option value="openrouter">OpenRouter</option>
               </select>
             </div>
@@ -200,18 +196,16 @@ export const RAGConfigSection: React.FC<Props> = ({
                 value={ragConfig.selectedModel}
                 onChange={(e) => onChangeRagConfig({ ...ragConfig, selectedModel: e.target.value })}
                 className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
-                placeholder="gemini-2.5-flash"
+                placeholder="google/gemma-3-27b-it:free"
               />
             </div>
             <div className="space-y-2">
               <label className="ml-1 text-xs font-black uppercase tracking-widest text-slate-400">Proveedor fallback</label>
               <select
                 value={ragConfig.fallbackProvider}
-                onChange={(e) => onChangeRagConfig({ ...ragConfig, fallbackProvider: e.target.value as RagConfig['fallbackProvider'] })}
+                onChange={() => onChangeRagConfig({ ...ragConfig, fallbackProvider: 'openrouter' })}
                 className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
               >
-                <option value="gemini">Gemini</option>
-                <option value="apifreellm">APIFreeLLM</option>
                 <option value="openrouter">OpenRouter</option>
               </select>
             </div>
@@ -221,7 +215,7 @@ export const RAGConfigSection: React.FC<Props> = ({
                 value={ragConfig.fallbackModel}
                 onChange={(e) => onChangeRagConfig({ ...ragConfig, fallbackModel: e.target.value })}
                 className="w-full rounded-2xl border-2 border-transparent bg-slate-50 px-5 py-3.5 font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white"
-                placeholder="gpt-4o-mini"
+                placeholder="google/gemma-2-9b-it:free"
               />
             </div>
             <div className="space-y-2 md:col-span-2">

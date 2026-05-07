@@ -48,10 +48,8 @@ export const RagSettingsModule: React.FC<Props> = ({
   });
 
   const hasApiKeyForSelected = useMemo(() => {
-    if (ragConfig.selectedProvider === 'gemini') return !!apiConfig.geminiApiKey.trim();
-    if (ragConfig.selectedProvider === 'openrouter') return !!apiConfig.openrouterApiKey.trim();
-    return !!apiConfig.apifreellmApiKey.trim();
-  }, [ragConfig.selectedProvider, apiConfig.geminiApiKey, apiConfig.apifreellmApiKey, apiConfig.openrouterApiKey]);
+    return !!apiConfig.openrouterApiKey.trim();
+  }, [apiConfig.openrouterApiKey]);
 
   const handleSave = async () => {
     try {
@@ -151,8 +149,6 @@ export const RagSettingsModule: React.FC<Props> = ({
               }
               className={inputCls}
             >
-              <option value="gemini">Gemini</option>
-              <option value="apifreellm">APIFreeLLM</option>
               <option value="openrouter">OpenRouter</option>
             </select>,
           )}
@@ -162,7 +158,7 @@ export const RagSettingsModule: React.FC<Props> = ({
               value={ragConfig.selectedModel}
               onChange={(e) => onChangeRagConfig({ ...ragConfig, selectedModel: e.target.value })}
               className={inputCls}
-              placeholder="gemini-2.5-flash"
+              placeholder="google/gemma-3-27b-it:free"
             />,
           )}
           {field(
@@ -174,8 +170,6 @@ export const RagSettingsModule: React.FC<Props> = ({
               }
               className={inputCls}
             >
-              <option value="gemini">Gemini</option>
-              <option value="apifreellm">APIFreeLLM</option>
               <option value="openrouter">OpenRouter</option>
             </select>,
           )}
@@ -185,7 +179,7 @@ export const RagSettingsModule: React.FC<Props> = ({
               value={ragConfig.fallbackModel}
               onChange={(e) => onChangeRagConfig({ ...ragConfig, fallbackModel: e.target.value })}
               className={inputCls}
-              placeholder="gpt-4o-mini"
+              placeholder="google/gemma-2-9b-it:free"
             />,
           )}
           <div className="space-y-2 md:col-span-2">

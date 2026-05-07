@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { AppLanguage, BarrierDiagnosis, RequestRecord } from '../../../types/domain';
 import { normalizeText, toSafeNumber } from './helpers';
-import type { AiCriterionRow, AnalysisVersionRecord, ChatMessage, ManualRow, SelectedAnalysis } from './types';
+import type { AiCriterionRow, AnalysisVersionRecord, ChatMessage, ManualRow, SelectedAnalysis, MatrixRow } from './types';
 import { openPrintFormatWindow } from './printFormatWindow';
 
 interface Props {
@@ -120,12 +120,55 @@ interface Props {
   currentLanguages?: AppLanguage[];
 }
 
-const BarrierAlertPanel = ({ bd }: { bd: BarrierDiagnosis }) => {
+interface BarrierAlertPanelProps {
+  bd: BarrierDiagnosis;
+  matrixTotal: number;
+  rows: MatrixRow[];
+}
+
+const BarrierAlertPanel = ({ bd, matrixTotal, rows }: BarrierAlertPanelProps) => {
+  // Generar explicación detallada de qué falta
+  const generateDetailedExplanation = (): string[] => {
+    const explanations: string[] = [];
+    const puntajeFaltante = Math.max(0, bd.requiredPts - matrixTotal);
+    
+    if (puntajeFaltante > 0) {
+      explanations.push(`Puntaje tabla actual: ${matrixTotal.toFixed(1)} pts`);
+      explanations.push(`Requiere: ${bd.requiredPts} pts para categoría ${bd.blockedCategory}`);
+      explanations.push(`Faltan: ${puntajeFaltante.toFixed(1)} pts`);
+      
+      // Análisis detallado por sección
+      const experienciaRows = rows.filter(r => r.section === 'Experiencia');
+      const estudiosRows = rows.filter(r => r.section === 'Estudios Cursados');
+      
+      const experienciaTotal = experienciaRows.reduce((acc, r) => acc + r.puntaje, 0);
+      const estudiosTotal = estudiosRows.reduce((acc, r) => acc + r.puntaje, 0);
+      
+      if (experienciaTotal > 0) {
+        const maxExperiencia = experienciaRows.reduce((acc, r) => acc + (r.cantidad * r.valor), 0);
+        const deficitExperiencia = Math.max(0, maxExperiencia - experienciaTotal);
+        if (deficitExperiencia > 0) {
+          explanations.push(`• Experiencia: ${experienciaTotal.toFixed(1)} pts (potencial faltante: ${deficitExperiencia.toFixed(1)} pts)`);
+        } else {
+          explanations.push(`• Experiencia: ${experienciaTotal.toFixed(1)} pts (completa)`);
+        }
+      }
+      
+      if (estudiosTotal > 0) {
+        explanations.push(`• Formación académica: ${estudiosTotal.toFixed(1)} pts`);
+      }
+    }
+    
+    return explanations;
+  };
+
+  const detailedExplanation = generateDetailedExplanation();
+  
   const blockers = [
     bd.missingTitle && { label: `Título mínimo requerido: ${bd.requiredTitle}`, icon: '🎓' },
     bd.missingIdioma && { label: `Acreditación de idioma nivel ${bd.requiredIdioma}`, icon: '🌐' },
     bd.missingPts && {
-      label: `Puntaje total: requiere ${bd.requiredPts} pts, tiene aprox. ${Math.round(bd.ptsActuales)} (faltan ${Math.round(Math.max(0, bd.requiredPts - bd.ptsActuales))} pts)`,
+      label: `Puntaje tabla actual: ${matrixTotal.toFixed(1)} pts. Requiere ${bd.requiredPts} pts (faltan ${(Math.max(0, bd.requiredPts - matrixTotal)).toFixed(1)} pts).`,
       icon: '📊',
     },
   ].filter(Boolean) as { label: string; icon: string }[];
@@ -148,9 +191,16 @@ const BarrierAlertPanel = ({ bd }: { bd: BarrierDiagnosis }) => {
         {blockers.map((b, i) => (
           <div key={i} className="flex items-start gap-3 bg-white border-2 border-orange-300 rounded-xl px-4 py-3">
             <span className="text-xl shrink-0">{b.icon}</span>
-            <div>
+            <div className="flex-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-0.5">Requisito no cumplido</p>
               <p className="text-sm font-bold text-slate-800">{b.label}</p>
+              {bd.missingPts && i === 2 && detailedExplanation.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-orange-200 text-[12px] text-slate-700 space-y-1">
+                  {detailedExplanation.map((exp, idx) => (
+                    <p key={idx} className="font-medium">{exp}</p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -367,6 +417,11 @@ export const AnalysisDetailView: React.FC<Props> = ({
     const aiRow = aiRows.find((entry) => normalizeText(entry.criterio) === normalizeText(row.criterio));
     return acc + (aiRow ? aiRow.puntajeSugerido : row.hasSupport ? row.puntaje : 0);
   }, 0);
+
+  const matrixSubtotal = selectedAnalysis.matrixTotal;
+  const aiSubtotal = aiMatrixTotal;
+  const motorNormativeScore = selectedAnalysis.suggested.finalPts;
+  const officialFileScore = selectedAnalysisRequest.finalPts;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800 rounded-3xl border border-slate-200">
@@ -942,19 +997,29 @@ export const AnalysisDetailView: React.FC<Props> = ({
           </div>
 
           <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Puntaje Motor Escalafón</p>
-            <h3 className="text-3xl font-black text-slate-800">{selectedAnalysis.suggested.finalPts.toFixed(1)}</h3>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Puntaje total matriz (motor)</p>
+            <h3 className="text-3xl font-black text-slate-800">{matrixSubtotal.toFixed(1)}</h3>
+            <p className="mt-2 text-[11px] font-semibold text-slate-500">
+              Motor normativo (con topes): {motorNormativeScore.toFixed(1)}
+            </p>
           </div>
 
           <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Puntaje Oficial Expediente</p>
-            <h3 className="text-3xl font-black text-slate-800">{selectedAnalysisRequest.finalPts.toFixed(1)}</h3>
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Puntaje tabla {aiRows.length > 0 ? 'con ajuste IA' : 'sin ajuste IA'}</p>
+            <h3 className="text-3xl font-black text-slate-800">{aiSubtotal.toFixed(1)}</h3>
+            <p className="mt-2 text-[11px] font-semibold text-slate-500">
+              Puntaje oficial expediente: {officialFileScore.toFixed(1)}
+            </p>
           </div>
         </div>
 
         {/* Barrier Alert Panel */}
         {selectedAnalysis.suggested.barrierDiagnosis && (
-          <BarrierAlertPanel bd={selectedAnalysis.suggested.barrierDiagnosis} />
+          <BarrierAlertPanel 
+            bd={selectedAnalysis.suggested.barrierDiagnosis}
+            matrixTotal={matrixSubtotal}
+            rows={selectedAnalysis.rows}
+          />
         )}
 
 
@@ -1063,9 +1128,32 @@ export const AnalysisDetailView: React.FC<Props> = ({
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-3 bg-slate-50 border-t border-slate-200">
-            <p className="text-[10px] text-slate-500 font-semibold">
-              * El tope de experiencia es el máximo de puntos que puede aportar la experiencia para cada categoría. La experiencia excedente no se pierde pero solo se activa al ascender de categoría (Saturación Activa). · Puntaje docente actual en motor: <strong className="text-slate-800">{selectedAnalysis.suggested.finalPts.toFixed(1)} pts</strong>.
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 space-y-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 mb-2">¿Qué es el Tope Normativo de Experiencia?</p>
+              <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
+                El <strong>tope normativo</strong> es el máximo de puntos que la experiencia laboral y docente puede aportar al cálculo de puntaje para cada categoría, según los Acuerdos 003/2013 y 008/2019 de UDES. 
+                Este límite se establece porque la carrera académica debe construirse sobre un balance entre formación académica (títulos) y experiencia, no únicamente experiencia.
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 mb-2">¿Por Qué se Aplica?</p>
+              <ul className="text-[10px] text-slate-600 space-y-1 list-disc list-inside font-medium">
+                <li>Garantiza equidad: docentes con muchos años no dominan automáticamente categorías superiores.</li>
+                <li>Incentiva formación académica: requiere títulos avanzados (Maestría, Doctorado) para ascender.</li>
+                <li>Evita saturación: impide que un docente con 30 años de experiencia acumule miles de puntos.</li>
+                <li>Asegura calidad: combinación balanceada de experiencia + formación + producción intelectual.</li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-600 mb-2">Saturación Activa (Experiencia Excedente)</p>
+              <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
+                Si certificas más experiencia que el tope permitido, <strong>no se pierde</strong>. Queda <strong>activa pero bloqueada</strong> hasta que asciendes de categoría. 
+                En ese momento, el tope se incrementa (p. ej., de 250 pts a 350 pts) y el excedente se activa automáticamente.
+              </p>
+            </div>
+            <p className="text-[10px] text-slate-600 font-semibold pt-1 border-t border-slate-200">
+              · Puntaje docente actual en motor: <strong className="text-slate-800">{selectedAnalysis.suggested.finalPts.toFixed(1)} pts</strong>
             </p>
           </div>
         </div>

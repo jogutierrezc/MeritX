@@ -116,8 +116,8 @@ const DEFAULT_RESEND_CONFIG: ResendConfig = {
 };
 
 const DEFAULT_AI_CONFIG: AIConfig = {
-  provider: 'gemini',
-  model: 'gemini-2.5-flash',
+  provider: 'openrouter',
+  model: 'google/gemma-3-27b-it:free,google/gemma-2-9b-it:free',
   temperature: 0.7,
   maxTokens: 2048,
 };
@@ -136,10 +136,10 @@ const DEFAULT_RAG_CONFIG: RagConfig = {
   retrievalTopK: 5,
   chunkSize: 1200,
   chunkOverlap: 150,
-  selectedProvider: 'gemini',
-  selectedModel: 'gemini-2.5-flash',
-  fallbackProvider: 'apifreellm',
-  fallbackModel: 'gpt-4o-mini',
+  selectedProvider: 'openrouter',
+  selectedModel: 'google/gemma-3-27b-it:free',
+  fallbackProvider: 'openrouter',
+  fallbackModel: 'google/gemma-2-9b-it:free',
   systemContext:
     'Eres un asistente juridico-academico para escalafon docente UDES. Responde con soporte normativo, cita fuentes del contexto RAG y explica criterios de puntaje.',
 };
@@ -1098,7 +1098,7 @@ const AdminPortal = () => {
                 <div>
                 <h2 className="text-3xl font-black tracking-tight text-slate-800">Configuracion de API</h2>
                 <p className="font-medium text-slate-500">
-                  Conecta el sistema con Gemini, APIFreeLLM, SCOPUS y ORCID.
+                  Conecta el sistema con OpenRouter (modelos gratis), SCOPUS y ORCID.
                 </p>
                 </div>
                 <button

@@ -1,5 +1,5 @@
 import { MeritxReportPayload } from './meritxReportWindow';
-import { normalizeText, normalizeTitleLevel } from './helpers';
+import { normalizeText } from './helpers';
 
 const formatNumber = (val: number) =>
     val.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -35,22 +35,31 @@ export const buildPrintFormatHtml = ({
         ? `No acredita el nivel de idioma requerido (${barrier.requiredIdioma}).`
         : '';
 
+    const titleValueByLevel = (level: string) => {
+        const normalized = normalizeText(level);
+        if (normalized.includes('doctor')) return 400;
+        if (normalized.includes('maestr') || normalized.includes('magister')) return 200;
+        if (normalized.includes('especial')) return 90;
+        return 300;
+    };
+
+    const sumYears = (type: string) => {
+        return selectedAnalysis.experiences
+            .filter((e) => normalizeText(e.experienceType).includes(normalizeText(type)))
+            .reduce((acc, e) => {
+                const from = new Date(e.startedAt);
+                const to = e.endedAt ? new Date(e.endedAt) : new Date();
+                if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return acc;
+                return acc + ((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+            }, 0);
+    };
+
     // 1. Estudios Cursados
-    const usedRows = new Set();
     const titlesRows = selectedAnalysis.titles.map((t) => {
-        // Find the corresponding row in selectedAnalysis.rows to get the points
-        const row = selectedAnalysis.rows.find(r => {
-            if (r.section !== 'Estudios Cursados') return false;
-            if (normalizeTitleLevel(r.criterio) !== normalizeTitleLevel(t.titleLevel || '')) return false;
-            if (usedRows.has(r)) return false;
-            return true;
-        });
-        if (row) {
-            usedRows.add(row);
-        }
-        const cant = row ? 1 : '';
-        const valor = row ? formatNumber(row.valor) : '';
-        const puntaje = row ? formatNumber(row.puntaje) : '0.0';
+        const valorNum = titleValueByLevel(t.titleLevel || '');
+        const cant = 1;
+        const valor = formatNumber(valorNum);
+        const puntaje = formatNumber(valorNum);
         return `
       <tr>
         <td>${escapeHtml(t.titleLevel || '')}</td>
@@ -63,10 +72,10 @@ export const buildPrintFormatHtml = ({
     });
 
     const languagesRows = (currentLanguages || []).map((l: any) => {
-        const row = selectedAnalysis.rows.find(r => r.section === 'Estudios Cursados' && normalizeText(r.criterio) === 'IDIOMA EXTRANJERO');
-        const cant = row ? 1 : '';
-        const valor = row ? formatNumber(row.valor) : '';
-        const puntaje = row ? formatNumber(row.puntaje) : '0.0';
+                const row = selectedAnalysis.rows.find((r) => r.section === 'Estudios Cursados' && normalizeText(r.criterio) === 'idioma extranjero');
+                const cant = 1;
+                const valor = row ? formatNumber(row.valor) : formatNumber(30);
+                const puntaje = row ? formatNumber(row.valor) : '0.0';
         return `
       <tr>
         <td>IDIOMA EXTRANJERO (${escapeHtml(l.languageLevel)})</td>
@@ -81,31 +90,45 @@ export const buildPrintFormatHtml = ({
     const estudiosHtml = [...titlesRows, ...languagesRows].join('');
 
     // 2. Experiencia Laboral y Docente
-    const expRowsMap = new Map();
-    selectedAnalysis.experiences.forEach(e => {
-        const type = e.experienceType;
-        if (!expRowsMap.has(type)) {
-            expRowsMap.set(type, { years: 0 });
-        }
-    });
+        const expCriteria = [
+                { label: 'EXPERIENCIA LABORAL PROFESIONAL', key: 'profesional', defaultValor: 20 },
+                { label: 'EXPERIENCIA LABORAL DOCENCIA', key: 'docencia', defaultValor: 30 },
+                { label: 'EXPERIENCIA INVESTIGACIÓN', key: 'investig', defaultValor: 40 },
+        ];
 
-    // Get the calculated rows for experience
-    const expRowsHtml = selectedAnalysis.rows
-        .filter(r => r.section === 'Experiencia')
-        .map(r => {
-            const type = r.criterio;
-            const years = formatNumber(r.cantidad);
-            const valor = formatNumber(r.valor);
-            const puntaje = formatNumber(r.puntaje);
-            return `
-        <tr>
-          <td>${escapeHtml(type)}</td>
-          <td class="text-center">${years}</td>
-          <td class="text-center">${valor}</td>
-          <td class="text-center">${puntaje}</td>
-        </tr>
-      `;
+        const expRowsHtml = expCriteria.map((criterion) => {
+                const row = selectedAnalysis.rows.find(
+                        (r) => r.section === 'Experiencia' && normalizeText(r.criterio).includes(criterion.key),
+                );
+                const years = row ? row.cantidad : sumYears(criterion.key);
+                const valor = row ? row.valor : criterion.defaultValor;
+                const puntaje = row ? row.puntaje : 0;
+
+                return `
+                <tr>
+                    <td>${escapeHtml(criterion.label)}</td>
+                    <td class="text-center">${formatNumber(years)}</td>
+                    <td class="text-center">${formatNumber(valor)}</td>
+                    <td class="text-center">${formatNumber(puntaje)}</td>
+                </tr>
+            `;
         }).join('');
+
+        const productionRows = selectedAnalysis.rows.filter((r) => r.section === 'Otros');
+        const productionRowsHtml = productionRows
+                .map((r) => `
+            <tr>
+                <td>${escapeHtml(r.criterio)}</td>
+                <td>${escapeHtml(r.detalle || '-')}</td>
+                <td class="text-center">${formatNumber(r.valor)}</td>
+                <td class="text-center">${formatNumber(r.puntaje)}</td>
+            </tr>
+        `)
+                .join('');
+
+        const matrixSubtotal = selectedAnalysis.matrixTotal;
+        const normativeFinal = selectedAnalysis.suggested.finalPts;
+        const experienceApplied = Math.min(selectedAnalysis.suggested.ptsExpBruta, selectedAnalysis.suggested.appliedTope);
 
     // Soportes Presentados
     const soportesPresentados = selectedAnalysis.rows
@@ -337,11 +360,35 @@ export const buildPrintFormatHtml = ({
             </tbody>
         </table>
 
+        <!-- Producción / Investigación -->
+        <div class="section-title">3. Producción Intelectual e Investigación</div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 28%;">Criterio</th>
+                    <th style="width: 52%;">Detalle</th>
+                    <th style="width: 10%;">Valor</th>
+                    <th style="width: 10%;">Puntaje</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${productionRowsHtml || '<tr><td colspan="4" class="text-center">No se reporta producción intelectual registrada</td></tr>'}
+            </tbody>
+        </table>
+
         <!-- Resumen -->
         <table class="data-table">
             <tr>
-                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">PUNTAJE TOTAL ACUMULADO:</td>
-                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(selectedAnalysis.suggested.finalPts)}</td>
+                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">SUBTOTAL MATRIZ DOCUMENTAL:</td>
+                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(matrixSubtotal)}</td>
+            </tr>
+            <tr>
+                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">EXPERIENCIA NORMATIVA RECONOCIDA (CON TOPE):</td>
+                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(experienceApplied)}</td>
+            </tr>
+            <tr>
+                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">PUNTAJE TOTAL NORMATIVO FINAL:</td>
+                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(normativeFinal)}</td>
             </tr>
             <tr>
                 <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">CATEGORÍA DOCENTE ASIGNADA:</td>

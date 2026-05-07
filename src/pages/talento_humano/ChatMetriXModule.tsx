@@ -163,11 +163,7 @@ const toSafeNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const normalizeAiProvider = (value?: string): 'gemini' | 'apifreellm' | 'openrouter' => {
-  const normalized = normalizeForSearch(String(value || ''));
-  if (normalized.includes('openrouter') || normalized.includes('router')) return 'openrouter';
-  return normalized.includes('free') ? 'apifreellm' : 'gemini';
-};
+const normalizeAiProvider = (_value?: string): 'openrouter' => 'openrouter';
 
 const sanitizeOpenRouterModelList = (value?: string) => {
   const blocked = OPENROUTER_BLOCKED_MODELS.map((item) => normalizeForSearch(item));
@@ -183,40 +179,17 @@ const sanitizeOpenRouterModelList = (value?: string) => {
 const resolveAiRuntime = (params: {
   provider?: string;
   model?: string;
-  geminiKey?: string;
-  apifreellmKey?: string;
   openrouterKey?: string;
 }) => {
   const configuredProvider = normalizeAiProvider(params.provider);
-  
-  // Resolve keys with priority: Params (DB) > Environment Variables
-  const geminiKey = String(params.geminiKey || '').trim() || String(import.meta.env.VITE_GEMINI_API_KEY || '').trim();
-  const apifreellmKey = String(params.apifreellmKey || '').trim() || String(import.meta.env.VITE_APIFREELLM_API_KEY || '').trim();
+
   const openrouterKey = String(params.openrouterKey || '').trim() || String(import.meta.env.VITE_OPENROUTER_API_KEY || '').trim();
 
-  let provider: 'gemini' | 'apifreellm' | 'openrouter' = configuredProvider;
-  let activeKey = provider === 'gemini' ? geminiKey : provider === 'openrouter' ? openrouterKey : apifreellmKey;
-
-  // Global priority fallback if the active provider has no key
-  if (!activeKey) {
-    if (openrouterKey) {
-      provider = 'openrouter';
-      activeKey = openrouterKey;
-    } else if (apifreellmKey) {
-      provider = 'apifreellm';
-      activeKey = apifreellmKey;
-    } else if (geminiKey) {
-      provider = 'gemini';
-      activeKey = geminiKey;
-    }
-  }
+  const provider: 'openrouter' = configuredProvider;
+  const activeKey = openrouterKey;
 
   const requestedModel = String(params.model || '').trim();
-  const model = provider === 'gemini'
-    ? (requestedModel && !normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'gemini-2.5-flash')
-    : provider === 'openrouter'
-      ? sanitizeOpenRouterModelList(requestedModel)
-      : (requestedModel && normalizeForSearch(requestedModel).includes('free') ? requestedModel : 'apifreellm');
+  const model = sanitizeOpenRouterModelList(requestedModel);
 
   return { provider, model, activeKey };
 };
@@ -447,11 +420,9 @@ const ChatMetriXModule = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [apifreellmApiKey, setApifreellmApiKey] = useState('');
   const [openrouterApiKey, setOpenrouterApiKey] = useState('');
-  const [aiProvider, setAiProvider] = useState('gemini');
-  const [aiModel, setAiModel] = useState('gemini-2.5-flash');
+  const [aiProvider, setAiProvider] = useState('openrouter');
+  const [aiModel, setAiModel] = useState('google/gemma-3-27b-it:free,google/gemma-2-9b-it:free');
   const [ragSystemContext, setRagSystemContext] = useState('');
   const [ragTopK, setRagTopK] = useState(5);
   const [ragChunkSize, setRagChunkSize] = useState(1200);
@@ -510,14 +481,11 @@ const ChatMetriXModule = () => {
       if (apiTable) {
         const apiRows = Array.from(apiTable.iter()) as any[];
         const defaultCfg = apiRows.find((row) => row.configKey === 'default');
-        if (typeof defaultCfg?.geminiApiKey === 'string') setGeminiApiKey(defaultCfg.geminiApiKey.trim());
-        if (typeof defaultCfg?.apifreellmApiKey === 'string') setApifreellmApiKey(defaultCfg.apifreellmApiKey.trim());
         if (typeof defaultCfg?.openrouterApiKey === 'string') setOpenrouterApiKey(defaultCfg.openrouterApiKey.trim());
         if (defaultCfg?.aiProvider) setAiProvider(normalizeAiProvider(defaultCfg.aiProvider));
         if (defaultCfg?.aiModel) {
-          const provider = normalizeAiProvider(defaultCfg?.aiProvider);
           const model = String(defaultCfg.aiModel || '').trim();
-          setAiModel(provider === 'openrouter' ? sanitizeOpenRouterModelList(model) : model);
+          setAiModel(sanitizeOpenRouterModelList(model));
         }
       }
 
@@ -813,8 +781,6 @@ const ChatMetriXModule = () => {
     const runtime = resolveAiRuntime({
       provider: aiProvider,
       model: aiModel,
-      geminiKey: geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '',
-      apifreellmKey: apifreellmApiKey,
       openrouterKey: openrouterApiKey,
     });
     const provider = runtime.provider;
@@ -822,7 +788,7 @@ const ChatMetriXModule = () => {
     const activeKey = runtime.activeKey;
 
     if (!activeKey) {
-      window.alert('No se encontró API Key activa. Configura Gemini o APIFreeLLM en Configuración > API.');
+      window.alert('No se encontró API Key activa. Configura OpenRouter en Configuración > API.');
       return;
     }
 
@@ -870,54 +836,7 @@ const ChatMetriXModule = () => {
         ragSystemContext ? `\nPOLÍTICA RAG ADICIONAL:\n${ragSystemContext}` : '',
       ].join('\n');
 
-      let aiText = '';
-      if (provider === 'gemini') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: userPrompt }] }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      } else if (provider === 'openrouter') {
-        try {
-          aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt, OPENROUTER_PRESET_METRIX);
-        } catch (orError) {
-          console.warn('[ChatMetriX] OpenRouter falló, reintentando con Gemini:', orError);
-          const fallbackKey = geminiApiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
-          if (!fallbackKey) throw orError;
-          const fallbackRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${fallbackKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: userPrompt }] }],
-              systemInstruction: { parts: [{ text: baseSystemPrompt }] },
-            }),
-          });
-          if (!fallbackRes.ok) throw new Error(await fallbackRes.text());
-          const fallbackData = await fallbackRes.json();
-          aiText = fallbackData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        }
-      } else {
-        const res = await fetch('/api/apifreellm/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${activeKey}`,
-          },
-          body: JSON.stringify({
-            message: `${systemPrompt}\n\n${userPrompt}`,
-            model: model || 'apifreellm',
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        aiText = data.response || data.message || data.content || data.text || '';
-      }
+      const aiText = await requestOpenRouterText(model, activeKey, systemPrompt, userPrompt, OPENROUTER_PRESET_METRIX);
 
       const parsed = parseJsonFromText(aiText);
       if (!parsed) {
