@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   Award,
@@ -413,6 +413,29 @@ export const AnalysisDetailView: React.FC<Props> = ({
     MANUAL_TH: { label: 'Manual TH', color: 'border-emerald-300 bg-emerald-50', textColor: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800' },
   } as const;
 
+  const defaultEscalafonObservation = useMemo(() => {
+    const barrier = selectedAnalysis.suggested.barrierDiagnosis;
+    const reasons: string[] = [];
+    if (barrier?.missingTitle) reasons.push(`no acredita el título mínimo (${barrier.requiredTitle})`);
+    if (barrier?.missingIdioma) reasons.push(`no acredita idioma mínimo (${barrier.requiredIdioma})`);
+    if (barrier?.missingPts) reasons.push(`no alcanza el puntaje requerido (${barrier.requiredPts} pts)`);
+
+    const hasSignificantExperience = selectedAnalysis.suggested.ptsExpBruta >= 30;
+    const warning = hasSignificantExperience && reasons.length > 0
+      ? `Advertencia: aunque el docente acredita experiencia relevante (${selectedAnalysis.suggested.ptsExpBruta.toFixed(1)} pts brutos de experiencia), no procede ascenso de escalafón por ${reasons.join(', ')}.`
+      : '';
+
+    const conclusion = `Se recomienda mantener la categoría ${selectedAnalysis.suggested.finalCat.name.toUpperCase()} con ${selectedAnalysis.suggested.finalPts.toFixed(1)} puntos, hasta subsanar los requisitos normativos pendientes.`;
+
+    return [warning, conclusion].filter(Boolean).join(' ');
+  }, [selectedAnalysis]);
+
+  const [printEscalafonObservation, setPrintEscalafonObservation] = useState(defaultEscalafonObservation);
+
+  useEffect(() => {
+    setPrintEscalafonObservation(defaultEscalafonObservation);
+  }, [defaultEscalafonObservation, selectedAnalysisRequest.id]);
+
   const aiMatrixTotal = selectedAnalysis.rows.reduce((acc, row) => {
     const aiRow = aiRows.find((entry) => normalizeText(entry.criterio) === normalizeText(row.criterio));
     return acc + (aiRow ? aiRow.puntajeSugerido : row.hasSupport ? row.puntaje : 0);
@@ -463,7 +486,8 @@ export const AnalysisDetailView: React.FC<Props> = ({
                   meritxNarrative: safeNarrative,
                   generatedAt: null,
                   aiEngine,
-                  currentLanguages
+                  currentLanguages,
+                  escalafonObservation: printEscalafonObservation,
                 });
               }}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-100 font-medium text-sm">
@@ -479,6 +503,28 @@ export const AnalysisDetailView: React.FC<Props> = ({
               Cerrar análisis
             </button>
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <h3 className="text-sm font-black uppercase tracking-[0.12em] text-slate-700">Observación de escalafón para imprimible</h3>
+            <button
+              onClick={() => setPrintEscalafonObservation(defaultEscalafonObservation)}
+              className="px-3 py-1.5 rounded border border-slate-300 bg-slate-50 text-[11px] font-bold uppercase text-slate-700 hover:bg-slate-100"
+            >
+              Restaurar sugerencia
+            </button>
+          </div>
+          <textarea
+            value={printEscalafonObservation}
+            onChange={(event) => setPrintEscalafonObservation(event.target.value)}
+            rows={4}
+            placeholder="Escribe aquí una observación personalizada para el formato imprimible."
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+          />
+          <p className="mt-2 text-[11px] text-slate-500">
+            Este texto se imprimirá en la sección de Observaciones de Categorización y puede ajustarse caso por caso.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">

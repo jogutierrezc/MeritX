@@ -18,6 +18,7 @@ export type MeritxReportPayload = {
   generatedAt?: string | null;
   aiEngine?: { provider: string; model: string } | string;
   currentLanguages?: any[];
+  escalafonObservation?: string;
 };
 
 const escapeHtml = (value: string) =>

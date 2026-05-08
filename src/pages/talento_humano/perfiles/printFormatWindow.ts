@@ -16,7 +16,8 @@ const escapeHtml = (unsafe: string) => {
 export const buildPrintFormatHtml = ({
     selectedAnalysisRequest,
     selectedAnalysis,
-    currentLanguages
+  currentLanguages,
+  escalafonObservation,
 }: MeritxReportPayload) => {
     const generatedLabel = new Date().toLocaleDateString('es-CO', {
         year: 'numeric',
@@ -63,8 +64,17 @@ export const buildPrintFormatHtml = ({
         justificacionNarrativa = `El docente cumple con los parámetros establecidos para la categoría ${escapeHtml(selectedAnalysis.suggested.finalCat.name.toUpperCase())} según la matriz de escalafón. Puntaje total: ${computedTotal} puntos.`;
     }
 
-    // Also idioma is not explicitly in the checkboxes, maybe we add it or add to "Observaciones"
-    const observaciones = '';
+    const reasons: string[] = [];
+    if (barrier?.missingTitle) reasons.push(`título mínimo ${barrier.requiredTitle}`);
+    if (barrier?.missingIdioma) reasons.push(`idioma mínimo ${barrier.requiredIdioma}`);
+    if (barrier?.missingPts) reasons.push(`puntaje mínimo ${barrier.requiredPts}`);
+    const hasRelevantExperience = selectedAnalysis.suggested.ptsExpBruta >= 30;
+    const warningByTime = hasRelevantExperience && reasons.length > 0
+      ? `Advertencia: aunque el docente acredita experiencia relevante (${formatNumber(selectedAnalysis.suggested.ptsExpBruta)} pts brutos de experiencia), no procede ascenso de escalafón por incumplimiento de ${reasons.join(', ')}.`
+      : '';
+
+    const finalObservation = String(escalafonObservation || '').trim() || [justificacionNarrativa, warningByTime].filter(Boolean).join(' ');
+    const finalObservationHtml = escapeHtml(finalObservation).replace(/\n/g, '<br/>');
 
     const titleValueByLevel = (level: string) => {
         const normalized = normalizeText(level);
@@ -651,7 +661,7 @@ export const buildPrintFormatHtml = ({
         <td colspan="5" style="padding: 10px; border: 1px solid #333; vertical-align: top;">
           <div style="font-weight: bold; margin-bottom: 8px; color: #222; font-size: 9.5px;">OBSERVACIONES DE CATEGORIZACIÓN:</div>
           <div style="font-size: 8.5px; line-height: 1.6; color: #111; text-align: justify;">
-            ${escapeHtml(justificacionNarrativa)}
+            ${finalObservationHtml}
           </div>
         </td>
       </tr>
