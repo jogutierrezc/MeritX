@@ -30,10 +30,41 @@ export const buildPrintFormatHtml = ({
     const isMissingExp = (barrier?.missingPts && selectedAnalysis.suggested.ptsExpBruta === 0) ? 'X' : '';
     const isMissingProd = (barrier?.missingPts && selectedAnalysis.suggested.ptsPI === 0) ? 'X' : '';
 
+    // Calcular puntaje total PRIMERO (antes de usarlo en narrativa)
+    let totalPoints = 0;
+    selectedAnalysis.rows.forEach(row => {
+            totalPoints += row.puntaje || 0;
+    });
+    const computedTotal = formatNumber(totalPoints);
+
+    // Narrativa de justificación basada en barreras
+    let justificacionNarrativa = '';
+    if (barrier) {
+        const barrierTexts: string[] = [];
+        if (barrier.missingTitle) {
+            barrierTexts.push(`No cumple con la formación académica mínima requerida (requiere ${barrier.requiredTitle})`);
+        }
+        if (barrier.missingIdioma) {
+            barrierTexts.push(`No acredita el nivel de idioma mínimo requerido (requiere nivel ${barrier.requiredIdioma})`);
+        }
+        if (barrier.missingPts) {
+            barrierTexts.push(`Puntaje insuficiente (actualmente tiene ${computedTotal} puntos, requiere ${barrier.requiredPts} puntos)`);
+        }
+        
+        if (barrierTexts.length > 0) {
+            justificacionNarrativa = `Se asigna la categoría ${escapeHtml(selectedAnalysis.suggested.finalCat.name.toUpperCase())} debido a que el docente no cumple con los requisitos mínimos para la categoría inmediatamente superior: ${barrierTexts.join('; ')}. `;
+            if (selectedAnalysis.suggested.appliedTope > 0 && selectedAnalysis.suggested.appliedTope < selectedAnalysis.suggested.ptsExpBruta) {
+                justificacionNarrativa += `Adicionalmente, la experiencia laboral se aplicó con tope normativo de ${formatNumber(selectedAnalysis.suggested.appliedTope)} años conforme a la normativa institucional.`;
+            }
+        } else {
+            justificacionNarrativa = `El docente cumple con los parámetros establecidos para la categoría ${escapeHtml(selectedAnalysis.suggested.finalCat.name.toUpperCase())} según la matriz de escalafón. Puntaje total: ${computedTotal} puntos.`;
+        }
+    } else {
+        justificacionNarrativa = `El docente cumple con los parámetros establecidos para la categoría ${escapeHtml(selectedAnalysis.suggested.finalCat.name.toUpperCase())} según la matriz de escalafón. Puntaje total: ${computedTotal} puntos.`;
+    }
+
     // Also idioma is not explicitly in the checkboxes, maybe we add it or add to "Observaciones"
-    const observaciones = barrier?.missingIdioma
-        ? `No acredita el nivel de idioma requerido (${barrier.requiredIdioma}).`
-        : '';
+    const observaciones = '';
 
     const titleValueByLevel = (level: string) => {
         const normalized = normalizeText(level);
@@ -100,30 +131,39 @@ export const buildPrintFormatHtml = ({
                 const row = selectedAnalysis.rows.find(
                         (r) => r.section === 'Experiencia' && normalizeText(r.criterio).includes(criterion.key),
                 );
-                const years = row ? row.cantidad : sumYears(criterion.key);
-                const valor = row ? row.valor : criterion.defaultValor;
-                const puntaje = row ? row.puntaje : 0;
+                // Solo mostrar si hay puntaje > 0
+                if (!row || row.puntaje === 0) return '';
+                
+                const years = row.cantidad || 0;
+                const valor = row.valor || 0;
+                const puntaje = row.puntaje || 0;
+                const detalle = row.detalle ? `${escapeHtml(row.detalle)}` : '';
 
                 return `
-                <tr>
-                    <td>${escapeHtml(criterion.label)}</td>
-                    <td class="text-center">${formatNumber(years)}</td>
-                    <td class="text-center">${formatNumber(valor)}</td>
-                    <td class="text-center">${formatNumber(puntaje)}</td>
+                <tr class="row-data">
+                    <td class="label-cell">${escapeHtml(criterion.label)}</td>
+                    <td class="input-cell">${detalle}</td>
+                    <td class="num-cell">${formatNumber(years)}</td>
+                    <td class="num-cell">${formatNumber(valor)}</td>
+                    <td class="zero-cell">${formatNumber(puntaje)}</td>
                 </tr>
             `;
         }).join('');
 
         const productionRows = selectedAnalysis.rows.filter((r) => r.section === 'Otros');
         const productionRowsHtml = productionRows
-                .map((r) => `
-            <tr>
-                <td>${escapeHtml(r.criterio)}</td>
-                <td>${escapeHtml(r.detalle || '-')}</td>
-                <td class="text-center">${formatNumber(r.valor)}</td>
-                <td class="text-center">${formatNumber(r.puntaje)}</td>
+                .map((r) => {
+                        const supportInfo = r.hasSupport ? `${escapeHtml(r.supportNote || 'Soporte adjunto')}` : '';
+                        return `
+            <tr class="row-data">
+                <td class="label-cell">${escapeHtml(r.criterio)}</td>
+                <td class="input-cell">${supportInfo}</td>
+                <td class="num-cell">${formatNumber(r.cantidad)}</td>
+                <td class="num-cell">${formatNumber(r.valor)}</td>
+                <td class="zero-cell">${formatNumber(r.puntaje)}</td>
             </tr>
-        `)
+        `;
+                })
                 .join('');
 
         const matrixSubtotal = selectedAnalysis.matrixTotal;
@@ -140,350 +180,502 @@ export const buildPrintFormatHtml = ({
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CATEGORIZACIÓN</title>
-    <style>
-        :root {
-            --udes-blue: #1a365d;
-            --udes-green: #2d6a4f;
-            --border-color: #000;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Categorización TAH-FT-004-UDES</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Arial+Narrow&display=swap');
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 10pt;
-            line-height: 1.3;
-            color: #333;
-            margin: 0;
-            padding: 0;
-            background-color: #f9f9f9;
-        }
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-        /* Estilos de Impresión */
-        @media print {
-            body { background-color: white; }
-            .no-print { display: none; }
-            .page-container {
-                box-shadow: none !important;
-                margin: 0 !important;
-                padding: 0.5cm !important;
-                width: 100% !important;
-            }
-            .section-title { background-color: #e2e8f0 !important; -webkit-print-color-adjust: exact; }
-            th { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; }
-            .section-title-dark { background-color: #1a365d !important; color: white !important; -webkit-print-color-adjust: exact; }
-        }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10px;
+    background: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 10px;
+  }
 
-        .page-container {
-            background-color: white;
-            width: 21cm; 
-            min-height: 29.7cm;
-            margin: 20px auto;
-            padding: 1.2cm;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            box-sizing: border-box;
-        }
+  .page {
+    width: 820px;
+    background: #fff;
+    padding: 18px 22px 22px 22px;
+    box-shadow: none;
+    font-family: Arial, Helvetica, sans-serif;
+  }
 
-        /* Encabezado */
-        .header-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-        }
+  /* ── HEADER ── */
+  .header {
+    display: flex;
+    align-items: stretch;
+    border: 1.5px solid #222;
+    margin-bottom: 10px;
+    font-family: Arial, Helvetica, sans-serif;
+  }
 
-        .header-table td {
-            border: 1px solid var(--border-color);
-            padding: 8px;
-            text-align: center;
-            vertical-align: middle;
-        }
+  .header-logo {
+    width: 180px;
+    min-height: 62px;
+    border-right: 1.5px solid #222;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+    gap: 4px;
+    font-family: Arial, Helvetica, sans-serif;
+  }
 
-        .logo-cell { width: 25%; }
-        .title-cell { width: 50%; font-weight: bold; font-size: 11pt; text-transform: uppercase; }
-        .info-cell { width: 25%; font-size: 7.5pt; text-align: left !important; }
+  .logo-icons {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 2px;
+  }
 
-        /* Información General */
-        .general-info { width: 100%; margin-bottom: 15px; }
-        .info-row { display: flex; margin-bottom: 4px; border-bottom: 1px solid #eee; }
-        .info-label { font-weight: bold; width: 140px; text-transform: uppercase; font-size: 8.5pt; }
-        .info-value { flex-grow: 1; }
+  .logo-box {
+    border: 1.5px solid #1a3a6e;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: 7px;
+    font-weight: bold;
+    color: #1a3a6e;
+    line-height: 1.1;
+    text-align: center;
+  }
 
-        /* Tablas */
-        table.data-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        table.data-table th, table.data-table td { border: 1px solid var(--border-color); padding: 5px; text-align: left; }
-        table.data-table th { background-color: #f2f2f2; font-size: 8.5pt; text-transform: uppercase; text-align: center; }
+  .logo-iqnet {
+    background: #1a3a6e;
+    color: #fff;
+    font-size: 7px;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 3px;
+    line-height: 1.1;
+    text-align: center;
+  }
 
-        .section-title {
-            background-color: #e2e8f0;
-            font-weight: bold;
-            padding: 4px 10px;
-            margin-top: 15px;
-            border: 1px solid var(--border-color);
-            border-bottom: none;
-            text-transform: uppercase;
-            font-size: 9.5pt;
-        }
+  .logo-title {
+    text-align: center;
+  }
 
-        .text-center { text-align: center !important; }
-        .text-bold { font-weight: bold; }
+  .logo-title span.univ {
+    font-size: 13px;
+    font-weight: 900;
+    color: #1a3a6e;
+    display: block;
+    line-height: 1;
+  }
 
-        /* Firmas */
-        .signatures { margin-top: 35px; display: flex; justify-content: space-between; margin-bottom: 15px; }
-        .signature-box { width: 45%; }
-        .signature-line { border-top: 1px solid #000; margin-top: 40px; margin-bottom: 4px; }
-        .signature-label { font-size: 8.5pt; font-weight: bold; }
+  .logo-title span.sub {
+    font-size: 8px;
+    color: #1a3a6e;
+    font-weight: bold;
+    display: block;
+    letter-spacing: 0.5px;
+  }
 
-        /* NUEVA SECCIÓN: Requisitos y Justificación */
-        .requirements-container {
-            margin-top: 20px;
-            border: 1px solid var(--border-color);
-            padding: 10px;
-        }
+  .logo-title span.udes {
+    font-size: 9px;
+    color: #e8311b;
+    font-weight: 900;
+    display: block;
+  }
 
-        .justification-area {
-            margin-top: 10px;
-            font-size: 9pt;
-        }
+  .logo-vigilada {
+    font-size: 6.5px;
+    color: #555;
+    text-align: center;
+  }
 
-        .checkbox-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-            margin-top: 5px;
-        }
+  .logo-sc {
+    font-size: 6px;
+    color: #1a3a6e;
+    font-weight: bold;
+  }
 
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-        }
+  .header-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    border-right: 1.5px solid #222;
+    text-align: center;
+  }
 
-        .box {
-            width: 14px;
-            height: 14px;
-            border: 1px solid black;
-            margin-right: 8px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 10px;
-        }
+  .header-info .sys-title {
+    font-size: 9.5px;
+    font-weight: bold;
+    color: #222;
+    margin-bottom: 1px;
+  }
 
-        /* Botón Impresión */
-        .print-btn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #2d6a4f;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: bold;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            z-index: 100;
-        }
+  .header-info .sys-sub {
+    font-size: 8.5px;
+    color: #222;
+    margin-bottom: 5px;
+  }
 
-    </style>
+  .header-info .doc-title {
+    font-style: italic;
+    font-weight: bold;
+    font-size: 9px;
+    color: #222;
+    text-transform: uppercase;
+    margin-bottom: 1px;
+  }
+
+  .header-info .doc-code {
+    font-style: italic;
+    font-size: 9px;
+    color: #222;
+    text-transform: uppercase;
+  }
+
+  .header-version {
+    width: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: bold;
+    color: #222;
+    padding: 5px;
+    text-align: center;
+  }
+
+  /* ── FIELDS ROW ── */
+  .fields-row {
+    display: flex;
+    border: 1px solid #222;
+    margin-bottom: 6px;
+  }
+
+  .field-cell {
+    flex: 1;
+    padding: 4px 7px;
+    border-right: 1px solid #222;
+    font-size: 9.5px;
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .field-cell:last-child {
+    border-right: none;
+  }
+
+  .field-cell label {
+    font-weight: bold;
+    color: #222;
+    white-space: nowrap;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .field-cell .underline {
+    flex: 1;
+    border-bottom: 1px solid #aaa;
+    min-width: 40px;
+    height: 14px;
+  }
+
+  /* ── MAIN TABLE ── */
+  .main-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1.5px solid #222;
+  }
+
+  .main-table td,
+  .main-table th {
+    border: 1px solid #333;
+    padding: 0;
+    vertical-align: middle;
+  }
+
+  /* Blue header rows */
+  .row-blue {
+    background: #2155a0;
+      font-family: Arial, Helvetica, sans-serif;
+    color: #fff;
+    font-weight: bold;
+    font-size: 9px;
+  }
+
+  .row-blue td {
+    padding: 5px 8px;
+    border-color: #1a4080;
+  }
+
+  /* Section header rows (medium blue) */
+  .row-section {
+    background: #2e6bb5;
+      font-family: Arial, Helvetica, sans-serif;
+    color: #fff;
+    font-weight: bold;
+    font-size: 9px;
+  }
+
+  .row-section td {
+    padding: 4px 8px;
+    border-color: #1a4080;
+    text-align: center;
+  }
+
+  /* Column header row */
+  .row-colheader {
+    background: #3a7dc9;
+      font-family: Arial, Helvetica, sans-serif;
+    color: #fff;
+    font-weight: bold;
+    font-size: 8.5px;
+    text-align: center;
+  }
+
+  .row-colheader td {
+    padding: 4px 6px;
+    border-color: #1a4080;
+    text-align: center;
+  }
+
+  /* Data rows */
+  .row-data td {
+    padding: 3px 7px;
+    font-size: 8.5px;
+    color: #111;
+    height: 20px;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .row-data td.label-cell {
+    font-size: 8.5px;
+    text-transform: uppercase;
+    color: #111;
+    width: 210px;
+  }
+
+  .row-data td.input-cell {
+    background: #fff;
+    border-bottom: 1px solid #aaa;
+  }
+
+  .row-data td.num-cell {
+    text-align: center;
+    font-size: 9px;
+    width: 55px;
+  }
+
+  .row-data td.zero-cell {
+    text-align: center;
+    font-size: 9px;
+    width: 55px;
+    color: #111;
+  }
+
+  /* Categoria footer row */
+  .row-categoria {
+    background: #2155a0;
+    color: #fff;
+    font-weight: bold;
+    font-size: 10px;
+  }
+
+  .row-categoria td {
+    padding: 6px 8px;
+    border-color: #1a4080;
+  }
+
+  .row-categoria td.total-label {
+    text-align: right;
+    font-size: 9px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+
+  .row-categoria td.total-val {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 900;
+    background: #2155a0;
+    color: #fff;
+    width: 55px;
+  }
+
+  /* ── FOOTER ── */
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+      font-family: Arial, Helvetica, sans-serif;
+    font-size: 9px;
+    color: #222;
+  }
+
+  .footer-row span {
+    font-weight: bold;
+  }
+
+  /* ── PRINT ── */
+  @media print {
+    body {
+      background: #fff;
+      padding: 0;
+    }
+    .page {
+      box-shadow: none;
+      padding: 10px 14px;
+      width: 100%;
+    }
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+  }
+</style>
 </head>
 <body>
+<div class="page">
 
-    <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir Formato</button>
-
-    <div class="page-container">
-        <!-- Encabezado -->
-        <table class="header-table">
-            <tr>
-                <td class="logo-cell">
-                    <img src="https://cucuta.udes.edu.co/images/logo/udes-logo-principal.svg" alt="UDES" style="max-height: 40px; max-width: 100%;">
-                </td>
-                <td class="title-cell">FORMATO DE CATEGORIZACIÓN DOCENTE</td>
-                <td class="info-cell">
-                    <strong>Código:</strong> TAH-FT-004-UDES <br>
-                    <strong>Versión:</strong> 05 <br>
-                    <strong>Fecha Aprob:</strong> 11/11/2025
-                </td>
-            </tr>
-        </table>
-
-        <!-- Datos Generales -->
-        <div class="general-info">
-            <div class="info-row">
-                <span class="info-label">Campus:</span> <span class="info-value">BUCARAMANGA</span>
-                <span class="info-label" style="width: 70px;">Periodo:</span> <span class="info-value">2026-01</span>
-                <span class="info-label" style="width: 70px;">Fecha:</span> <span class="info-value">${generatedLabel}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Cédula:</span> <span class="info-value">${escapeHtml(selectedAnalysisRequest.documento)}</span>
-                <span class="info-label">Nombres:</span> <span class="info-value">${escapeHtml(selectedAnalysisRequest.nombre)}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Programa:</span> <span class="info-value">${escapeHtml(selectedAnalysisRequest.programa || 'No especificado')}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">Facultad:</span> <span class="info-value">${escapeHtml(selectedAnalysisRequest.facultad || 'No especificada')}</span>
-            </div>
-        </div>
-
-        <!-- Estudios Cursados -->
-        <div class="section-title">1. Estudios Cursados</div>
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width: 30%;">Nivel de Formación</th>
-                    <th style="width: 40%;">Título Obtenido</th>
-                    <th style="width: 10%;">Cant.</th>
-                    <th style="width: 10%;">Valor</th>
-                    <th style="width: 10%;">Puntaje</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${estudiosHtml || '<tr><td colspan="5" class="text-center">No se reportan estudios</td></tr>'}
-            </tbody>
-        </table>
-
-        <!-- Experiencia -->
-        <div class="section-title">2. Experiencia Laboral y Docente</div>
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width: 45%;">Tipo de Experiencia</th>
-                    <th style="width: 25%;">Años</th>
-                    <th style="width: 15%;">Valor x Año</th>
-                    <th style="width: 15%;">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${expRowsHtml || '<tr><td colspan="4" class="text-center">No se reporta experiencia</td></tr>'}
-            </tbody>
-        </table>
-
-        <!-- Producción / Investigación -->
-        <div class="section-title">3. Producción Intelectual e Investigación</div>
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width: 28%;">Criterio</th>
-                    <th style="width: 52%;">Detalle</th>
-                    <th style="width: 10%;">Valor</th>
-                    <th style="width: 10%;">Puntaje</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${productionRowsHtml || '<tr><td colspan="4" class="text-center">No se reporta producción intelectual registrada</td></tr>'}
-            </tbody>
-        </table>
-
-        <!-- Resumen -->
-        <table class="data-table">
-            <tr>
-                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">SUBTOTAL MATRIZ DOCUMENTAL:</td>
-                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(matrixSubtotal)}</td>
-            </tr>
-            <tr>
-                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">EXPERIENCIA NORMATIVA RECONOCIDA (CON TOPE):</td>
-                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(experienceApplied)}</td>
-            </tr>
-            <tr>
-                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">PUNTAJE TOTAL NORMATIVO FINAL:</td>
-                <td style="width: 30%; font-weight: bold; text-align: center; font-size: 11pt;">${formatNumber(normativeFinal)}</td>
-            </tr>
-            <tr>
-                <td style="width: 70%; font-weight: bold; background-color: #f2f2f2; text-align: right;">CATEGORÍA DOCENTE ASIGNADA:</td>
-                <td style="width: 30%; font-weight: bold; text-align: center;">${escapeHtml(selectedAnalysis.suggested.finalCat.name.toUpperCase())}</td>
-            </tr>
-        </table>
-
-        <!-- Firmas -->
-        <div class="signatures">
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div class="signature-label">ELABORADO POR (Firma)</div>
-                <div style="font-size: 7.5pt;">Analista de Talento Humano</div>
-            </div>
-            <div class="signature-box">
-                <div class="signature-line"></div>
-                <div class="signature-label">APROBADO POR (Firma)</div>
-                <div style="font-size: 7.5pt;">Presidente Comité de Categorización</div>
-            </div>
-        </div>
-        
-        <!-- Soportes Presentados -->
-        <div class="section-title">ANEXO: SOPORTES PRESENTADOS</div>
-        <div style="border: 1px solid var(--border-color); padding: 10px; font-size: 8pt; border-top: none;">
-            <ul style="margin: 0; padding-left: 20px;">
-                ${soportesPresentados || '<li>No se reportaron soportes válidos.</li>'}
-            </ul>
-        </div>
-
-        <!-- COMPLEMENTO: Requisitos y Justificación -->
-        <div style="border-top: 2px dashed #ccc; margin: 20px 0;"></div>
-        
-        <div class="section-title section-title-dark">ANEXO: CRITERIOS DE CATEGORIZACIÓN</div>
-        <table class="data-table" style="font-size: 8.5pt;">
-            <thead>
-                <tr>
-                    <th>Categoría</th>
-                    <th>Formación Académica Mínima</th>
-                    <th>Experiencia Docente</th>
-                    <th>Puntaje Mínimo</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr ${selectedAnalysis.suggested.finalCat.name.toLowerCase() === 'auxiliar' ? 'style="background-color: #e6f2ff;"' : ''}>
-                    <td class="text-bold">AUXILIAR</td>
-                    <td>Título Profesional</td>
-                    <td>Sin experiencia mínima</td>
-                    <td class="text-center">340 Pts</td>
-                </tr>
-                <tr ${selectedAnalysis.suggested.finalCat.name.toLowerCase() === 'asistente' ? 'style="background-color: #e6f2ff;"' : ''}>
-                    <td class="text-bold">ASISTENTE</td>
-                    <td>Especialización / Nivel A2</td>
-                    <td>Dos (2) años</td>
-                    <td class="text-center">481 Pts</td>
-                </tr>
-                <tr ${selectedAnalysis.suggested.finalCat.name.toLowerCase() === 'asociado' ? 'style="background-color: #e6f2ff;"' : ''}>
-                    <td class="text-bold">ASOCIADO</td>
-                    <td>Maestría / Nivel B1</td>
-                    <td>Cinco (5) años</td>
-                    <td class="text-center">751 Pts</td>
-                </tr>
-                <tr ${selectedAnalysis.suggested.finalCat.name.toLowerCase() === 'titular' ? 'style="background-color: #e6f2ff;"' : ''}>
-                    <td class="text-bold">TITULAR</td>
-                    <td>Doctorado / Nivel B2</td>
-                    <td>Ocho (8) años</td>
-                    <td class="text-center">981 Pts</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div class="requirements-container">
-            <div class="text-bold" style="text-decoration: underline; margin-bottom: 5px;">JUSTIFICACIÓN DE LA CATEGORÍA ASIGNADA:</div>
-            <div class="justification-area">
-                Se asigna la categoría indicada anteriormente debido a que el docente <strong>NO</strong> cumple con los requisitos mínimos para la categoría inmediatamente superior por los siguientes motivos:
-                
-                <div class="checkbox-group">
-                    <div class="checkbox-item"><div class="box">${isMissingTitle}</div> Formación Académica (Nivel de estudios)</div>
-                    <div class="checkbox-item"><div class="box">${isMissingExp}</div> Años de Experiencia Docente / Profesional</div>
-                    <div class="checkbox-item"><div class="box">${isMissingPts}</div> Puntaje Mínimo Requerido</div>
-                    <div class="checkbox-item"><div class="box">${isMissingProd}</div> Producción Intelectual / Investigativa</div>
-                </div>
-
-                <div style="margin-top: 10px;">
-                    <strong>Observaciones adicionales:</strong><br>
-                    ${observaciones ? `<div style="margin-top: 5px;">${escapeHtml(observaciones)}</div>` : ''}
-                    <div style="border-bottom: 1px solid #000; height: 20px; margin-top: 5px;"></div>
-                    <div style="border-bottom: 1px solid #000; height: 20px; margin-top: 5px;"></div>
-                </div>
-            </div>
-        </div>
-
-        <div style="margin-top: 20px; text-align: center; font-size: 7pt; color: #777;">
-            Este formato es de uso exclusivo para el proceso de escalafón docente de la Universidad de Santander UDES.
-        </div>
+  <!-- ══ HEADER ══ -->
+  <div class="header">
+    <div class="header-logo">
+      <img src="/UdesImprimible.png" alt="UDES Logo" style="max-height: 60px; max-width: 100%; object-fit: contain;">
     </div>
+
+    <div class="header-info">
+      <div class="sys-title">Sistema de Gestión de la Calidad VAF</div>
+      <div class="sys-sub">Vicerrectoría Administrativa y Financiera</div>
+      <div class="doc-title">Categorización</div>
+      <div class="doc-code">TAH-FT-004-UDES</div>
+    </div>
+
+    <div class="header-version">Versión: 05</div>
+  </div>
+
+  <!-- ══ CAMPUS / PERIODO / FECHA ══ -->
+  <div class="fields-row">
+    <div class="field-cell" style="flex:1.2;">
+      <label>Campus:</label>
+      <div class="underline">BUCARAMANGA</div>
+    </div>
+    <div class="field-cell" style="flex:0.9;">
+      <label>Período:</label>
+      <div class="underline">2026-01</div>
+    </div>
+    <div class="field-cell" style="flex:0.9; border-right:none;">
+      <label>Fecha:</label>
+      <div class="underline">${generatedLabel}</div>
+    </div>
+  </div>
+
+  <!-- ══ CÉDULA / NOMBRES ══ -->
+  <table class="main-table">
+    <tbody>
+
+      <!-- Cédula + Nombres -->
+      <tr class="row-blue">
+        <td style="width:110px; padding:5px 8px; font-size:9px; font-weight:bold; border-right:1px solid #1a4080;">CÉDULA:</td>
+        <td style="padding:5px 8px;" colspan="4">
+          <span style="font-size:9px; font-weight:bold;">NOMBRES Y APELLIDOS:</span>
+        </td>
+      </tr>
+
+      <tr class="row-data">
+        <td class="input-cell" style="width:110px; font-size:8.5px;">${escapeHtml(selectedAnalysisRequest.documento)}</td>
+        <td class="input-cell" colspan="4" style="font-size:8.5px;">${escapeHtml(selectedAnalysisRequest.nombre)}</td>
+      </tr>
+
+      <!-- ADSCRITO AL AREA + columns -->
+      <tr class="row-blue">
+        <td colspan="2" style="padding:5px 8px; font-size:9px; font-weight:bold; border-right:1px solid #1a4080;">ADSCRITO AL AREA</td>
+        <td class="row-colheader" style="width:50px;">Cantidad</td>
+        <td class="row-colheader" style="width:50px;">Valor</td>
+        <td class="row-colheader" style="width:50px;">Puntaje</td>
+      </tr>
+
+      <!-- ESTUDIOS CURSADOS header -->
+      <tr class="row-section">
+        <td style="width:210px; text-align:center; border-right:1px solid #1a4080;">Estudios Cursados</td>
+        <td style="text-align:center; border-right:1px solid #1a4080;">Título Obtenido</td>
+        <td colspan="3"></td>
+      </tr>
+
+      <!-- Data rows — Estudios -->
+      ${estudiosHtml || '<tr class="row-data"><td colspan="5" class="label-cell">No se reportan estudios</td></tr>'}
+
+      <!-- EXPERIENCIA header -->
+      <tr class="row-section">
+        <td style="width:210px; text-align:center; border-right:1px solid #1a4080;">Experiencia</td>
+        <td style="text-align:center; border-right:1px solid #1a4080;">Entidad/Institución</td>
+        <td class="row-colheader" style="width:50px;">Años</td>
+        <td class="row-colheader" style="width:50px;">Valor</td>
+        <td class="row-colheader" style="width:50px;">Puntaje</td>
+      </tr>
+
+      <!-- Data rows — Experiencia -->
+      ${expRowsHtml || '<tr class="row-data"><td colspan="5" class="label-cell">No se reporta experiencia</td></tr>'}
+
+      <!-- OTROS header -->
+      <tr class="row-section">
+        <td style="width:210px; text-align:center; border-right:1px solid #1a4080;">Conceptos/Soportes</td>
+        <td style="text-align:center; border-right:1px solid #1a4080;">Descripción del Soporte</td>
+        <td class="row-colheader" style="width:50px;">Cant.</td>
+        <td class="row-colheader" style="width:50px;">Valor</td>
+        <td class="row-colheader" style="width:50px;">Puntaje</td>
+      </tr>
+
+      <!-- Data rows — Producción intelectual y Otros -->
+      ${productionRowsHtml || '<tr class="row-data"><td colspan="5" class="label-cell">No se reporta producción intelectual</td></tr>'}
+
+      <!-- CATEGORÍA footer -->
+      <tr class="row-categoria">
+        <td style="padding:6px 8px; font-size:10px; font-weight:900; letter-spacing:1px;" colspan="2">CATEGORÍA: ${escapeHtml(selectedAnalysis.suggested.finalCat.name.toUpperCase())}</td>
+        <td class="total-label" colspan="2" style="padding:6px 8px; font-size:9px; background:#2155a0; color:#fff; text-align:right; font-weight:bold;">PUNTAJE TOTAL</td>
+        <td class="total-val">${computedTotal}</td>
+      </tr>
+
+      <!-- Observaciones de Categorización -->
+      <tr class="row-data" style="height: auto;">
+        <td colspan="5" style="padding: 10px; border: 1px solid #333; vertical-align: top;">
+          <div style="font-weight: bold; margin-bottom: 8px; color: #222; font-size: 9.5px;">OBSERVACIONES DE CATEGORIZACIÓN:</div>
+          <div style="font-size: 8.5px; line-height: 1.6; color: #111; text-align: justify;">
+            ${escapeHtml(justificacionNarrativa)}
+          </div>
+        </td>
+      </tr>
+
+         </tbody>
+  </table>
+
+  <!-- ══ FOOTER ══ -->
+  <div class="footer-row">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%;">
+      <div style="display: flex; justify-content: space-between; width: 100%; gap: 40px;">
+        <div style="flex: 1; text-align: center;">
+          <div style="border-bottom: 1px solid #222; height: 30px; margin-bottom: 5px;"></div>
+          <span style="font-weight: bold; font-size: 9px;">Elaborado por</span>
+          
+        </div>
+        <div style="flex: 1; text-align: center;">
+          <div style="border-bottom: 1px solid #222; height: 30px; margin-bottom: 5px;"></div>
+          <span style="font-weight: bold; font-size: 9px;">Aprobado por</span>
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
 
 </body>
 </html>

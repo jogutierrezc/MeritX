@@ -55,7 +55,7 @@ const renderParagraphs = (value: string, className: string) => {
   return items.map((item) => `<p class="${className}">${escapeHtml(item)}</p>`).join('');
 };
 
-const logoSrc = () => `${window.location.origin}/MeritX%20Logo.png`;
+const logoSrc = () => `${window.location.origin}/UdesImprimible.png`;
 
 const buildShell = (title: string, body: string) => `
 <!doctype html>
@@ -64,6 +64,7 @@ const buildShell = (title: string, body: string) => `
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@400;500;700;900&display=swap" rel="stylesheet" />
     <style>
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
@@ -225,567 +226,490 @@ const buildShell = (title: string, body: string) => `
         text-transform: uppercase;
         letter-spacing: 0.18em;
       }
-      .report-page {
+      :root {
+        --ink: #0f172a;
+        --ink-soft: #475569;
+        --ink-muted: #94a3b8;
+        --line: #e2e8f0;
+        --bg: #f8fafc;
+        --white: #ffffff;
+        --accent: #3b82f6;
+        --purple: #8b5cf6;
+        --pink: #ec4899;
+        --green: #15803d;
+        --green-bg: #dcfce7;
+        --warn: #b45309;
+        --warn-bg: #fef3c7;
+        --danger: #b91c1c;
+        --danger-bg: #fef2f2;
+        --sat-bg: #0f172a;
+      }
+      body {
         min-height: 100vh;
-        background: #f1f5f9;
-        padding: 8px 32px;
-        color: #1e293b;
+        background: #e8edf3;
+        color: var(--ink);
+        font-family: 'DM Sans', sans-serif;
+        font-size: 13px;
       }
-      .report-shell {
-        position: relative;
-        max-width: 1400px;
-        margin: 0 auto;
-      }
-      .report-glow {
-        position: absolute;
-        inset: -6px;
-        background: linear-gradient(to right, #3b82f6, #6366f1, #8b5cf6, #ec4899, #3b82f6);
-        border-radius: 2.8rem;
-        filter: blur(10px);
-        opacity: 0.25;
-        transition: opacity 1s;
-        animation: gradient-x 12s ease infinite;
-        background-size: 200% 200%;
-      }
-      .report-card {
-        position: relative;
-        background: #f8fafc;
-        border-radius: 2.5rem;
+      .screen-wrap {
+        max-width: 1080px;
+        margin: 24px auto;
+        background: var(--white);
+        border-radius: 28px;
         overflow: hidden;
-        box-shadow: 0 25px 60px rgba(15,23,42,0.12);
+        box-shadow: 0 30px 80px rgba(15,23,42,0.14);
       }
-      .report-inner {
-        padding: 16px 40px 0;
-        max-width: 1400px;
-        margin: 0 auto;
-      }
-      .report-topbar {
+      .udes-header {
+        border: 1.5px solid #1a3a6e;
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 24px;
+        align-items: stretch;
+        background: #fff;
       }
-      .report-brand {
+      .udes-logo-block {
+        width: 210px;
+        flex-shrink: 0;
+        border-right: 1.5px solid #1a3a6e;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+      }
+      .udes-logo-block img {
+        width: 100%;
+        max-width: 180px;
+        height: auto;
+      }
+      .udes-info-block {
+        flex: 1;
+        border-right: 1.5px solid #1a3a6e;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 20px;
+        text-align: center;
+        gap: 2px;
+      }
+      .udes-sys-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: #1a2f5a;
+      }
+      .udes-sys-sub {
+        font-size: 10px;
+        color: #1a2f5a;
+        margin-bottom: 8px;
+      }
+      .udes-doc-title,
+      .udes-doc-code {
+        font-size: 10px;
+        font-style: italic;
+        color: #1a2f5a;
+        text-transform: uppercase;
+      }
+      .udes-version-block {
+        width: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #1a2f5a;
+        padding: 8px;
+        text-align: center;
+      }
+      .udes-title-strip {
+        background: var(--ink);
+        color: #fff;
+        padding: 22px 32px 20px;
+        position: relative;
+        overflow: hidden;
+      }
+      .udes-title-strip::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(59,130,246,0.22) 0%, rgba(139,92,246,0.18) 50%, rgba(236,72,153,0.14) 100%);
+      }
+      .uts-inner {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      .uts-label {
+        font-size: 8px;
+        font-weight: 900;
+        letter-spacing: 0.45em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.35);
+        margin-bottom: 6px;
+      }
+      .uts-title {
+        font-family: 'DM Serif Display', serif;
+        font-size: 26px;
+        font-weight: 400;
+        line-height: 1.2;
+      }
+      .uts-title em {
+        font-style: italic;
+        background: linear-gradient(90deg, #93c5fd, #c4b5fd, #f9a8d4);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .uts-right {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .chip {
+        padding: 5px 13px;
+        border-radius: 999px;
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .chip-outline {
+        border: 1px solid rgba(255,255,255,0.2);
+        color: rgba(255,255,255,0.6);
+        background: rgba(255,255,255,0.06);
+      }
+      .chip-accent {
+        background: linear-gradient(90deg, var(--accent), var(--purple));
+        color: #fff;
+      }
+      .section-pad,
+      .table-section {
+        padding: 36px 48px;
+        border-bottom: 1px solid var(--line);
+      }
+      .section-label {
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-bottom: 20px;
         display: flex;
         align-items: center;
         gap: 12px;
       }
-      .report-brand img {
-        height: 40px;
-        width: auto;
+      .section-label::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--line);
       }
-      .report-actions-note {
+      .docente-grid {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 24px;
+        align-items: center;
+      }
+      .docente-avatar {
+        width: 72px;
+        height: 72px;
+        background: var(--ink);
+        border-radius: 18px;
         display: flex;
         align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-family: 'DM Serif Display', serif;
+        font-size: 28px;
+        font-style: italic;
+      }
+      .docente-name {
+        font-size: 26px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .docente-sub {
+        display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        color: #94a3b8;
-        font-weight: 700;
+        gap: 6px 20px;
         font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--ink-muted);
+      }
+      .docente-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        background: var(--ink);
+        color: #fff;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+      }
+      .docente-detail-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-top: 1px solid var(--line);
+        margin-top: 24px;
+      }
+      .docente-detail-cell {
+        padding: 18px 20px;
+        border-right: 1px solid var(--line);
+      }
+      .docente-detail-cell:last-child { border-right: none; }
+      .detail-label {
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-bottom: 5px;
+      }
+      .detail-value { font-size: 13px; font-weight: 700; }
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .stat-cell {
+        padding: 28px 24px;
+        border-right: 1px solid var(--line);
+        position: relative;
+      }
+      .stat-cell:last-child {
+        border-right: none;
+        background: var(--danger-bg);
+      }
+      .stat-label {
+        font-size: 9px;
+        font-weight: 900;
         text-transform: uppercase;
         letter-spacing: 0.2em;
+        color: var(--ink-muted);
+        margin-bottom: 12px;
       }
-      .report-engine-chip {
+      .stat-cell:last-child .stat-label { color: var(--danger); }
+      .stat-number {
+        font-family: 'DM Serif Display', serif;
+        font-size: 44px;
+        letter-spacing: -2px;
+        line-height: 1;
+        margin-bottom: 6px;
+      }
+      .stat-cell:last-child .stat-number { color: var(--danger); }
+      .stat-sub {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--ink-muted);
+      }
+      .stat-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+      }
+      .narrative-list { display: flex; flex-direction: column; }
+      .narrative-item {
+        padding: 28px 0;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 20px;
+      }
+      .narrative-item:last-child { border-bottom: none; }
+      .narrative-num {
+        font-family: 'DM Serif Display', serif;
+        font-size: 32px;
+        font-style: italic;
+        color: var(--line);
+        line-height: 1;
+      }
+      .narrative-heading {
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.25em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-bottom: 10px;
+      }
+      .narrative-dot-bar {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 7px 10px;
-        border-radius: 999px;
-        background: #e2e8f0;
-        color: #334155;
-        font-size: 10px;
-        font-weight: 900;
-        letter-spacing: 0.12em;
       }
-      .report-print-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 24px;
-        background: #1e293b;
-        color: white;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 700;
-        box-shadow: 0 10px 24px rgba(15,23,42,0.16);
-        border: 0;
-        cursor: pointer;
-      }
-      .report-print-button:hover {
-        background: #0f172a;
-      }
-      .teacher-card {
-        background: white;
-        border-radius: 24px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-        margin-bottom: 32px;
-        overflow: hidden;
-      }
-      .teacher-head {
-        padding: 32px;
-        display: flex;
-        flex-direction: column;
-        gap: 32px;
-        align-items: center;
-        background: rgba(248,250,252,0.5);
-        border-bottom: 1px solid #f1f5f9;
-      }
-      .teacher-avatar {
-        width: 80px;
-        height: 80px;
-        background: white;
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #94a3b8;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-        overflow: hidden;
-      }
-      .teacher-avatar img {
-        width: 78%;
-        height: auto;
-      }
-      .teacher-main {
-        flex-grow: 1;
-        text-align: center;
-      }
-      .teacher-title-row {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin-bottom: 8px;
-        justify-content: center;
-        align-items: center;
-      }
-      .teacher-name {
-        margin: 0;
-        font-size: 30px;
-        font-weight: 900;
-        color: #0f172a;
-        letter-spacing: -0.02em;
-        text-transform: uppercase;
-      }
-      .teacher-badge {
-        padding: 6px 12px;
-        background: #0f172a;
-        color: white;
-        font-size: 10px;
-        font-weight: 900;
-        border-radius: 8px;
-        text-transform: uppercase;
-        letter-spacing: 0.15em;
-      }
-      .teacher-meta-row {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 10px 32px;
-        font-size: 12px;
-        color: #64748b;
-        font-weight: 700;
-        text-transform: uppercase;
-      }
-      .teacher-meta-row span {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .teacher-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-      }
-      .teacher-grid-item {
-        padding: 20px;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        border-top: 1px solid #f1f5f9;
-      }
-      .teacher-grid-icon {
-        padding: 12px;
-        background: #f8fafc;
-        color: #64748b;
-        border-radius: 12px;
-        width: 44px;
-        text-align: center;
-        font-size: 18px;
-        font-weight: 900;
-      }
-      .teacher-grid-label {
-        margin: 0 0 4px;
-        font-size: 10px;
-        font-weight: 900;
-        color: #94a3b8;
-        text-transform: uppercase;
-        letter-spacing: 0.14em;
-      }
-      .teacher-grid-value {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 700;
-        color: #1e293b;
-      }
-      .stats-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 16px;
-        margin-bottom: 32px;
-      }
-      .stats-box {
-        padding: 24px;
-        border-radius: 16px;
-        border: 1px solid #e2e8f0;
-        background: white;
-        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-      }
-      .stats-box.alert {
-        background: #fef2f2;
-        color: #b91c1c;
-        border-color: #fecaca;
-      }
-      .stats-head {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 16px;
-        opacity: 0.65;
-        font-size: 10px;
-        font-weight: 900;
-        text-transform: uppercase;
-        letter-spacing: 0.14em;
-      }
-      .stats-main {
-        font-size: 42px;
-        font-weight: 900;
-        letter-spacing: -0.05em;
-      }
-      .stats-sub {
-        margin-top: 4px;
-        font-size: 10px;
-        font-weight: 700;
-        opacity: 0.7;
-        text-transform: uppercase;
-      }
-      .narratives {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        margin-bottom: 32px;
-      }
-      .narrative-box {
-        background: white;
-        padding: 32px;
-        border-radius: 24px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-        position: relative;
-        overflow: hidden;
-      }
-      .narrative-row {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-      }
-      .narrative-track {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .narrative-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-      }
-      .narrative-line {
-        display: none;
-        width: 1px;
-        height: 100%;
-        background: #f1f5f9;
-      }
-      .narrative-title {
-        margin: 0 0 12px;
-        font-size: 11px;
-        font-weight: 900;
-        color: #94a3b8;
-        text-transform: uppercase;
-        letter-spacing: 0.2em;
+      .n-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
       }
       .narrative-copy {
-        margin: 0 0 10px;
-        font-size: 14px;
-        color: #475569;
-        line-height: 1.75;
+        font-size: 13px;
+        color: var(--ink-soft);
+        line-height: 1.8;
         text-align: justify;
-        font-style: italic;
-        font-weight: 600;
+        margin-bottom: 8px;
       }
-      .resolution-box {
-        background: #f1f5f9;
-        border-radius: 2.5rem;
-        padding: 40px;
-        border: 1px solid #e2e8f0;
-        margin-bottom: 48px;
+      .narrative-copy:last-child { margin-bottom: 0; }
+      .resolution-strip {
+        background: var(--ink);
+        color: #fff;
+        padding: 40px 48px;
         position: relative;
         overflow: hidden;
       }
-      .resolution-gavel {
+      .resolution-strip::before {
+        content: '';
         position: absolute;
-        top: 0;
-        right: 0;
-        padding: 48px;
-        opacity: 0.03;
-        color: #0f172a;
-        font-size: 300px;
-        font-weight: 900;
-        line-height: 1;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(139,92,246,0.12) 100%);
       }
-      .resolution-title {
-        margin: 0 0 40px;
-        text-align: center;
-        font-size: 10px;
+      .res-label,
+      .res-headline,
+      .res-subline,
+      .res-panels {
+        position: relative;
+      }
+      .res-label {
+        font-size: 9px;
         font-weight: 900;
-        color: #94a3b8;
+        letter-spacing: 0.5em;
         text-transform: uppercase;
-        letter-spacing: 0.4em;
+        color: rgba(255,255,255,0.3);
+        margin-bottom: 20px;
       }
-      .resolution-main {
-        max-width: 960px;
-        margin: 0 auto 48px;
-        text-align: center;
+      .res-headline {
+        font-family: 'DM Serif Display', serif;
+        font-size: 30px;
+        font-weight: 400;
+        line-height: 1.3;
+        margin-bottom: 8px;
+        max-width: 800px;
       }
-      .resolution-main-copy {
-        margin: 0;
-        font-size: 34px;
-        font-weight: 900;
-        color: #0f172a;
-        line-height: 1.25;
-      }
-      .resolution-subcopy {
-        margin-top: 16px;
-        color: #64748b;
-        font-size: 14px;
+      .res-headline u { text-decoration-color: rgba(255,255,255,0.3); }
+      .res-subline {
+        font-size: 10px;
         font-weight: 700;
+        letter-spacing: 0.2em;
         text-transform: uppercase;
-        letter-spacing: 0.15em;
-        opacity: 0.85;
+        color: rgba(255,255,255,0.35);
+        margin-bottom: 36px;
       }
-      .resolution-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        padding-top: 40px;
-        border-top: 1px solid #e2e8f0;
-      }
-      .resolution-panel {
-        background: rgba(255,255,255,0.5);
-        padding: 24px;
-        border-radius: 16px;
-        border: 1px solid rgba(255,255,255,0.6);
-      }
-      .resolution-panel-title {
-        margin: 0 0 12px;
-        font-size: 10px;
-        font-weight: 900;
-        color: #0f172a;
-        text-transform: uppercase;
-        letter-spacing: 0.14em;
-      }
-      .resolution-panel-copy {
-        margin: 0 0 8px;
-        font-size: 12px;
-        color: #475569;
-        line-height: 1.7;
-        text-align: justify;
-        font-style: italic;
-      }
-      .master-section {
-        margin: 64px 0;
-      }
-      .cepi-section {
-        margin: 48px 0;
-      }
-      .cepi-head {
-        display: flex;
-        align-items: center;
+      .res-panels {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
         gap: 16px;
-        margin-bottom: 18px;
       }
-      .cepi-title {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 900;
-        color: #0f172a;
-        letter-spacing: -0.01em;
-        text-transform: uppercase;
-      }
-      .cepi-line {
-        height: 1px;
-        flex: 1;
-        background: #e2e8f0;
-      }
-      .cepi-subtitle {
-        margin: 0 0 14px;
-        font-size: 11px;
-        color: #64748b;
-        font-weight: 700;
-      }
-      .cepi-table-wrap {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
+      .res-panel {
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.1);
         border-radius: 16px;
-        overflow: auto;
+        padding: 20px;
       }
+      .res-panel-title {
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.45);
+        margin-bottom: 10px;
+      }
+      .res-panel-copy {
+        font-size: 12px;
+        color: rgba(255,255,255,0.65);
+        line-height: 1.75;
+        text-align: justify;
+        margin-bottom: 8px;
+      }
+      .res-panel-copy:last-child { margin-bottom: 0; }
+      .master-table,
       .cepi-table {
         width: 100%;
-        min-width: 900px;
         border-collapse: collapse;
-      }
-      .cepi-table thead tr {
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
-        font-size: 9px;
-        font-weight: 900;
-        color: #94a3b8;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .cepi-table th,
-      .cepi-table td {
-        padding: 14px;
-        border-bottom: 1px solid #f1f5f9;
-      }
-      .cepi-article {
-        font-size: 12px;
-        font-weight: 800;
-        color: #1e293b;
-      }
-      .cepi-meta {
         font-size: 11px;
-        font-weight: 700;
-        color: #64748b;
       }
-      .cepi-ok {
-        color: #166534;
-        font-weight: 800;
-      }
-      .cepi-warn {
-        color: #b45309;
-        font-weight: 800;
-      }
-      .master-head {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 24px;
-      }
-      .master-title {
-        margin: 0;
-        font-size: 24px;
-        font-weight: 900;
-        color: #0f172a;
-        letter-spacing: -0.02em;
-        text-transform: uppercase;
-      }
-      .master-line {
-        height: 1px;
-        flex: 1;
-        background: #e2e8f0;
-      }
-      .master-table-wrap {
-        background: white;
-        border-radius: 16px;
-        border: 1px solid #e2e8f0;
-        overflow: auto;
-        box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-      }
-      .master-table {
-        width: 100%;
-        min-width: 1000px;
-        border-collapse: collapse;
-      }
-      .master-table thead tr {
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
-        font-size: 9px;
-        font-weight: 900;
-        color: #94a3b8;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+      .master-table thead tr,
+      .cepi-table thead tr {
+        background: var(--bg);
+        border-bottom: 2px solid var(--line);
       }
       .master-table th,
-      .master-table td {
-        padding: 16px;
+      .cepi-table th {
+        padding: 12px 14px;
+        font-size: 8px;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
         text-align: left;
-        border-bottom: 1px solid #f1f5f9;
       }
-      .master-table td {
-        font-size: 14px;
+      .master-table td,
+      .cepi-table td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: middle;
       }
-      .master-section-cell {
-        font-size: 10px;
-        font-weight: 700;
-        color: #94a3b8;
-        text-transform: uppercase;
-      }
-      .master-criteria {
-        font-size: 14px;
+      .master-table tbody tr:last-child td,
+      .cepi-table tbody tr:last-child td { border-bottom: none; }
+      .td-section {
+        font-size: 8px;
         font-weight: 900;
-        color: #1e293b;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
       }
-      .master-doc {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 10px;
+      .td-criterio { font-size: 12px; font-weight: 900; }
+      .td-doc { font-size: 10px; color: var(--ink-soft); }
+      .td-num {
+        text-align: right;
+        font-size: 12px;
         font-weight: 700;
-        color: #64748b;
       }
-      .master-state {
+      .td-meritx {
+        text-align: right;
+        font-size: 13px;
+        font-weight: 900;
+        background: var(--bg);
+      }
+      .badge {
         display: inline-block;
-        font-size: 9px;
-        font-weight: 900;
-        padding: 6px 12px;
+        padding: 4px 10px;
         border-radius: 999px;
-      }
-      .state-ok {
-        background: #dcfce7;
-        color: #15803d;
-      }
-      .state-sat {
-        background: #0f172a;
-        color: white;
-      }
-      .state-warn {
-        background: #eff6ff;
-        color: #2563eb;
-      }
-      .text-center { text-align: center; }
-      .text-right { text-align: right; }
-      .text-soft { color: #94a3b8; }
-      .text-bold { font-weight: 700; }
-      .text-black { font-weight: 900; color: #0f172a; }
-      .meritx-col { background: rgba(248,250,252,0.6); }
-      .report-footer {
-        margin-top: 48px;
-        padding-top: 32px;
-        border-top: 1px solid #e2e8f0;
-        padding-bottom: 64px;
-        text-align: center;
-      }
-      .report-footer-copy {
-        margin: 0;
-        color: #cbd5e1;
-        font-size: 10px;
+        font-size: 8px;
         font-weight: 900;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        letter-spacing: 0.6em;
+      }
+      .badge-ok { background: var(--green-bg); color: var(--green); }
+      .badge-sat { background: var(--sat-bg); color: #fff; }
+      .badge-warn { background: var(--warn-bg); color: var(--warn); }
+      .badge-none { background: var(--danger-bg); color: var(--danger); }
+      .tc { text-align: center; }
+      .tr { text-align: right; }
+      .tf { font-weight: 700; }
+      .tmu { color: var(--ink-muted); }
+      .tok { color: var(--green); font-weight: 800; }
+      .twn { color: var(--warn); font-weight: 800; }
+      .report-footer {
+        padding: 24px 48px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid var(--line);
+      }
+      .footer-copy,
+      .footer-date {
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
       }
       .error-page {
         min-height: 100vh;
@@ -844,79 +768,45 @@ const buildShell = (title: string, body: string) => `
         50% { background-position: 100% 50%; }
       }
       @media (min-width: 768px) {
-        .teacher-head {
-          flex-direction: row;
-          align-items: center;
-        }
-        .teacher-main {
-          text-align: left;
-        }
-        .teacher-title-row {
-          flex-direction: row;
-          justify-content: flex-start;
-        }
-        .teacher-meta-row {
-          justify-content: flex-start;
-        }
-        .teacher-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-        .teacher-grid-item {
-          border-top: 0;
-          border-right: 1px solid #f1f5f9;
-        }
-        .teacher-grid-item:last-child {
-          border-right: 0;
-        }
-        .stats-grid {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
-        .narrative-row {
-          flex-direction: row;
-          align-items: flex-start;
-        }
-        .narrative-track {
-          flex-direction: column;
-          width: 14px;
-          flex-shrink: 0;
-        }
-        .narrative-line {
-          display: block;
-        }
-        .resolution-grid {
-          flex-direction: column;
+        .screen-wrap {
+          margin: 32px auto;
         }
       }
       @media print {
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
         body {
-          -webkit-print-color-adjust: exact;
-          background-color: white !important;
+          background: #fff;
         }
-        .report-page {
-          padding: 0;
-          background: white;
-        }
-        .report-glow {
-          display: none !important;
-        }
-        .report-card {
-          box-shadow: none;
+        .screen-wrap {
+          margin: 0;
           border-radius: 0;
-        }
-        .print-hidden {
-          display: none !important;
-        }
-        .report-topbar {
-          margin-bottom: 12px;
-        }
-        .teacher-card,
-        .narrative-box,
-        .master-table-wrap {
           box-shadow: none;
+          max-width: 100%;
+        }
+        .narratives-section {
+          page-break-before: always;
+        }
+        .table-section {
+          page-break-before: always;
+        }
+        .table-section + .table-section {
+          page-break-before: auto;
+        }
+        .master-table tbody tr,
+        .cepi-table tbody tr,
+        .narrative-item,
+        .res-panel {
+          page-break-inside: avoid;
+        }
+        .report-footer {
+          page-break-inside: avoid;
         }
         @page {
-          margin: 1.5cm;
           size: letter portrait;
+          margin: 1.5cm 1.2cm;
         }
       }
     </style>
@@ -1006,6 +896,13 @@ const buildReportHtml = ({
     }),
   };
 
+  const teacherInitials = teacherData.nombre
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'MX';
+
   const stats = {
     matriz: {
       pts: selectedAnalysis.matrixTotal,
@@ -1088,28 +985,25 @@ const buildReportHtml = ({
     .map(
       (row) => `
         <tr>
-          <td class="master-section-cell">${escapeHtml(row.seccion)}</td>
-          <td class="master-criteria">${escapeHtml(row.criterio)}</td>
+          <td class="td-section">${escapeHtml(row.seccion)}</td>
+          <td class="td-criterio">${escapeHtml(row.criterio)}</td>
+          <td class="td-doc">${escapeHtml(row.doc)}</td>
           <td>
-            <div class="master-doc">
-              <span>F</span>
-              <span>${escapeHtml(row.doc)}</span>
-            </div>
-          </td>
-          <td>
-            <span class="master-state ${
+            <span class="badge ${
               row.estado === 'VALIDADO' || row.estado === 'CON SOPORTE'
-                ? 'state-ok'
+                ? 'badge-ok'
                 : row.estado === 'SATURADO'
-                  ? 'state-sat'
-                  : 'state-warn'
+                  ? 'badge-sat'
+                  : row.estado === 'SIN SOPORTE'
+                    ? 'badge-none'
+                    : 'badge-warn'
             }">${escapeHtml(row.estado)}</span>
           </td>
-          <td class="text-center text-bold">${escapeHtml(row.cant)}</td>
-          <td class="text-right text-bold text-soft">${escapeHtml(row.valor)}</td>
-          <td class="text-right text-bold">${escapeHtml(row.pMatriz)}</td>
-          <td class="text-right text-bold">${escapeHtml(row.pMotor)}</td>
-          <td class="text-right text-black meritx-col">${escapeHtml(row.pIA)}</td>
+          <td class="td-num tc">${escapeHtml(row.cant)}</td>
+          <td class="td-num tr tmu">${escapeHtml(row.valor)}</td>
+          <td class="td-num tr">${escapeHtml(row.pMatriz)}</td>
+          <td class="td-num tr">${escapeHtml(row.pMotor)}</td>
+          <td class="td-meritx tr">${escapeHtml(row.pIA)}</td>
         </tr>
       `,
     )
@@ -1117,17 +1011,17 @@ const buildReportHtml = ({
 
   const narrativeHtml = narratives
     .map(
-      (item) => `
-        <div class="narrative-box">
-          <div class="narrative-row">
-            <div class="narrative-track">
-              <div class="narrative-dot" style="background:${item.color}"></div>
-              <div class="narrative-line"></div>
+      (item, index) => `
+        <div class="narrative-item">
+          <div class="narrative-num">${String(index + 1).padStart(2, '0')}</div>
+          <div>
+            <div class="narrative-heading">
+              <span class="narrative-dot-bar">
+                <span class="n-dot" style="background:${item.color}"></span>
+                ${escapeHtml(item.title.replace(/^\d+\.\s*/, ''))}
+              </span>
             </div>
-            <div>
-              <h3 class="narrative-title">${escapeHtml(item.title)}</h3>
-              ${renderParagraphs(item.text, 'narrative-copy')}
-            </div>
+            ${renderParagraphs(item.text, 'narrative-copy')}
           </div>
         </div>
       `,
@@ -1148,13 +1042,13 @@ const buildReportHtml = ({
 
       return `
         <tr>
-          <td class="cepi-article">${escapeHtml(publication.publicationTitle)}</td>
-          <td class="cepi-meta text-center">${escapeHtml(source)}</td>
-          <td class="cepi-meta text-center">${escapeHtml(quartile)}</td>
-          <td class="cepi-meta text-center">${escapeHtml(String(publication.publicationYear || '-'))}</td>
-          <td class="cepi-meta text-right">${escapeHtml(unitScore)}</td>
-          <td class="cepi-meta text-right text-black">${escapeHtml(appliedScore)}</td>
-          <td class="cepi-meta ${supportClass}">${escapeHtml(supportText)}</td>
+          <td class="tf">${escapeHtml(publication.publicationTitle)}</td>
+          <td class="tc tmu">${escapeHtml(source)}</td>
+          <td class="tc tmu">${escapeHtml(quartile)}</td>
+          <td class="tc tmu">${escapeHtml(String(publication.publicationYear || '-'))}</td>
+          <td class="tr tf">${escapeHtml(unitScore)}</td>
+          <td class="tr tf">${escapeHtml(appliedScore)}</td>
+          <td class="${supportClass === 'cepi-warn' ? 'twn' : 'tok'}">${escapeHtml(supportText)}</td>
         </tr>
       `;
     })
@@ -1162,28 +1056,23 @@ const buildReportHtml = ({
 
   const cepiSectionHtml = selectedAnalysis.publications.length > 0
     ? `
-      <section class="cepi-section">
-        <div class="cepi-head">
-          <h2 class="cepi-title">Auditoría CEPI por Artículo</h2>
-          <div class="cepi-line"></div>
-        </div>
-        <p class="cepi-subtitle">Desglose de validación por fuente, cuartil y efecto en puntaje individual de producción intelectual.</p>
-        <div class="cepi-table-wrap">
-          <table class="cepi-table">
-            <thead>
-              <tr>
-                <th>Artículo</th>
-                <th class="text-center">Fuente</th>
-                <th class="text-center">Cuartil</th>
-                <th class="text-center">Año</th>
-                <th class="text-right">Puntaje unitario</th>
-                <th class="text-right">Puntaje aplicado</th>
-                <th>Estado de soporte</th>
-              </tr>
-            </thead>
-            <tbody>${cepiRowsHtml}</tbody>
-          </table>
-        </div>
+      <section class="table-section">
+        <div class="section-label">Auditoría CEPI por artículo</div>
+        <p style="font-size:11px;color:var(--ink-soft);margin:0 0 20px;font-weight:500;">Desglose de validación por fuente, cuartil y efecto en puntaje individual de producción intelectual.</p>
+        <table class="cepi-table">
+          <thead>
+            <tr>
+              <th>Artículo</th>
+              <th class="tc">Fuente</th>
+              <th class="tc">Cuartil</th>
+              <th class="tc">Año</th>
+              <th class="tr">P. Unitario</th>
+              <th class="tr">P. Aplicado</th>
+              <th>Estado de soporte</th>
+            </tr>
+          </thead>
+          <tbody>${cepiRowsHtml}</tbody>
+        </table>
       </section>
     `
     : '';
@@ -1191,9 +1080,9 @@ const buildReportHtml = ({
   const resolutionHtml = resolutionCards
     .map(
       (item) => `
-        <div class="resolution-panel">
-          <h5 class="resolution-panel-title">${escapeHtml(item.title)}</h5>
-          ${renderParagraphs(item.text, 'resolution-panel-copy')}
+        <div class="res-panel">
+          <h5 class="res-panel-title">${escapeHtml(item.title)}</h5>
+          ${renderParagraphs(item.text, 'res-panel-copy')}
         </div>
       `,
     )
@@ -1202,150 +1091,129 @@ const buildReportHtml = ({
   return buildShell(
     `MeritX IA | Informe de ${teacherData.nombre}`,
     `
-    <div class="report-page">
-      <div class="report-shell">
-        <div class="report-glow print-hidden"></div>
-        <div class="report-card">
-          <div class="report-inner">
-            <div class="report-topbar">
-              <div class="report-brand">
-                <img class="logo-img report-header-logo" src="${logoSrc()}" alt="MeritX" />
-              </div>
-              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
-                <div class="report-actions-note">
-                  ${aiEngine ? `<span class="report-engine-chip">Motor IA: ${escapeHtml(typeof aiEngine === 'string' ? aiEngine : String(aiEngine.provider).toUpperCase() + ' · ' + aiEngine.model)}</span>` : ''}
-                  <span>Historial</span>
-                  <span>Auditoría Técnica Talento Humano • MeritX IA</span>
-                </div>
-                <button class="report-print-button print-hidden" type="button" onclick="window.print()">
-                  <span>Imprimir informe</span>
-                </button>
-              </div>
-            </div>
+    <div class="screen-wrap">
+      <div class="udes-header">
+        <div class="udes-logo-block">
+          <img class="logo-img" src="${logoSrc()}" alt="UDES" />
+        </div>
+        <div class="udes-info-block">
+          <div class="udes-sys-title">Sistema de Gestión de la Calidad VAF</div>
+          <div class="udes-sys-sub">Vicerrectoría Administrativa y Financiera</div>
+          <div class="udes-doc-title">Reporte MeritX - Categorización Docente</div>
+          <div class="udes-doc-code">TAH-FT-004-UDES</div>
+        </div>
+        <div class="udes-version-block">Versión: 05</div>
+      </div>
 
-            <div class="teacher-card">
-              <div class="teacher-head">
-                <div class="teacher-avatar">
-                  <img class="logo-img" src="${logoSrc()}" alt="MeritX" />
-                </div>
-                <div class="teacher-main">
-                  <div class="teacher-title-row">
-                    <h1 class="teacher-name">${escapeHtml(teacherData.nombre)}</h1>
-                    <span class="teacher-badge">Expediente Validado</span>
-                  </div>
-                  <div class="teacher-meta-row">
-                    <span>ID: ${escapeHtml(teacherData.id)}</span>
-                    <span>Radicado: ${escapeHtml(teacherData.radicado)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="teacher-grid">
-                <div class="teacher-grid-item">
-                  <div class="teacher-grid-icon">F</div>
-                  <div>
-                    <p class="teacher-grid-label">Facultad</p>
-                    <p class="teacher-grid-value">${escapeHtml(teacherData.facultad)}</p>
-                  </div>
-                </div>
-                <div class="teacher-grid-item">
-                  <div class="teacher-grid-icon">P</div>
-                  <div>
-                    <p class="teacher-grid-label">Programa</p>
-                    <p class="teacher-grid-value">${escapeHtml(teacherData.programa)}</p>
-                  </div>
-                </div>
-                <div class="teacher-grid-item">
-                  <div class="teacher-grid-icon">C</div>
-                  <div>
-                    <p class="teacher-grid-label">Postulación</p>
-                    <p class="teacher-grid-value">${escapeHtml(teacherData.fechaPostulacion)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <section class="stats-grid">
-              <div class="stats-box">
-                <div class="stats-head">Matriz Bruta</div>
-                <div>
-                  <div class="stats-main">${formatNumber(stats.matriz.pts)}</div>
-                  <div class="stats-sub">${escapeHtml(stats.matriz.cat)}</div>
-                </div>
-              </div>
-              <div class="stats-box">
-                <div class="stats-head">Motor (Algoritmo)</div>
-                <div>
-                  <div class="stats-main">${formatNumber(stats.motor.pts)}</div>
-                  <div class="stats-sub">${escapeHtml(stats.motor.cat)}</div>
-                </div>
-              </div>
-              <div class="stats-box">
-                <div class="stats-head">Sugerencia MeritX</div>
-                <div>
-                  <div class="stats-main">${formatNumber(stats.ia.pts)}</div>
-                  <div class="stats-sub">${escapeHtml(stats.ia.cat)}</div>
-                </div>
-              </div>
-              <div class="stats-box alert">
-                <div class="stats-head">Puntos en Discordia</div>
-                <div>
-                  <div class="stats-main">-${formatNumber(stats.discordia)}</div>
-                  <div class="stats-sub">Pendiente Justificación</div>
-                </div>
-              </div>
-            </section>
-
-            <div class="narratives">${narrativeHtml}</div>
-
-            <div class="resolution-box">
-              <div class="resolution-gavel print-hidden">G</div>
-              <div style="position:relative;z-index:1;">
-                <h4 class="resolution-title">Ratificación Técnica del Dictamen</h4>
-                <div class="resolution-main">
-                  <p class="resolution-main-copy">
-                    Se ratifica el puntaje de <span style="text-decoration:underline;text-decoration-color:#cbd5e1;">${formatNumber(meritxNarrative.puntajeIntermedio)} puntos</span> bajo una hipótesis técnica de categoría <span style="color:#475569;">${escapeHtml(selectedAnalysis.suggested.finalCat.name)}</span>.
-                  </p>
-                  <p class="resolution-subcopy">Basado en el consenso del estudio de datos MeritX IA</p>
-                </div>
-                <div class="resolution-grid">${resolutionHtml}</div>
-              </div>
-            </div>
-
-            <section class="master-section">
-              <div class="master-head">
-                <h2 class="master-title">Consolidado Maestro de Datos y Puntajes</h2>
-                <div class="master-line"></div>
-              </div>
-
-              <div class="master-table-wrap">
-                <table class="master-table">
-                  <thead>
-                    <tr>
-                      <th>Sección</th>
-                      <th>Criterio</th>
-                      <th>Documento</th>
-                      <th>Estado</th>
-                      <th class="text-center">Cant.</th>
-                      <th class="text-right">Valor</th>
-                      <th class="text-right">P. Matriz</th>
-                      <th class="text-right">P. Motor</th>
-                      <th class="text-right meritx-col">P. MeritX</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rowsHtml}</tbody>
-                </table>
-              </div>
-            </section>
-
-            ${cepiSectionHtml}
-
-            <footer class="report-footer">
-              <p class="report-footer-copy">Sistema de Auditoría MeritX IA • Reporte Técnico de Escalafón • ${escapeHtml(generatedLabelText)}</p>
-            </footer>
+      <div class="udes-title-strip">
+        <div class="uts-inner">
+          <div>
+            <div class="uts-label">Auditoría Técnica</div>
+            <div class="uts-title">Reporte <em>MeritX IA</em> de Categorización</div>
+          </div>
+          <div class="uts-right">
+            ${aiEngine ? `<span class="chip chip-accent">Motor IA: ${escapeHtml(typeof aiEngine === 'string' ? aiEngine : String(aiEngine.provider).toUpperCase() + ' · ' + aiEngine.model)}</span>` : ''}
+            <span class="chip chip-outline">Historial</span>
+            <span class="chip chip-outline">Talento Humano UDES</span>
           </div>
         </div>
       </div>
+
+      <div class="section-pad">
+        <div class="section-label">Datos del docente</div>
+        <div class="docente-grid">
+          <div class="docente-avatar">${escapeHtml(teacherInitials)}</div>
+          <div>
+            <div class="docente-name">${escapeHtml(teacherData.nombre)}</div>
+            <div class="docente-sub">
+              <span>ID: ${escapeHtml(teacherData.id)}</span>
+              <span>Radicado: ${escapeHtml(teacherData.radicado)}</span>
+            </div>
+          </div>
+          <div class="docente-badge">Expediente Validado</div>
+        </div>
+        <div class="docente-detail-row">
+          <div class="docente-detail-cell">
+            <div class="detail-label">Facultad</div>
+            <div class="detail-value">${escapeHtml(teacherData.facultad)}</div>
+          </div>
+          <div class="docente-detail-cell">
+            <div class="detail-label">Programa</div>
+            <div class="detail-value">${escapeHtml(teacherData.programa)}</div>
+          </div>
+          <div class="docente-detail-cell">
+            <div class="detail-label">Fecha de postulación</div>
+            <div class="detail-value">${escapeHtml(teacherData.fechaPostulacion)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-cell">
+          <div class="stat-label">Matriz Bruta</div>
+          <div class="stat-number">${formatNumber(stats.matriz.pts)}</div>
+          <div class="stat-sub">${escapeHtml(stats.matriz.cat)}</div>
+          <div class="stat-bar" style="background:linear-gradient(90deg,#3b82f6,#6366f1)"></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Motor (Algoritmo)</div>
+          <div class="stat-number">${formatNumber(stats.motor.pts)}</div>
+          <div class="stat-sub">${escapeHtml(stats.motor.cat)}</div>
+          <div class="stat-bar" style="background:linear-gradient(90deg,#8b5cf6,#a855f7)"></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Sugerencia MeritX</div>
+          <div class="stat-number">${formatNumber(stats.ia.pts)}</div>
+          <div class="stat-sub">${escapeHtml(stats.ia.cat)}</div>
+          <div class="stat-bar" style="background:linear-gradient(90deg,#6366f1,#ec4899)"></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Puntos en Discordia</div>
+          <div class="stat-number">-${formatNumber(stats.discordia)}</div>
+          <div class="stat-sub">Pendiente justificación</div>
+        </div>
+      </div>
+
+      <div class="section-pad narratives-section">
+        <div class="section-label">Análisis narrativo</div>
+        <div class="narrative-list">${narrativeHtml}</div>
+      </div>
+
+      <div class="resolution-strip">
+        <div class="res-label">Ratificación técnica del dictamen</div>
+        <div class="res-headline">
+          Se ratifica el puntaje de <u>${formatNumber(meritxNarrative.puntajeIntermedio)} puntos</u> bajo una hipótesis técnica de categoría <span style="opacity:.65">${escapeHtml(selectedAnalysis.suggested.finalCat.name)}</span>.
+        </div>
+        <div class="res-subline">Basado en el consenso del estudio de datos MeritX IA</div>
+        <div class="res-panels">${resolutionHtml}</div>
+      </div>
+
+      <section class="table-section">
+        <div class="section-label">Consolidado maestro de datos y puntajes</div>
+        <table class="master-table">
+          <thead>
+            <tr>
+              <th>Sección</th>
+              <th>Criterio</th>
+              <th>Documento</th>
+              <th>Estado</th>
+              <th class="tc">Cant.</th>
+              <th class="tr">Valor</th>
+              <th class="tr">P. Matriz</th>
+              <th class="tr">P. Motor</th>
+              <th class="tr">P. MeritX</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </section>
+
+      ${cepiSectionHtml}
+
+      <footer class="report-footer">
+        <span class="footer-copy">Sistema de Auditoría MeritX IA - Reporte Técnico de Escalafón</span>
+        <span class="footer-date">${escapeHtml(generatedLabelText)}</span>
+      </footer>
     </div>
   `,
   );
