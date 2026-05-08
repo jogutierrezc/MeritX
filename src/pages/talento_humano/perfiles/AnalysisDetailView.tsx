@@ -415,19 +415,33 @@ export const AnalysisDetailView: React.FC<Props> = ({
 
   const defaultEscalafonObservation = useMemo(() => {
     const barrier = selectedAnalysis.suggested.barrierDiagnosis;
-    const reasons: string[] = [];
-    if (barrier?.missingTitle) reasons.push(`no acredita el título mínimo (${barrier.requiredTitle})`);
-    if (barrier?.missingIdioma) reasons.push(`no acredita idioma mínimo (${barrier.requiredIdioma})`);
-    if (barrier?.missingPts) reasons.push(`no alcanza el puntaje requerido (${barrier.requiredPts} pts)`);
-
+    const matrixScore = selectedAnalysis.matrixTotal;
+    const motorScore = selectedAnalysis.suggested.finalPts;
+    const supportCount = selectedAnalysis.rows.filter((row) => row.hasSupport).length;
     const hasSignificantExperience = selectedAnalysis.suggested.ptsExpBruta >= 30;
-    const warning = hasSignificantExperience && reasons.length > 0
-      ? `Advertencia: aunque el docente acredita experiencia relevante (${selectedAnalysis.suggested.ptsExpBruta.toFixed(1)} pts brutos de experiencia), no procede ascenso de escalafón por ${reasons.join(', ')}.`
+
+    const intro = `El análisis técnico consolidó un puntaje de tabla/matriz de ${matrixScore.toFixed(1)} puntos y un puntaje combinado (matriz + reglas normativas del motor) de ${motorScore.toFixed(1)} puntos.`;
+
+    const missingReasons: string[] = [];
+    if (barrier?.missingTitle) missingReasons.push(`título mínimo requerido (${barrier.requiredTitle})`);
+    if (barrier?.missingIdioma) missingReasons.push(`idioma mínimo requerido (${barrier.requiredIdioma})`);
+    if (barrier?.missingPts) missingReasons.push(`puntaje mínimo exigido (${barrier.requiredPts} puntos)`);
+
+    const priorityJustification = missingReasons.length > 0
+      ? `La justificación principal de no ascenso de categoría es el incumplimiento de ${missingReasons.join(', ')}.`
+      : `No se identifican barreras normativas activas para la categoría actual en esta ejecución.`;
+
+    const warningByTime = hasSignificantExperience && missingReasons.length > 0
+      ? `Advertencia: aunque el docente acredita experiencia relevante (${selectedAnalysis.suggested.ptsExpBruta.toFixed(1)} pts brutos) y ${supportCount} criterio(s) con soporte, no procede ascenso automático hasta subsanar los requisitos faltantes.`
       : '';
 
-    const conclusion = `Se recomienda mantener la categoría ${selectedAnalysis.suggested.finalCat.name.toUpperCase()} con ${selectedAnalysis.suggested.finalPts.toFixed(1)} puntos, hasta subsanar los requisitos normativos pendientes.`;
+    const committeeRecommendation = missingReasons.length === 1
+      ? `Al existir una sola barrera, se recomienda que Jurídica y el Comité (CAP/CEPI) evalúen la viabilidad de una recomendación de categoría superior, dejando constancia de que no constituye acto administrativo automático.`
+      : '';
 
-    return [warning, conclusion].filter(Boolean).join(' ');
+    const conclusion = `Se recomienda mantener la categoría ${selectedAnalysis.suggested.finalCat.name.toUpperCase()} con ${motorScore.toFixed(1)} puntos mientras se corrigen los requisitos pendientes.`;
+
+    return [intro, priorityJustification, warningByTime, committeeRecommendation, conclusion].filter(Boolean).join(' ');
   }, [selectedAnalysis]);
 
   const [printEscalafonObservation, setPrintEscalafonObservation] = useState(defaultEscalafonObservation);
