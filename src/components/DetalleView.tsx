@@ -335,7 +335,7 @@ const DetalleView: React.FC<Props> = ({
                   onChange={(e) => setTitleForm({ ...titleForm, title_level: e.target.value })}
                   className="border-2 border-slate-900 px-4 py-2 text-sm font-bold focus:outline-none"
                 >
-                  {['Pregrado', 'Especialización', 'Maestría', 'Doctorado'].map((v) => <option key={v} value={v}>{v}</option>)}
+                  {['Pregrado', 'Especialización', 'Maestría', 'Doctorado', 'Diplomado', 'Curso corto o seminario (40h+)'].map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
                 <input
                   type="date"

@@ -67,6 +67,8 @@ export const RegistroSidebar: React.FC<RegistroSidebarProps> = ({
                 <option>Especialización</option>
                 <option>Maestría</option>
                 <option>Doctorado</option>
+                <option>Diplomado</option>
+                <option>Curso corto o seminario (40h+)</option>
               </select>
               <button
                 onClick={() => onRemoveTitulo(i)}

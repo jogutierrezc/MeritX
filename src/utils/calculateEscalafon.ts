@@ -23,6 +23,8 @@ export const ESCALAFON_CONFIG = {
     'Maestría de Profundización': 200,
     'Maestría de Investigación': 300,
     'Doctorado': 500,
+    'Diplomado': 15,
+    'Curso corto o seminario (40h+)': 15,
   },
   PUNTOS_IDIOMA: {
     'A2': 20,
@@ -87,12 +89,41 @@ const normalizeTextSimple = (val: string) =>
     .toLowerCase()
     .trim();
 
-const canonicalTitleLevel = (nivel: string): string => {
-  const n = normalizeTextSimple(nivel);
-  if (n === 'doctorado' || n.includes('doctor')) return 'Doctorado';
-  if (n.startsWith('maestria') || n.includes('maestr') || n.includes('magister')) return 'Maestría';
-  if (n.startsWith('especializacion') || n.includes('especial')) return 'Especialización';
+const canonicalTitleLevel = (nivel: string, titleName?: string): string => {
+  const merged = `${nivel || ''} ${titleName || ''}`;
+  const n = normalizeTextSimple(merged);
+  if (n.includes('diplom')) return 'Diplomado';
+  if (n.includes('curso') || n.includes('seminario')) return 'Curso corto o seminario (40h+)';
+  const nivelNormalized = normalizeTextSimple(nivel);
+  if (nivelNormalized === 'doctorado' || nivelNormalized.includes('doctor')) return 'Doctorado';
+  if (nivelNormalized.startsWith('maestria') || nivelNormalized.includes('maestr') || nivelNormalized.includes('magister')) return 'Maestría';
+  if (nivelNormalized.startsWith('especializacion') || nivelNormalized.includes('especial')) return 'Especialización';
   return 'Pregrado';
+};
+
+const formalTitleLevel = (level: string): 'Ninguno' | 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
+  if (level === 'Doctorado') return 'Doctorado';
+  if (level === 'Maestría' || level === 'Maestría de Profundización' || level === 'Maestría de Investigación') return 'Maestría';
+  if (level === 'Especialización' || level === 'Especialización Médico Quirúrgica') return 'Especialización';
+  if (level === 'Pregrado') return 'Pregrado';
+  return 'Ninguno';
+};
+
+const meetsTitleRequirement = (
+  highestLevel: 'Ninguno' | 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado',
+  requiredTitle: string,
+) => {
+  const order: Array<'Ninguno' | 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado'> = [
+    'Ninguno',
+    'Pregrado',
+    'Especialización',
+    'Maestría',
+    'Doctorado',
+  ];
+  const normalizedRequired = (order.includes(requiredTitle as (typeof order)[number])
+    ? requiredTitle
+    : 'Ninguno') as (typeof order)[number];
+  return order.indexOf(highestLevel) >= order.indexOf(normalizedRequired);
 };
 
 const hasAnySupport = (name?: string, path?: string) => Boolean(String(name || '').trim() || String(path || '').trim());
@@ -125,14 +156,21 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     // Foreign title only contributes when convalidated and accompanied by the convalidation resolution.
     if (isForeign && (!isConvalidated || !hasConvalidationSupport)) return acc;
 
-    const level = canonicalTitleLevel(t.nivel);
+    const level = canonicalTitleLevel(t.nivel, t.titulo);
     return acc + (ESCALAFON_CONFIG.PUNTOS_TITULOS[level as keyof typeof ESCALAFON_CONFIG.PUNTOS_TITULOS] || 0);
   }, 0);
 
-  const highestLevel = data.titulos.reduce((max, t) => {
-    const levels = ['Ninguno', 'Pregrado', 'Especialización', 'Maestría', 'Doctorado'];
-    const canonical = canonicalTitleLevel(t.nivel);
-    return levels.indexOf(canonical) > levels.indexOf(max) ? canonical : max;
+  const highestLevel = data.titulos.reduce<'Ninguno' | 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado'>((max, t) => {
+    const levels: Array<'Ninguno' | 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado'> = [
+      'Ninguno',
+      'Pregrado',
+      'Especialización',
+      'Maestría',
+      'Doctorado',
+    ];
+    const canonical = canonicalTitleLevel(t.nivel, t.titulo);
+    const formal = formalTitleLevel(canonical);
+    return levels.indexOf(formal) > levels.indexOf(max) ? formal : max;
   }, 'Ninguno');
 
   const ptsIdioma = data.idiomas.reduce(
@@ -239,10 +277,7 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     const totalSimulado = ptsBaseSinExp + expTopada;
 
     // 4.2 Verificación de Barreras Doctrinarias (Títulos e Idioma)
-    const cumpleTitulo = (cat.reqTitulo === 'Doctorado' && highestLevel === 'Doctorado') ||
-      (cat.reqTitulo === 'Maestría' && ['Maestría', 'Doctorado'].includes(highestLevel)) ||
-      (cat.reqTitulo === 'Especialización' && ['Especialización', 'Maestría', 'Doctorado'].includes(highestLevel)) ||
-      (cat.reqTitulo === 'Pregrado');
+    const cumpleTitulo = meetsTitleRequirement(highestLevel, cat.reqTitulo);
 
     const cumpleIdioma = userLangLevel >= (ESCALAFON_CONFIG.VALOR_IDIOMA as Record<string, number>)[cat.reqIdioma];
 
@@ -269,10 +304,7 @@ export const calculateAdvancedEscalafon = (data: FormState): EscalafonResult => 
     const expTopada = Math.min(ptsExpBruta, nextCat.capExp);
     const totalConNextCap = ptsBaseSinExp + expTopada;
 
-    const cumpleTituloNext = (nextCat.reqTitulo === 'Doctorado' && highestLevel === 'Doctorado') ||
-      (nextCat.reqTitulo === 'Maestría' && ['Maestría', 'Doctorado'].includes(highestLevel)) ||
-      (nextCat.reqTitulo === 'Especialización' && ['Especialización', 'Maestría', 'Doctorado'].includes(highestLevel)) ||
-      (nextCat.reqTitulo === 'Pregrado');
+    const cumpleTituloNext = meetsTitleRequirement(highestLevel, nextCat.reqTitulo);
 
     const reqIdiomaVal = (ESCALAFON_CONFIG.VALOR_IDIOMA as Record<string, number>)[nextCat.reqIdioma] ?? 0;
     const cumpleIdiomaNext = userLangLevel >= reqIdiomaVal;

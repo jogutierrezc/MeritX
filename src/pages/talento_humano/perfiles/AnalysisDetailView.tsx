@@ -1420,6 +1420,8 @@ export const AnalysisDetailView: React.FC<Props> = ({
                             <option>Maestría de Profundización</option>
                             <option>Maestría de Investigación</option>
                             <option>Doctorado</option>
+                            <option>Diplomado</option>
+                            <option>Curso corto o seminario (40h+)</option>
                           </select>
                           <input
                             value={row.originUniversity || ''}

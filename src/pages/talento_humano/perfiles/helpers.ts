@@ -9,9 +9,22 @@ export const normalizeText = (value: string) =>
     .toLowerCase()
     .trim();
 
-export const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especialización' | 'Especialización Médico Quirúrgica' | 'Maestría' | 'Maestría de Profundización' | 'Maestría de Investigación' | 'Doctorado' => {
+export const normalizeTitleLevel = (
+  level: string,
+):
+  | 'Pregrado'
+  | 'Especialización'
+  | 'Especialización Médico Quirúrgica'
+  | 'Maestría'
+  | 'Maestría de Profundización'
+  | 'Maestría de Investigación'
+  | 'Doctorado'
+  | 'Diplomado'
+  | 'Curso corto o seminario (40h+)' => {
   // Preserve exact known values stored in DB
   const exact = level.trim();
+  if (exact === 'Curso corto o seminario (40h+)') return 'Curso corto o seminario (40h+)';
+  if (exact === 'Diplomado') return 'Diplomado';
   if (exact === 'Doctorado') return 'Doctorado';
   if (exact === 'Maestría de Investigación') return 'Maestría de Investigación';
   if (exact === 'Maestría de Profundización') return 'Maestría de Profundización';
@@ -21,6 +34,8 @@ export const normalizeTitleLevel = (level: string): 'Pregrado' | 'Especializaci�
   if (exact === 'Pregrado') return 'Pregrado';
   // Fuzzy fallback for legacy / free-text data
   const normalized = normalizeText(level);
+  if (normalized.includes('diplom')) return 'Diplomado';
+  if (normalized.includes('curso') || normalized.includes('seminario')) return 'Curso corto o seminario (40h+)';
   if (normalized.includes('doctor')) return 'Doctorado';
   if (normalized.includes('investigac') && (normalized.includes('maestr') || normalized.includes('magister'))) return 'Maestría de Investigación';
   if (normalized.includes('profundizac') && (normalized.includes('maestr') || normalized.includes('magister'))) return 'Maestría de Profundización';

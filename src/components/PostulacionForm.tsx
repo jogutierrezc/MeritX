@@ -6,7 +6,13 @@ import {
 } from 'lucide-react';
 
 // ---- Types ----
-export type NivelTitulo = 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado';
+export type NivelTitulo =
+  | 'Pregrado'
+  | 'Especialización'
+  | 'Maestría'
+  | 'Doctorado'
+  | 'Diplomado'
+  | 'Curso corto o seminario (40h+)';
 export type NivelIdioma = 'A2' | 'B1' | 'B2' | 'C1';
 export type TipoExperiencia = 'Profesional' | 'Docencia Universitaria' | 'Investigación';
 export type Cuartil = 'Q1' | 'Q2' | 'Q3' | 'Q4';
@@ -398,6 +404,8 @@ export const PostulacionForm = ({ onSubmit, onBack, loading, error }: Props) => 
                     <option>Especialización</option>
                     <option>Maestría</option>
                     <option>Doctorado</option>
+                    <option>Diplomado</option>
+                    <option>Curso corto o seminario (40h+)</option>
                   </select>
                   {form.titulos.length > 1 && (
                     <button

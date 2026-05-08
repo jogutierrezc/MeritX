@@ -68,6 +68,8 @@ export const buildPrintFormatHtml = ({
 
     const titleValueByLevel = (level: string) => {
         const normalized = normalizeText(level);
+      if (normalized.includes('diplom')) return 15;
+      if (normalized.includes('curso') || normalized.includes('seminario')) return 15;
         if (normalized.includes('doctor')) return 400;
         if (normalized.includes('maestr') || normalized.includes('magister')) return 200;
         if (normalized.includes('especial')) return 90;

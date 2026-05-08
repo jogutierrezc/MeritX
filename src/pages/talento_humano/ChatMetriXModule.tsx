@@ -335,8 +335,10 @@ const parseJsonFromText = (text: string): any | null => {
 };
 
 const sanitizeFormState = (candidate: any): FormState => {
-  const mapTitleLevel = (value: string): 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado' => {
+  const mapTitleLevel = (value: string): FormState['titulos'][number]['nivel'] => {
     const normalized = normalizeForSearch(String(value || ''));
+    if (normalized.includes('diplom')) return 'Diplomado';
+    if (normalized.includes('curso') || normalized.includes('seminario')) return 'Curso corto o seminario (40h+)';
     if (normalized.includes('doctor')) return 'Doctorado';
     if (normalized.includes('maestr') || normalized.includes('magister')) return 'Maestría';
     if (normalized.includes('especial')) return 'Especialización';

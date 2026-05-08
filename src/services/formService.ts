@@ -10,7 +10,13 @@ export type Campus = (typeof CAMPUS)[number];
 
 export type TitleItem = {
   titulo: string;
-  nivel: 'Pregrado' | 'Especialización' | 'Maestría' | 'Doctorado';
+  nivel:
+    | 'Pregrado'
+    | 'Especialización'
+    | 'Maestría'
+    | 'Doctorado'
+    | 'Diplomado'
+    | 'Curso corto o seminario (40h+)';
   soporte?: File | null;
   soporteNombre?: string;
 };

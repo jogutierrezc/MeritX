@@ -24,7 +24,16 @@ export type FormState = {
   hasTrabajoAprobadoCEPI: boolean;
   titulos: Array<{
     titulo: string;
-    nivel: 'Pregrado' | 'Especialización' | 'Especialización Médico Quirúrgica' | 'Maestría' | 'Maestría de Profundización' | 'Maestría de Investigación' | 'Doctorado';
+    nivel:
+      | 'Pregrado'
+      | 'Especialización'
+      | 'Especialización Médico Quirúrgica'
+      | 'Maestría'
+      | 'Maestría de Profundización'
+      | 'Maestría de Investigación'
+      | 'Doctorado'
+      | 'Diplomado'
+      | 'Curso corto o seminario (40h+)';
     fechaGrado?: string;
     universidadOrigen?: string;
     tipoUniversidad?: 'NACIONAL' | 'EXTRANJERA';

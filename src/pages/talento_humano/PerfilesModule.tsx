@@ -1238,6 +1238,17 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
     const especializaciones = titles.filter((row) => normalizeTitleLevel(row.titleLevel) === 'Especialización');
     const maestrias = titles.filter((row) => normalizeTitleLevel(row.titleLevel) === 'Maestría');
     const doctorados = titles.filter((row) => normalizeTitleLevel(row.titleLevel) === 'Doctorado');
+    const diplomados = titles.filter((row) => {
+      const normalizedLevel = normalizeTitleLevel(row.titleLevel);
+      if (normalizedLevel === 'Diplomado') return true;
+      return normalizeText(row.titleName).includes('diplom');
+    });
+    const cursosCortos = titles.filter((row) => {
+      const normalizedLevel = normalizeTitleLevel(row.titleLevel);
+      if (normalizedLevel === 'Curso corto o seminario (40h+)') return true;
+      const name = normalizeText(row.titleName);
+      return name.includes('curso') || name.includes('seminario');
+    });
 
     const studiesRows: MatrixRow[] = [
       {
@@ -1313,48 +1324,26 @@ const PerfilesModule: React.FC<PerfilesModuleProps> = ({ mode = 'full' }) => {
       {
         section: 'Estudios Cursados',
         criterio: 'DIPLOMADOS (40 HS O MÁS)',
-        detalle: titles
-          .filter((row) => normalizeText(row.titleName).includes('diplom'))
+        detalle: diplomados
           .map((row) => row.supportName || row.titleName)
           .join(' | ') || '-',
-        cantidad: titles.filter((row) => normalizeText(row.titleName).includes('diplom')).length,
+        cantidad: diplomados.length,
         valor: 15,
-        puntaje: titles.filter((row) => normalizeText(row.titleName).includes('diplom')).length * 15,
-        hasSupport: titles.filter((row) => normalizeText(row.titleName).includes('diplom')).some((row) => hasSupport(row.supportName, row.supportPath)),
-        supportNote: titles.filter((row) => normalizeText(row.titleName).includes('diplom')).some((row) => hasSupport(row.supportName, row.supportPath)) ? 'Soportado parcialmente' : 'Sin soporte adjunto',
+        puntaje: diplomados.length * 15,
+        hasSupport: diplomados.some((row) => hasSupport(row.supportName, row.supportPath)),
+        supportNote: diplomados.some((row) => hasSupport(row.supportName, row.supportPath)) ? 'Soportado parcialmente' : 'Sin soporte adjunto',
       },
       {
         section: 'Estudios Cursados',
         criterio: 'CURSOS O SEMINARIOS (40 HS O MÁS)',
-        detalle: titles
-          .filter((row) => {
-            const name = normalizeText(row.titleName);
-            return name.includes('curso') || name.includes('seminario');
-          })
+        detalle: cursosCortos
           .map((row) => row.supportName || row.titleName)
           .join(' | ') || '-',
-        cantidad: titles.filter((row) => {
-          const name = normalizeText(row.titleName);
-          return name.includes('curso') || name.includes('seminario');
-        }).length,
+        cantidad: cursosCortos.length,
         valor: 15,
-        puntaje:
-          titles.filter((row) => {
-            const name = normalizeText(row.titleName);
-            return name.includes('curso') || name.includes('seminario');
-          }).length * 15,
-        hasSupport: titles
-          .filter((row) => {
-            const name = normalizeText(row.titleName);
-            return name.includes('curso') || name.includes('seminario');
-          })
-          .some((row) => hasSupport(row.supportName, row.supportPath)),
-        supportNote: titles
-          .filter((row) => {
-            const name = normalizeText(row.titleName);
-            return name.includes('curso') || name.includes('seminario');
-          })
-          .some((row) => hasSupport(row.supportName, row.supportPath))
+        puntaje: cursosCortos.length * 15,
+        hasSupport: cursosCortos.some((row) => hasSupport(row.supportName, row.supportPath)),
+        supportNote: cursosCortos.some((row) => hasSupport(row.supportName, row.supportPath))
           ? 'Soportado parcialmente'
           : 'Sin soporte adjunto',
       },
