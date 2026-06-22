@@ -31,8 +31,8 @@ type ConvocatoriaData = {
   nombre: string;
   periodo: 'Primer Semestre' | 'Segundo Semestre';
   año: number;
-  fecha_apertura: string;
-  fecha_cierre: string;
+  fechaApertura: string;
+  fechaCierre: string;
   descripcion: string;
   estado: 'ABIERTA' | 'CERRADA' | 'CANCELADA';
   postulaciones_count?: number;
@@ -187,8 +187,8 @@ const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) =>
         nombre: convocatoriaForm.nombre,
         periodo: convocatoriaForm.semestre,
         año: parseInt(convocatoriaForm.año),
-        fecha_apertura: convocatoriaForm.inicio,
-        fecha_cierre: convocatoriaForm.cierre,
+        fechaApertura: convocatoriaForm.inicio,
+        fechaCierre: convocatoriaForm.cierre,
         descripcion: convocatoriaForm.descripcion,
         estado: 'ABIERTA',
       });
@@ -291,14 +291,14 @@ const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) =>
                 </td>
                 <td className="py-5 px-6 text-center">
                   <div className="flex flex-col items-center gap-0.5 text-[11px] font-medium text-slate-500">
-                    <span>{c.fecha_apertura}</span>
+                    <span>{c.fechaApertura}</span>
                     <div className="w-3 h-[1px] bg-slate-200"></div>
-                    <span className="text-blue-600 font-bold">{c.fecha_cierre}</span>
+                    <span className="text-blue-600 font-bold">{c.fechaCierre}</span>
                   </div>
                 </td>
                 <td className="py-5 px-6 text-center">
                   <div className="inline-flex flex-col items-center px-3 py-1 bg-rose-50 rounded-lg border border-rose-100">
-                    <span className="text-sm font-black text-rose-600 leading-none">{getDaysLeft(c.fecha_cierre)}</span>
+                    <span className="text-sm font-black text-rose-600 leading-none">{getDaysLeft(c.fechaCierre)}</span>
                     <span className="text-[8px] font-bold text-rose-400 uppercase mt-0.5">Días</span>
                   </div>
                 </td>
@@ -367,8 +367,8 @@ const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) =>
                   value: `${selectedConvocatoria?.periodo} - ${selectedConvocatoria?.año}`,
                   icon: Calendar,
                 },
-                { label: 'Inicio', value: selectedConvocatoria?.fecha_apertura, icon: Clock },
-                { label: 'Cierre', value: selectedConvocatoria?.fecha_cierre, icon: AlertCircle },
+                { label: 'Inicio', value: selectedConvocatoria?.fechaApertura, icon: Clock },
+                { label: 'Cierre', value: selectedConvocatoria?.fechaCierre, icon: AlertCircle },
                 { label: 'Postulados', value: `${selectedConvocatoria?.postulaciones_count || 0}`, icon: Users },
               ].map((item, i) => (
                 <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -381,7 +381,7 @@ const ConvocatoriasModule: React.FC<ConvocatoriasModuleProps> = ({ onClose }) =>
             </div>
           </div>
           <div className="flex flex-col items-center justify-center p-8 bg-slate-800 text-white rounded-3xl min-w-[200px] shadow-lg">
-            <span className="text-5xl font-black leading-none">{getDaysLeft(selectedConvocatoria?.fecha_cierre || '')}</span>
+            <span className="text-5xl font-black leading-none">{getDaysLeft(selectedConvocatoria?.fechaCierre || '')}</span>
             <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mt-2">Días para el cierre</p>
           </div>
         </div>

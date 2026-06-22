@@ -1,5 +1,6 @@
 /**
  * Re-export types from SpacetimeDB Convocatoria table
+ * Note: property names are camelCase as returned by the SpacetimeDB SDK.
  */
 
 export type ConvocatoriaType = {
@@ -9,13 +10,13 @@ export type ConvocatoriaType = {
   descripcion: string;
   periodo: string;
   año: number;
+  fechaApertura: string;
+  fechaCierre: string;
   estado: 'ABIERTA' | 'CERRADA' | 'CANCELADA';
-  fecha_apertura: string;
-  fecha_cierre: string;
-  postulaciones_count?: number;
-  created_by?: string;
-  created_at?: string;
-  updated_at?: string;
+  postulacionesCount?: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 /**
