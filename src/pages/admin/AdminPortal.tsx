@@ -985,7 +985,7 @@ const AdminPortal = () => {
               <p className="text-xs font-black leading-none text-slate-800">{session?.username ?? 'Admin'}</p>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-tighter text-slate-400">
                 {connected
-                  ? portalAuthReady
+                  ? portalAuthReady && session
                     ? 'Sesion admin activa'
                     : 'Conectado sin sesion admin'
                   : 'Sin conexion'}

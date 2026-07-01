@@ -115,47 +115,82 @@ export const SpacetimeProvider = ({ children }: { children: ReactNode }) => {
         ];
 
         const subscribeBaseOnly = () => {
-          if (isMounted) setPortalAuthReady(Boolean(currentSession) ? false : true);
+          // portalAuthReady = true solo si NO hay sesión pendiente de autenticar
+          // Si hay sesión pero el login falló → false
+          // Si no hay sesión → false (no hay sesión admin activa)
+          if (isMounted) setPortalAuthReady(false);
           subscribeQueries(baseQueries);
         };
 
         // ── Portal login reducer ───────────────────────────────────────────
-        if (currentSession) {
-          const credentials = getPortalCredentialsForRole(currentSession.role);
+        const attemptLogin = (retryCount = 0) => {
+          if (!isMounted) return;
+
+          const currentRetrySession = getPortalSession();
+          setSession(currentRetrySession);
+
+          if (!currentRetrySession) {
+            subscribeBaseOnly();
+            return;
+          }
+
+          const credentials = getPortalCredentialsForRole(currentRetrySession.role);
           const reducers = c.reducers as any;
           const loginFn = reducers.portalLogin || reducers.portal_login;
 
-          if (credentials && typeof loginFn === 'function') {
-            Promise.resolve(loginFn({
-              role: currentSession.role,
-              username: credentials.username,
-              password: credentials.password,
-            }))
-              .then(() => {
-                if (!isMounted) return;
-                setPortalAuthReady(true);
-                subscribeQueries([...baseQueries, ...portalQueries]);
-              })
-              .catch((e) => {
-                if (isInvalidPortalCredentialsError(e)) {
-                  clearPortalSession();
-                  if (isMounted) setSession(null);
-                } else {
-                  console.error('Error enviando portal_login:', e);
-                }
-                subscribeBaseOnly();
-              });
-          } else {
+          if (!credentials || typeof loginFn !== 'function') {
             subscribeBaseOnly();
+            return;
           }
+
+          Promise.resolve(loginFn({
+            role: currentRetrySession.role,
+            username: credentials.username,
+            password: credentials.password,
+          }))
+            .then(() => {
+              if (!isMounted) return;
+              setPortalAuthReady(true);
+              subscribeQueries([...baseQueries, ...portalQueries]);
+            })
+            .catch((e) => {
+              if (isInvalidPortalCredentialsError(e)) {
+                clearPortalSession();
+                if (isMounted) setSession(null);
+                subscribeBaseOnly();
+                return;
+              }
+
+              console.error('Error enviando portal_login:', e);
+
+              // Reintentar hasta 3 veces con backoff de 2s, 4s, 8s
+              if (retryCount < 3) {
+                const delay = 2000 * Math.pow(2, retryCount);
+                console.log(`Reintentando portal_login en ${delay}ms (intento ${retryCount + 1}/3)...`);
+                setTimeout(() => attemptLogin(retryCount + 1), delay);
+                // Mientras tanto, cargar datos base para que la UI no se quede congelada
+                subscribeQueries(baseQueries);
+              } else {
+                subscribeBaseOnly();
+              }
+            });
+        };
+
+        if (currentSession) {
+          attemptLogin();
           return;
         }
 
-        subscribeBaseOnly();
+        // Sin sesión guardada: modo anónimo, no hay sesión admin activa
+        setPortalAuthReady(false);
+        subscribeQueries(baseQueries);
       })
       .onConnectError((_ctx: unknown, err: unknown) => {
         console.error('Global Spacetime connect error:', err);
-        if (isMounted) setConnected(false);
+        if (isMounted) {
+          setConnected(false);
+          setPortalAuthReady(false);
+        }
       })
       .build();
 
