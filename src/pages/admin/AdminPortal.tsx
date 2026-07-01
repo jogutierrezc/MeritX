@@ -208,7 +208,7 @@ const MENU_ITEMS: { id: TabId; icon: React.FC<{ size?: number }>; label: string 
 // ─── AdminPortal ──────────────────────────────────────────────────────────────
 
 const AdminPortal = () => {
-  const { connection, connected, portalAuthReady, globalDataReady, session } = useSpacetime();
+  const { connection, connected, portalAuthReady, globalDataReady, session, reconnectSession } = useSpacetime();
 
   const [activeTab, setActiveTab] = useState<TabId>('usuarios');
   const [statusMessage, setStatusMessage] = useState('');
@@ -990,6 +990,22 @@ const AdminPortal = () => {
                     : 'Conectado sin sesion admin'
                   : 'Sin conexion'}
               </p>
+              {connected && !portalAuthReady && (
+                <button
+                  onClick={async () => {
+                    setStatusMessage('Reconectando sesion admin...');
+                    const ok = await reconnectSession();
+                    if (ok) {
+                      setStatusMessage('Sesion admin reconectada correctamente.');
+                    } else {
+                      setStatusMessage('No se pudo reconectar la sesion. Inicia sesion desde /auth.');
+                    }
+                  }}
+                  className="ml-2 rounded-lg bg-amber-500 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white hover:bg-amber-600"
+                >
+                  Reconectar
+                </button>
+              )}
             </div>
           </div>
         </div>
