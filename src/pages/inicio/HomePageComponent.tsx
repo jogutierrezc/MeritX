@@ -99,7 +99,7 @@ export const HomePageComponent: React.FC<HomePageComponentProps> = ({ onSelectCo
         ) : convocatorias.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {convocatorias.map((conv) => {
-              const postCount = conv.postulaciones_count ?? 0;
+              const postCount = conv.postulacionesCount ?? 0;
               const daysLeft = getDaysLeft(conv.fechaCierre);
               const isClosingSoon = daysLeft <= 7;
               const isClosed = daysLeft < 0;
