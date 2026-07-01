@@ -843,7 +843,7 @@ const AdminPortal = () => {
       setStatusMessage('Usuario creado correctamente en SpacetimeDB.');
     } catch (error) {
       console.error(error);
-      setStatusMessage('No fue posible crear el usuario. Verifica sesion admin en Spacetime.');
+      setStatusMessage(error instanceof Error ? error.message : 'Error desconocido al crear usuario.');
     } finally {
       setSaving(false);
     }
@@ -883,7 +883,7 @@ const AdminPortal = () => {
       setStatusMessage('Usuario actualizado correctamente.');
     } catch (error) {
       console.error(error);
-      setStatusMessage('No fue posible actualizar el usuario.');
+      setStatusMessage(error instanceof Error ? error.message : 'Error desconocido al actualizar usuario.');
     } finally {
       setSaving(false);
     }
@@ -916,7 +916,7 @@ const AdminPortal = () => {
       setStatusMessage('Configuracion guardada en SpacetimeDB.');
     } catch (error) {
       console.error(error);
-      setStatusMessage('No fue posible guardar. Verifica sesion admin en Spacetime.');
+      setStatusMessage(error instanceof Error ? error.message : 'Error desconocido al guardar configuracion.');
     } finally {
       setSaving(false);
     }
@@ -930,7 +930,7 @@ const AdminPortal = () => {
       setStatusMessage('Configuracion de APIs guardada en SpacetimeDB.');
     } catch (error) {
       console.error(error);
-      setStatusMessage('No fue posible guardar APIs. Verifica sesion admin en Spacetime.');
+      setStatusMessage(error instanceof Error ? error.message : 'Error desconocido al guardar APIs.');
     } finally {
       setSaving(false);
     }
